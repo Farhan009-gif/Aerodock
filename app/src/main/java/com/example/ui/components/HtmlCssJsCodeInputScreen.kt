@@ -724,14 +724,20 @@ fun HtmlCssJsCodeInputBottomSheet(
     onInsertIntoChat: ((formattedMarkdown: String) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var clearSheetIme by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val safeDismiss: () -> Unit = {
+        clearSheetIme?.invoke()
+        onDismiss()
+    }
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = safeDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("html_css_js_code_input_sheet")
     ) {
+        DialogWindowFocusGuard(onRegisterCleaner = { clearSheetIme = it })
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -743,9 +749,19 @@ fun HtmlCssJsCodeInputBottomSheet(
                 initialHtml = initialHtml,
                 initialCss = initialCss,
                 initialJs = initialJs,
-                onRunInSandboxWithConfirmation = onRunInSandboxWithConfirmation,
-                onInsertIntoChat = onInsertIntoChat,
-                onClose = onDismiss
+                onRunInSandboxWithConfirmation = onRunInSandboxWithConfirmation?.let { callback ->
+                    { html, css, js ->
+                        clearSheetIme?.invoke()
+                        callback(html, css, js)
+                    }
+                },
+                onInsertIntoChat = onInsertIntoChat?.let { callback ->
+                    { markdown ->
+                        clearSheetIme?.invoke()
+                        callback(markdown)
+                    }
+                },
+                onClose = safeDismiss
             )
         }
     }

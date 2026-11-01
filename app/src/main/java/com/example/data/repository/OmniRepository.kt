@@ -109,6 +109,8 @@ class OmniRepository(
         OpenAICompatibleProvider(okHttpClient)
     }
 
+    val liveInfoToolsService = com.example.data.mcp.LiveInfoToolsService()
+
     val anthropicProvider: AnthropicProvider by lazy {
         AnthropicProvider(okHttpClient)
     }
@@ -2751,6 +2753,57 @@ class OmniRepository(
         )
         dao.insertToolCallLog(logEntity)
         logEntity
+    }
+
+    suspend fun executeLiveInfoToolAndLog(
+        conversationId: String,
+        messageId: String,
+        toolName: String,
+        argumentsJson: String,
+        maxSearchesPerMessage: Int,
+        configuredFeeds: List<com.example.data.mcp.RssFeedConfig>
+    ): Pair<ToolCallLogEntity, com.example.data.mcp.LiveInfoToolExecutionResult> = withContext(Dispatchers.IO) {
+        val execResult = when (toolName) {
+            com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME -> {
+                liveInfoToolsService.executeWebSearch(
+                    argumentsJson = argumentsJson,
+                    maxSearchesPerMessage = maxSearchesPerMessage
+                )
+            }
+            com.example.data.mcp.LiveInfoToolsService.NEWS_HEADLINES_TOOL_NAME -> {
+                liveInfoToolsService.executeNewsHeadlines(
+                    argumentsJson = argumentsJson,
+                    configuredFeeds = configuredFeeds
+                )
+            }
+            else -> {
+                com.example.data.mcp.LiveInfoToolExecutionResult(
+                    toolName = toolName,
+                    modelResponseText = "Unsupported Live Info tool: $toolName",
+                    displaySummaryText = "Unsupported Live Info tool: $toolName",
+                    sources = emptyList(),
+                    isSuccess = false,
+                    durationMs = 1L
+                )
+            }
+        }
+
+        val logEntity = ToolCallLogEntity(
+            id = "tlog_${UUID.randomUUID().toString().take(10)}",
+            conversationId = conversationId,
+            messageId = messageId,
+            serverId = com.example.data.mcp.LiveInfoToolsService.LIVE_INFO_SERVER_ID,
+            serverName = com.example.data.mcp.LiveInfoToolsService.LIVE_INFO_SERVER_NAME,
+            toolName = toolName,
+            argumentsJson = argumentsJson.ifBlank { "{}" },
+            resultText = execResult.displaySummaryText,
+            isSuccess = execResult.isSuccess,
+            isDestructiveOrWrite = false,
+            durationMs = execResult.durationMs,
+            createdAt = System.currentTimeMillis()
+        )
+        dao.insertToolCallLog(logEntity)
+        logEntity to execResult
     }
 
     suspend fun clearToolCallLogs() = withContext(Dispatchers.IO) {

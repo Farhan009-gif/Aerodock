@@ -295,7 +295,13 @@ data class OmniUiState(
     val javaRunnerUrl: String = "",
     val maskedJavaRunnerKey: String = "",
     val activeHtmlPreviewDocument: String? = null,
-    val activeHtmlPreviewTitle: String = ""
+    val activeHtmlPreviewTitle: String = "",
+    // 9. Live Info Tools (web_search & news_headlines)
+    val liveInfoWebSearchEnabled: Boolean = false,
+    val liveInfoNewsHeadlinesEnabled: Boolean = false,
+    val liveInfoMaxSearchesPerMessage: Int = com.example.data.mcp.LiveInfoToolsService.DEFAULT_MAX_SEARCHES_PER_MESSAGE,
+    val liveInfoRssFeeds: List<com.example.data.mcp.RssFeedConfig> = com.example.data.mcp.LiveInfoToolsService.DEFAULT_RSS_FEEDS,
+    val liveInfoSourcesByMessageId: Map<String, List<com.example.data.mcp.LiveInfoSource>> = emptyMap()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -451,6 +457,30 @@ class OmniStudioViewModel(
                         hasSeenFileAttachmentNotice = seenNotice,
                         javaRunnerUrl = javaUrl,
                         maskedJavaRunnerKey = maskedJavaKey
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                repository.secretVault.liveInfoWebSearchEnabledFlow,
+                repository.secretVault.liveInfoNewsHeadlinesEnabledFlow,
+                repository.secretVault.liveInfoMaxSearchesPerMessageFlow,
+                repository.secretVault.liveInfoRssFeedsJsonFlow
+            ) { webEnabled, newsEnabled, maxSearches, feedsJson ->
+                Tuple4(
+                    webEnabled,
+                    newsEnabled,
+                    maxSearches,
+                    com.example.data.mcp.LiveInfoToolsService.parseFeedsFromJson(feedsJson)
+                )
+            }.collect { (webEnabled, newsEnabled, maxSearches, feedsList) ->
+                _uiState.update { state ->
+                    state.copy(
+                        liveInfoWebSearchEnabled = webEnabled,
+                        liveInfoNewsHeadlinesEnabled = newsEnabled,
+                        liveInfoMaxSearchesPerMessage = maxSearches,
+                        liveInfoRssFeeds = feedsList
                     )
                 }
             }
@@ -3513,8 +3543,11 @@ class OmniStudioViewModel(
         )
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
-        // Resolve enabled MCP tools + built-in sandboxed run_code tool if function calling is supported and enabled
-        val enabledToolTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> =
+        // Reset per-message web search counter at the start of each turn
+        repository.liveInfoToolsService.resetPerMessageSearchCounter()
+
+        // Resolve enabled MCP tools + built-in sandboxed run_code tool + Live Info tools if function calling is supported
+        val mcpAndSandboxTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> =
             if (conv.mcpToolsEnabled && modelDescriptor.supportsFunctionCalling && comparisonGroupId == null) {
                 val serversById = dao.getMcpServersOnce().filter { it.isEnabled }.associateBy { it.id }
                 val mcpTriples = dao.getMcpToolsOnce().filter { it.isEnabled }.mapNotNull { toolEntity ->
@@ -3560,6 +3593,19 @@ class OmniStudioViewModel(
             } else {
                 emptyList()
             }
+
+        val liveInfoTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> =
+            if (comparisonGroupId == null) {
+                com.example.data.mcp.LiveInfoToolsService.resolveEnabledLiveInfoToolTriples(
+                    modelSupportsFunctionCalling = modelDescriptor.supportsFunctionCalling,
+                    webSearchEnabled = _uiState.value.liveInfoWebSearchEnabled,
+                    newsHeadlinesEnabled = _uiState.value.liveInfoNewsHeadlinesEnabled
+                )
+            } else {
+                emptyList()
+            }
+
+        val enabledToolTriples = mcpAndSandboxTriples + liveInfoTriples
         val toolDefinitions: List<McpToolDefinition> = com.example.data.provider.PromptCacheManager.sortToolsDeterministically(
             enabledToolTriples.map { it.third }
         )
@@ -3829,6 +3875,64 @@ class OmniStudioViewModel(
                         ChatMessagePayload(
                             role = "tool",
                             content = toolResultForModel,
+                            toolCallId = toolCall.id,
+                            toolName = toolCall.toolName
+                        )
+                    )
+                    continue
+                }
+
+                // Built-in Live Info Tools: web_search & news_headlines
+                if (com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(toolCall.toolName)) {
+                    val isToolEnabled = when (toolCall.toolName) {
+                        com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME -> _uiState.value.liveInfoWebSearchEnabled
+                        com.example.data.mcp.LiveInfoToolsService.NEWS_HEADLINES_TOOL_NAME -> _uiState.value.liveInfoNewsHeadlinesEnabled
+                        else -> false
+                    }
+                    if (!isToolEnabled) {
+                        workingPayloadMessages.add(
+                            ChatMessagePayload(
+                                role = "tool",
+                                content = "Error: Tool '${toolCall.toolName}' is disabled in Settings > Live info.",
+                                toolCallId = toolCall.id,
+                                toolName = toolCall.toolName
+                            )
+                        )
+                        continue
+                    }
+
+                    val liveStatusText = if (toolCall.toolName == com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME) {
+                        com.example.data.mcp.LiveInfoToolsService.SEARCHING_STATUS_TEXT
+                    } else {
+                        com.example.data.mcp.LiveInfoToolsService.READING_NEWS_STATUS_TEXT
+                    }
+                    _uiState.update {
+                        it.copy(activeToolLoopStatus = liveStatusText)
+                    }
+
+                    val (_, execResult) = repository.executeLiveInfoToolAndLog(
+                        conversationId = conv.id,
+                        messageId = assistantMsgId,
+                        toolName = toolCall.toolName,
+                        argumentsJson = toolCall.argumentsJson,
+                        maxSearchesPerMessage = _uiState.value.liveInfoMaxSearchesPerMessage,
+                        configuredFeeds = _uiState.value.liveInfoRssFeeds
+                    )
+
+                    if (execResult.sources.isNotEmpty()) {
+                        _uiState.update { state ->
+                            val existing = state.liveInfoSourcesByMessageId[assistantMsgId].orEmpty()
+                            val combined = (existing + execResult.sources).distinctBy { it.link }
+                            state.copy(
+                                liveInfoSourcesByMessageId = state.liveInfoSourcesByMessageId + (assistantMsgId to combined)
+                            )
+                        }
+                    }
+
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(
+                            role = "tool",
+                            content = execResult.modelResponseText,
                             toolCallId = toolCall.id,
                             toolName = toolCall.toolName
                         )
@@ -5598,6 +5702,98 @@ class OmniStudioViewModel(
                 activeHtmlPreviewDocument = null,
                 activeHtmlPreviewTitle = ""
             )
+        }
+    }
+
+    // --- Live Info Tools Settings (web_search & news_headlines) ---
+
+    fun setLiveInfoWebSearchEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.secretVault.setLiveInfoWebSearchEnabled(enabled)
+            _uiState.update {
+                it.copy(
+                    liveInfoWebSearchEnabled = enabled,
+                    statusToast = if (enabled) "Web search (DuckDuckGo) enabled" else "Web search disabled"
+                )
+            }
+        }
+    }
+
+    fun setLiveInfoNewsHeadlinesEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.secretVault.setLiveInfoNewsHeadlinesEnabled(enabled)
+            _uiState.update {
+                it.copy(
+                    liveInfoNewsHeadlinesEnabled = enabled,
+                    statusToast = if (enabled) "News headlines (RSS) enabled" else "News headlines disabled"
+                )
+            }
+        }
+    }
+
+    fun setLiveInfoMaxSearchesPerMessage(limit: Int) {
+        val coerced = limit.coerceIn(1, 20)
+        viewModelScope.launch {
+            repository.secretVault.setLiveInfoMaxSearchesPerMessage(coerced)
+            _uiState.update {
+                it.copy(
+                    liveInfoMaxSearchesPerMessage = coerced,
+                    statusToast = "Web search limit set to $coerced per message"
+                )
+            }
+        }
+    }
+
+    fun addLiveInfoRssFeed(name: String, url: String) {
+        val cleanName = name.trim()
+        val cleanUrl = url.trim()
+        if (!com.example.data.mcp.LiveInfoToolsService.isValidHttpsFeedUrl(cleanUrl)) {
+            _uiState.update {
+                it.copy(statusToast = "Only valid HTTPS RSS feed URLs are allowed (https://...)")
+            }
+            return
+        }
+        val effectiveName = cleanName.ifBlank {
+            cleanUrl.substringAfter("://").substringBefore("/").removePrefix("www.")
+        }
+        viewModelScope.launch {
+            val current = _uiState.value.liveInfoRssFeeds
+            if (current.any { it.url.equals(cleanUrl, ignoreCase = true) }) {
+                _uiState.update {
+                    it.copy(statusToast = "Feed already exists in Live info")
+                }
+                return@launch
+            }
+            val newFeed = com.example.data.mcp.RssFeedConfig(
+                name = effectiveName,
+                url = cleanUrl
+            )
+            val updated = current + newFeed
+            repository.secretVault.setLiveInfoRssFeedsJson(
+                com.example.data.mcp.LiveInfoToolsService.serializeFeedsToJson(updated)
+            )
+            _uiState.update {
+                it.copy(
+                    liveInfoRssFeeds = updated,
+                    statusToast = "Added RSS feed: $effectiveName"
+                )
+            }
+        }
+    }
+
+    fun removeLiveInfoRssFeed(feedId: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.liveInfoRssFeeds
+            val updated = current.filterNot { it.id == feedId }
+            repository.secretVault.setLiveInfoRssFeedsJson(
+                com.example.data.mcp.LiveInfoToolsService.serializeFeedsToJson(updated)
+            )
+            _uiState.update {
+                it.copy(
+                    liveInfoRssFeeds = updated,
+                    statusToast = "Removed RSS feed"
+                )
+            }
         }
     }
 

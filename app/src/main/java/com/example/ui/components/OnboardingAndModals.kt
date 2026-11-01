@@ -177,6 +177,7 @@ fun OmniRouteOnboardingSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("onboarding_bottom_sheet")
     ) {
+        DialogWindowFocusGuard()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -539,6 +540,7 @@ fun ModelPickerBottomSheet(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         modifier = Modifier.testTag("model_picker_bottom_sheet")
     ) {
+        DialogWindowFocusGuard()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -833,6 +835,7 @@ fun ParameterTuningBottomSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("parameter_tuning_sheet")
     ) {
+        DialogWindowFocusGuard()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1171,6 +1174,7 @@ fun TerminalAndHealthBottomSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("omniroute_terminal_and_health_sheet")
     ) {
+        DialogWindowFocusGuard()
         Column(
             modifier = Modifier
                 .fillMaxWidth()

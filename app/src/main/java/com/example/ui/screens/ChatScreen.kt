@@ -86,6 +86,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -253,9 +254,12 @@ fun ChatWorkspaceScreen(
             userPrompt = uiState.draftMessage
         ).size
     }
-    val enabledMcpToolsCount = remember(mcpTools, activeConversation) {
-        if (activeConversation?.mcpToolsEnabled == false) 0
+    val liveInfoToolsCount = (if (uiState.liveInfoWebSearchEnabled) 1 else 0) +
+        (if (uiState.liveInfoNewsHeadlinesEnabled) 1 else 0)
+    val enabledMcpToolsCount = remember(mcpTools, activeConversation, liveInfoToolsCount) {
+        val mcpCount = if (activeConversation?.mcpToolsEnabled == false) 0
         else mcpTools.count { it.isEnabled }
+        mcpCount + liveInfoToolsCount
     }
 
     var showToolsSheet by rememberSaveable { mutableStateOf(false) }
@@ -387,18 +391,17 @@ fun ChatWorkspaceScreen(
 
     // Rename Conversation Dialog
     renameTarget?.let { target ->
-        val dialogFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
-        val dialogKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+        var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
         var newTitle by rememberSaveable(target.id) { mutableStateOf(target.title) }
         AlertDialog(
             onDismissRequest = {
-                dialogFocusManager.clearFocus(force = true)
-                dialogKeyboard?.hide()
+                clearDialogIme?.invoke()
                 renameTarget = null
             },
             containerColor = MaterialTheme.colorScheme.surface,
             title = { Text("Rename conversation", style = MaterialTheme.typography.titleMedium) },
             text = {
+                com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
                 OutlinedTextField(
                     value = newTitle,
                     onValueChange = { newTitle = it },
@@ -411,8 +414,7 @@ fun ChatWorkspaceScreen(
                 MinimalButton(
                     text = "Save",
                     onClick = {
-                        dialogFocusManager.clearFocus(force = true)
-                        dialogKeyboard?.hide()
+                        clearDialogIme?.invoke()
                         onRenameConversation(target, newTitle)
                         renameTarget = null
                     }
@@ -421,8 +423,7 @@ fun ChatWorkspaceScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        dialogFocusManager.clearFocus(force = true)
-                        dialogKeyboard?.hide()
+                        clearDialogIme?.invoke()
                         renameTarget = null
                     }
                 ) {
@@ -1473,6 +1474,7 @@ private fun MinimalChatCanvas(
                                     models = models,
                                     combos = uiState.omniRouteCombos,
                                     toolLogs = msgLogs,
+                                    liveInfoSources = uiState.liveInfoSourcesByMessageId[msg.id].orEmpty(),
                                     isLastAssistantMessage = msg.id == lastAssistantId,
                                     isTokenCountEstimated = msg.id in uiState.estimatedTokenMessageIds,
                                     cachedInputTokens = uiState.cachedTokensByMessageId[msg.id] ?: 0,
@@ -1948,6 +1950,7 @@ private fun MinimalChatMessageItem(
     models: List<ModelDescriptorEntity> = emptyList(),
     combos: List<OmniRouteComboDefinition> = emptyList(),
     toolLogs: List<ToolCallLogEntity>,
+    liveInfoSources: List<com.example.data.mcp.LiveInfoSource> = emptyList(),
     isLastAssistantMessage: Boolean,
     isTokenCountEstimated: Boolean = false,
     cachedInputTokens: Int = 0,
@@ -1960,6 +1963,11 @@ private fun MinimalChatMessageItem(
     onOpenHtmlPreview: ((htmlDocument: String, title: String) -> Unit)? = null
 ) {
     val clipboard = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
+    val resolvedSources = remember(toolLogs, liveInfoSources) {
+        val fromLogs = com.example.data.mcp.LiveInfoToolsService.extractSourcesFromToolLogs(toolLogs)
+        (liveInfoSources + fromLogs).distinctBy { it.link }
+    }
     val isUser = message.role.equals("user", ignoreCase = true)
     val attachments = remember(message.attachmentUri, message.attachmentMimeType) {
         message.getAttachments()
@@ -2147,6 +2155,80 @@ private fun MinimalChatMessageItem(
                                 color = CyberCyan,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        }
+                    }
+                }
+
+                // Sources used in the reply (from web_search and news_headlines), with titles and links
+                if (resolvedSources.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                            .testTag("message_sources_section_${message.id}")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = LucideIcons.Search,
+                                    contentDescription = "Sources",
+                                    tint = SoftIndigo,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = "Sources (${resolvedSources.size})",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            resolvedSources.forEachIndexed { idx, src ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            runCatching { uriHandler.openUri(src.link) }.onFailure {
+                                                clipboard.setText(AnnotatedString(src.link))
+                                                onCopiedToast("Copied source link")
+                                            }
+                                        }
+                                        .padding(vertical = 3.dp)
+                                        .testTag("message_source_item_${message.id}_$idx"),
+                                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                                ) {
+                                    Text(
+                                        text = buildString {
+                                            append("${idx + 1}. ${src.title}")
+                                            if (src.sourceName.isNotBlank()) {
+                                                append(" · ${src.sourceName}")
+                                            }
+                                            if (src.publishDate.isNotBlank()) {
+                                                append(" (${src.publishDate})")
+                                            }
+                                        },
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = src.link,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
+                                        color = SoftIndigo,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -2392,6 +2474,9 @@ private fun MinimalFloatingComposerBar(
     onSend: () -> Unit,
     onStop: () -> Unit
 ) {
+    val composerFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val composerKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2551,7 +2636,11 @@ private fun MinimalFloatingComposerBar(
             ) {
                 // "+" button on the left
                 IconButton(
-                    onClick = onOpenAttachOptions,
+                    onClick = {
+                        composerFocusManager.clearFocus(force = true)
+                        composerKeyboard?.hide()
+                        onOpenAttachOptions()
+                    },
                     modifier = Modifier
                         .size(40.dp)
                         .testTag("composer_plus_button")
@@ -2593,6 +2682,8 @@ private fun MinimalFloatingComposerBar(
                         keyboardActions = KeyboardActions(
                             onSend = {
                                 if (draft.isNotBlank() || attachments.isNotEmpty()) {
+                                    composerFocusManager.clearFocus(force = true)
+                                    composerKeyboard?.hide()
                                     onSend()
                                 }
                             }
@@ -2603,7 +2694,11 @@ private fun MinimalFloatingComposerBar(
 
                 // Mic button in the composer (SpeechRecognizer; asks RECORD_AUDIO permission on first tap)
                 IconButton(
-                    onClick = onMicClick,
+                    onClick = {
+                        composerFocusManager.clearFocus(force = true)
+                        composerKeyboard?.hide()
+                        onMicClick()
+                    },
                     modifier = Modifier
                         .size(38.dp)
                         .testTag("composer_mic_button")
@@ -2620,7 +2715,13 @@ private fun MinimalFloatingComposerBar(
                 val canSend = draft.isNotBlank() || attachments.isNotEmpty()
                 Surface(
                     onClick = {
-                        if (isStreaming) onStop() else if (canSend) onSend()
+                        if (isStreaming) {
+                            onStop()
+                        } else if (canSend) {
+                            composerFocusManager.clearFocus(force = true)
+                            composerKeyboard?.hide()
+                            onSend()
+                        }
                     },
                     enabled = isStreaming || canSend,
                     shape = CircleShape,

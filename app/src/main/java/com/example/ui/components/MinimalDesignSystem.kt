@@ -930,6 +930,40 @@ fun MinimalToggle(
     )
 }
 
+@Composable
+fun DialogWindowFocusGuard(
+    onRegisterCleaner: ((() -> Unit) -> Unit)? = null
+): () -> Unit {
+    val dialogFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val dialogKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val dialogView = androidx.compose.ui.platform.LocalView.current
+
+    val clearDialogIme: () -> Unit = androidx.compose.runtime.remember(dialogFocusManager, dialogKeyboardController, dialogView) {
+        {
+            runCatching {
+                dialogFocusManager.clearFocus(force = true)
+                dialogKeyboardController?.hide()
+                dialogView.clearFocus()
+                val imm = dialogView.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                    as? android.view.inputmethod.InputMethodManager
+                imm?.hideSoftInputFromWindow(dialogView.windowToken, 0)
+            }
+        }
+    }
+
+    androidx.compose.runtime.SideEffect {
+        onRegisterCleaner?.invoke(clearDialogIme)
+    }
+
+    androidx.compose.runtime.DisposableEffect(dialogView) {
+        onDispose {
+            clearDialogIme()
+        }
+    }
+
+    return clearDialogIme
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MinimalSheet(
@@ -939,11 +973,29 @@ fun MinimalSheet(
     subtitle: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val hostFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val hostKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    val innerSheetCleanerState = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<(() -> Unit)?>(null)
+    }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        runCatching {
+            hostFocusManager.clearFocus(force = true)
+            hostKeyboardController?.hide()
+        }
+    }
+
     val safeDismiss: () -> Unit = {
-        focusManager.clearFocus(force = true)
-        keyboardController?.hide()
+        innerSheetCleanerState.value?.invoke()
+        runCatching {
+            hostFocusManager.clearFocus(force = true)
+            hostKeyboardController?.hide()
+            val imm = hostView.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(hostView.windowToken, 0)
+        }
         onDismiss()
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -955,6 +1007,7 @@ fun MinimalSheet(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         modifier = modifier
     ) {
+        DialogWindowFocusGuard(onRegisterCleaner = { innerSheetCleanerState.value = it })
         Column(
             modifier = Modifier
                 .fillMaxWidth()

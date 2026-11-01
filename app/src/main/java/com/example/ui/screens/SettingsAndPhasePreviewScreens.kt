@@ -118,7 +118,12 @@ fun SettingsWorkspaceScreen(
     onClearAllData: () -> Unit,
     onOpenConnectors: () -> Unit = {},
     onSaveJavaRunnerSettings: (url: String, rawKey: String?) -> Unit = { _, _ -> },
-    onClearJavaRunnerKey: () -> Unit = {}
+    onClearJavaRunnerKey: () -> Unit = {},
+    onSetLiveInfoWebSearchEnabled: (Boolean) -> Unit = {},
+    onSetLiveInfoNewsHeadlinesEnabled: (Boolean) -> Unit = {},
+    onSetLiveInfoMaxSearchesPerMessage: (Int) -> Unit = {},
+    onAddLiveInfoRssFeed: (name: String, url: String) -> Unit = { _, _ -> },
+    onRemoveLiveInfoRssFeed: (feedId: String) -> Unit = {}
 ) {
     MinimalSettingsAndThemeScreen(
         uiState = uiState,
@@ -132,7 +137,12 @@ fun SettingsWorkspaceScreen(
         onClearAllData = onClearAllData,
         onOpenConnectors = onOpenConnectors,
         onSaveJavaRunnerSettings = onSaveJavaRunnerSettings,
-        onClearJavaRunnerKey = onClearJavaRunnerKey
+        onClearJavaRunnerKey = onClearJavaRunnerKey,
+        onSetLiveInfoWebSearchEnabled = onSetLiveInfoWebSearchEnabled,
+        onSetLiveInfoNewsHeadlinesEnabled = onSetLiveInfoNewsHeadlinesEnabled,
+        onSetLiveInfoMaxSearchesPerMessage = onSetLiveInfoMaxSearchesPerMessage,
+        onAddLiveInfoRssFeed = onAddLiveInfoRssFeed,
+        onRemoveLiveInfoRssFeed = onRemoveLiveInfoRssFeed
     )
 }
 
@@ -153,11 +163,22 @@ fun MinimalSettingsAndThemeScreen(
     onOpenConnectors: () -> Unit = {},
     onSaveJavaRunnerSettings: (url: String, rawKey: String?) -> Unit = { _, _ -> },
     onClearJavaRunnerKey: () -> Unit = {},
+    onSetLiveInfoWebSearchEnabled: (Boolean) -> Unit = {},
+    onSetLiveInfoNewsHeadlinesEnabled: (Boolean) -> Unit = {},
+    onSetLiveInfoMaxSearchesPerMessage: (Int) -> Unit = {},
+    onAddLiveInfoRssFeed: (name: String, url: String) -> Unit = { _, _ -> },
+    onRemoveLiveInfoRssFeed: (feedId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isLightMode = uiState.themeMode.equals("LIGHT", ignoreCase = true)
     var javaRunnerUrlDraft by rememberSaveable(uiState.javaRunnerUrl) { mutableStateOf(uiState.javaRunnerUrl) }
     var javaRunnerKeyDraft by rememberSaveable { mutableStateOf("") }
+    var newFeedNameDraft by rememberSaveable { mutableStateOf("") }
+    var newFeedUrlDraft by rememberSaveable { mutableStateOf("") }
+    var feedUrlValidationError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val settingsFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val settingsKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
 
     LazyColumn(
         modifier = modifier
@@ -398,6 +419,218 @@ fun MinimalSettingsAndThemeScreen(
             }
         }
 
+        // Live info Section Card (Settings > Live info: web_search & news_headlines)
+        item {
+            MinimalSectionHeader(title = "Live info")
+            Spacer(modifier = Modifier.height(8.dp))
+            MinimalCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("settings_live_info_card")
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // 1. web_search toggle (off by default)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Web search (web_search)",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "DuckDuckGo search (no key, HTTPS only, 10m cache, 2 KB cap)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        MinimalToggle(
+                            checked = uiState.liveInfoWebSearchEnabled,
+                            onCheckedChange = onSetLiveInfoWebSearchEnabled,
+                            testTag = "live_info_web_search_toggle"
+                        )
+                    }
+
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+
+                    // 2. news_headlines toggle (off by default)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "News headlines (news_headlines)",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Saved HTTPS RSS feeds only (no key, 15m cache, 2 KB cap)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        MinimalToggle(
+                            checked = uiState.liveInfoNewsHeadlinesEnabled,
+                            onCheckedChange = onSetLiveInfoNewsHeadlinesEnabled,
+                            testTag = "live_info_news_headlines_toggle"
+                        )
+                    }
+
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+
+                    // 3. Max web searches per user message limit (default 3)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("live_info_search_limit_row"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Search limit per message",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "At most ${uiState.liveInfoMaxSearchesPerMessage} web search(es) per user message (3s interval)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            listOf(1, 2, 3, 5).forEach { limitOption ->
+                                MinimalChip(
+                                    label = limitOption.toString(),
+                                    selected = uiState.liveInfoMaxSearchesPerMessage == limitOption,
+                                    onClick = { onSetLiveInfoMaxSearchesPerMessage(limitOption) },
+                                    testTag = "live_info_search_limit_chip_$limitOption"
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+
+                    // 4. Saved HTTPS RSS News Feeds list with Add and Remove buttons
+                    Text(
+                        text = "News RSS feeds (${uiState.liveInfoRssFeeds.size} HTTPS feeds)",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        uiState.liveInfoRssFeeds.forEach { feed ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.background,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("live_info_feed_item_${feed.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = feed.name,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = feed.url,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    MinimalButton(
+                                        text = "Remove",
+                                        onClick = { onRemoveLiveInfoRssFeed(feed.id) },
+                                        filled = false,
+                                        modifier = Modifier.testTag("live_info_remove_feed_${feed.id}")
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = newFeedNameDraft,
+                        onValueChange = { newFeedNameDraft = it },
+                        label = { Text("Feed name") },
+                        placeholder = { Text("e.g., Ars Technica") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("live_info_new_feed_name_input")
+                    )
+
+                    OutlinedTextField(
+                        value = newFeedUrlDraft,
+                        onValueChange = {
+                            newFeedUrlDraft = it
+                            feedUrlValidationError = null
+                        },
+                        label = { Text("HTTPS RSS feed URL") },
+                        placeholder = { Text("https://example.com/rss.xml") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("live_info_new_feed_url_input")
+                    )
+
+                    if (feedUrlValidationError != null) {
+                        Text(
+                            text = feedUrlValidationError.orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = CoralError,
+                            modifier = Modifier.testTag("live_info_feed_url_error")
+                        )
+                    }
+
+                    MinimalButton(
+                        text = "Add HTTPS Feed",
+                        icon = LucideIcons.Plus,
+                        onClick = {
+                            settingsFocusManager.clearFocus(force = true)
+                            settingsKeyboard?.hide()
+                            val trimmedUrl = newFeedUrlDraft.trim()
+                            if (!com.example.data.mcp.LiveInfoToolsService.isValidHttpsFeedUrl(trimmedUrl)) {
+                                feedUrlValidationError = "Only valid public HTTPS feed URLs (https://...) are allowed."
+                            } else {
+                                feedUrlValidationError = null
+                                onAddLiveInfoRssFeed(newFeedNameDraft.trim(), trimmedUrl)
+                                newFeedNameDraft = ""
+                                newFeedUrlDraft = ""
+                            }
+                        },
+                        filled = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("live_info_add_feed_button")
+                    )
+                }
+            }
+        }
+
         // Code Runner (Java Remote Runner) Card
         item {
             MinimalSectionHeader(title = "Code Runner (Java Remote Runner)")
@@ -478,6 +711,8 @@ fun MinimalSettingsAndThemeScreen(
                         MinimalButton(
                             text = "Save Runner",
                             onClick = {
+                                settingsFocusManager.clearFocus(force = true)
+                                settingsKeyboard?.hide()
                                 onSaveJavaRunnerSettings(
                                     javaRunnerUrlDraft,
                                     javaRunnerKeyDraft.takeIf { it.isNotBlank() }
@@ -493,6 +728,8 @@ fun MinimalSettingsAndThemeScreen(
                             MinimalButton(
                                 text = "Clear Key",
                                 onClick = {
+                                    settingsFocusManager.clearFocus(force = true)
+                                    settingsKeyboard?.hide()
                                     javaRunnerKeyDraft = ""
                                     onClearJavaRunnerKey()
                                 },
@@ -516,7 +753,11 @@ fun MinimalSettingsAndThemeScreen(
                     MinimalButton(
                         text = "Open HTML/CSS/JS Code Input & Templates",
                         icon = LucideIcons.Code,
-                        onClick = { showSettingsHtmlCodeInputSheet = true },
+                        onClick = {
+                            settingsFocusManager.clearFocus(force = true)
+                            settingsKeyboard?.hide()
+                            showSettingsHtmlCodeInputSheet = true
+                        },
                         filled = false,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -679,10 +920,15 @@ fun IntegrationsWorkspaceScreen(
 
     if (showGitHubDialog) {
         var patInput by rememberSaveable { mutableStateOf("") }
+        var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
         AlertDialog(
-            onDismissRequest = { showGitHubDialog = false },
+            onDismissRequest = {
+                clearDialogIme?.invoke()
+                showGitHubDialog = false
+            },
             title = { Text("Connect GitHub", style = MaterialTheme.typography.titleLarge) },
             text = {
+                com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
                 OutlinedTextField(
                     value = patInput,
                     onValueChange = { patInput = it },
@@ -697,6 +943,7 @@ fun IntegrationsWorkspaceScreen(
                 MinimalButton(
                     text = "Connect",
                     onClick = {
+                        clearDialogIme?.invoke()
                         onSaveGitHubPat(patInput)
                         onVerifyGitHub(patInput)
                         showGitHubDialog = false
@@ -706,7 +953,12 @@ fun IntegrationsWorkspaceScreen(
                 )
             },
             dismissButton = {
-                TextButton(onClick = { showGitHubDialog = false }) { Text("Cancel") }
+                TextButton(
+                    onClick = {
+                        clearDialogIme?.invoke()
+                        showGitHubDialog = false
+                    }
+                ) { Text("Cancel") }
             }
         )
     }
@@ -714,10 +966,15 @@ fun IntegrationsWorkspaceScreen(
     if (showYouTubeDialog) {
         var clientIdInput by rememberSaveable { mutableStateOf(uiState.youTubeClientId) }
         var tokenInput by rememberSaveable { mutableStateOf("") }
+        var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
         AlertDialog(
-            onDismissRequest = { showYouTubeDialog = false },
+            onDismissRequest = {
+                clearDialogIme?.invoke()
+                showYouTubeDialog = false
+            },
             title = { Text("Connect YouTube", style = MaterialTheme.typography.titleLarge) },
             text = {
+                com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = clientIdInput,
@@ -742,6 +999,7 @@ fun IntegrationsWorkspaceScreen(
                 MinimalButton(
                     text = "Connect",
                     onClick = {
+                        clearDialogIme?.invoke()
                         onSaveYouTubeCredentials(clientIdInput, tokenInput)
                         onVerifyYouTubeChannel(tokenInput)
                         showYouTubeDialog = false
@@ -751,7 +1009,12 @@ fun IntegrationsWorkspaceScreen(
                 )
             },
             dismissButton = {
-                TextButton(onClick = { showYouTubeDialog = false }) { Text("Cancel") }
+                TextButton(
+                    onClick = {
+                        clearDialogIme?.invoke()
+                        showYouTubeDialog = false
+                    }
+                ) { Text("Cancel") }
             }
         )
     }
@@ -759,10 +1022,15 @@ fun IntegrationsWorkspaceScreen(
     if (showAddMcpDialog) {
         var mcpName by rememberSaveable { mutableStateOf("") }
         var mcpUrl by rememberSaveable { mutableStateOf("") }
+        var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
         AlertDialog(
-            onDismissRequest = { showAddMcpDialog = false },
+            onDismissRequest = {
+                clearDialogIme?.invoke()
+                showAddMcpDialog = false
+            },
             title = { Text("Add MCP Server", style = MaterialTheme.typography.titleLarge) },
             text = {
+                com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = mcpName,
@@ -786,6 +1054,7 @@ fun IntegrationsWorkspaceScreen(
                 MinimalButton(
                     text = "Connect",
                     onClick = {
+                        clearDialogIme?.invoke()
                         onSaveMcpServer(
                             null,
                             mcpName.trim(),
@@ -803,7 +1072,12 @@ fun IntegrationsWorkspaceScreen(
                 )
             },
             dismissButton = {
-                TextButton(onClick = { showAddMcpDialog = false }) { Text("Cancel") }
+                TextButton(
+                    onClick = {
+                        clearDialogIme?.invoke()
+                        showAddMcpDialog = false
+                    }
+                ) { Text("Cancel") }
             }
         )
     }

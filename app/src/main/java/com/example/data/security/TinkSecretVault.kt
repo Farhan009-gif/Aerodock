@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -125,6 +126,10 @@ class TinkSecretVault(private val context: Context) {
         private val KEY_PROVIDER_SPENDING_LIMITS_JSON = stringPreferencesKey("runway_provider_spending_limits_json")
         private val KEY_HAS_SEEN_FILE_ATTACHMENT_NOTICE = booleanPreferencesKey("runway_has_seen_file_attachment_notice")
         private val KEY_JAVA_RUNNER_URL = stringPreferencesKey("runway_java_runner_url")
+        private val KEY_LIVE_INFO_WEB_SEARCH_ENABLED = booleanPreferencesKey("runway_live_info_web_search_enabled")
+        private val KEY_LIVE_INFO_NEWS_HEADLINES_ENABLED = booleanPreferencesKey("runway_live_info_news_headlines_enabled")
+        private val KEY_LIVE_INFO_MAX_SEARCHES_PER_MESSAGE = intPreferencesKey("runway_live_info_max_searches_per_message")
+        private val KEY_LIVE_INFO_RSS_FEEDS_JSON = stringPreferencesKey("runway_live_info_rss_feeds_json")
 
         private fun apiKeyPreferenceKey(providerInstanceId: String) =
             stringPreferencesKey("$ENC_KEY_PREFIX$providerInstanceId")
@@ -198,6 +203,22 @@ class TinkSecretVault(private val context: Context) {
         prefs[KEY_JAVA_RUNNER_URL] ?: ""
     }
 
+    val liveInfoWebSearchEnabledFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_LIVE_INFO_WEB_SEARCH_ENABLED] ?: false
+    }
+
+    val liveInfoNewsHeadlinesEnabledFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_LIVE_INFO_NEWS_HEADLINES_ENABLED] ?: false
+    }
+
+    val liveInfoMaxSearchesPerMessageFlow: Flow<Int> = context.omniDataStore.data.map { prefs ->
+        (prefs[KEY_LIVE_INFO_MAX_SEARCHES_PER_MESSAGE] ?: 3).coerceIn(1, 20)
+    }
+
+    val liveInfoRssFeedsJsonFlow: Flow<String> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_LIVE_INFO_RSS_FEEDS_JSON] ?: ""
+    }
+
     val runwayMigrationVerifiedFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
         prefs[KEY_RUNWAY_MIGRATION_VERIFIED] ?: false
     }
@@ -217,6 +238,31 @@ class TinkSecretVault(private val context: Context) {
     suspend fun setReadRepliesAloud(enabled: Boolean) {
         context.omniDataStore.edit { prefs ->
             prefs[KEY_READ_REPLIES_ALOUD] = enabled
+        }
+    }
+
+    suspend fun setLiveInfoWebSearchEnabled(enabled: Boolean) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_LIVE_INFO_WEB_SEARCH_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setLiveInfoNewsHeadlinesEnabled(enabled: Boolean) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_LIVE_INFO_NEWS_HEADLINES_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setLiveInfoMaxSearchesPerMessage(limit: Int) {
+        val coerced = limit.coerceIn(1, 20)
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_LIVE_INFO_MAX_SEARCHES_PER_MESSAGE] = coerced
+        }
+    }
+
+    suspend fun setLiveInfoRssFeedsJson(json: String) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_LIVE_INFO_RSS_FEEDS_JSON] = json
         }
     }
 

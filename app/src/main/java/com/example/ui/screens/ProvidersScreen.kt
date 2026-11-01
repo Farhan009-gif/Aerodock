@@ -192,7 +192,9 @@ fun ProvidersScreen(
     editingLimitProvider?.let { targetProv ->
         val dialogFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
         val dialogKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+        var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
         val dismissLimitDialog: () -> Unit = {
+            clearDialogIme?.invoke()
             dialogFocusManager.clearFocus(force = true)
             dialogKeyboard?.hide()
             editingLimitProvider = null
@@ -214,6 +216,7 @@ fun ProvidersScreen(
                 )
             },
             text = {
+                com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Set an optional monthly USD limit for ${targetProv.displayName}. At 80% a warning appears in chat; at 100% requests are blocked.",
@@ -238,6 +241,7 @@ fun ProvidersScreen(
                     text = "Save",
                     onClick = {
                         val parsed = limitText.trim().removePrefix("$").toDoubleOrNull()
+                        clearDialogIme?.invoke()
                         dialogFocusManager.clearFocus(force = true)
                         dialogKeyboard?.hide()
                         onSetProviderMonthlyLimitUsd(targetProv.id, parsed)
@@ -559,7 +563,9 @@ private fun QuickEditApiKeyDialog(
     var rawKey by rememberSaveable { mutableStateOf("") }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
     val safeDismiss: () -> Unit = {
+        clearDialogIme?.invoke()
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
         onDismiss()
@@ -574,6 +580,7 @@ private fun QuickEditApiKeyDialog(
             )
         },
         text = {
+            com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (!currentMaskedKey.isNullOrBlank()) {
                     Text(
@@ -604,6 +611,7 @@ private fun QuickEditApiKeyDialog(
             MinimalButton(
                 text = "Save",
                 onClick = {
+                    clearDialogIme?.invoke()
                     focusManager.clearFocus(force = true)
                     keyboardController?.hide()
                     onSave(rawKey)
@@ -618,6 +626,7 @@ private fun QuickEditApiKeyDialog(
                 if (!currentMaskedKey.isNullOrBlank()) {
                     TextButton(
                         onClick = {
+                            clearDialogIme?.invoke()
                             focusManager.clearFocus(force = true)
                             keyboardController?.hide()
                             onClear()
@@ -673,9 +682,11 @@ private fun AddEditProviderDialog(
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     AlertDialog(
         onDismissRequest = {
+            clearDialogIme?.invoke()
             focusManager.clearFocus(force = true)
             keyboardController?.hide()
             onDismiss()
@@ -687,6 +698,7 @@ private fun AddEditProviderDialog(
             )
         },
         text = {
+            com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -775,6 +787,7 @@ private fun AddEditProviderDialog(
             MinimalButton(
                 text = "Save",
                 onClick = {
+                    clearDialogIme?.invoke()
                     focusManager.clearFocus(force = true)
                     keyboardController?.hide()
                     onSave(
@@ -796,6 +809,7 @@ private fun AddEditProviderDialog(
         },
         dismissButton = {
             TextButton(onClick = {
+                clearDialogIme?.invoke()
                 focusManager.clearFocus(force = true)
                 keyboardController?.hide()
                 onDismiss()
@@ -1089,8 +1103,13 @@ internal fun OmniRouteComboBuilderDialog(
         }
     }
 
+    var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            clearDialogIme?.invoke()
+            onDismiss()
+        },
         title = {
             Text(
                 text = if (initialCombo != null) "Edit OmniRoute Combo" else "New OmniRoute Combo",
@@ -1098,6 +1117,7 @@ internal fun OmniRouteComboBuilderDialog(
             )
         },
         text = {
+            com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1241,6 +1261,7 @@ internal fun OmniRouteComboBuilderDialog(
             MinimalButton(
                 text = "Save Combo",
                 onClick = {
+                    clearDialogIme?.invoke()
                     val targets = targetModelsText.split(",")
                         .map { it.trim() }
                         .filter { it.isNotEmpty() }
@@ -1259,7 +1280,10 @@ internal fun OmniRouteComboBuilderDialog(
             )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                clearDialogIme?.invoke()
+                onDismiss()
+            }) {
                 Text("Cancel")
             }
         }
@@ -1292,12 +1316,18 @@ internal fun AddCustomModelDialog(
     var modality by rememberSaveable { mutableStateOf(defaultModality) }
     var isCombo by rememberSaveable { mutableStateOf(false) }
 
+    var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
+
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            clearDialogIme?.invoke()
+            onDismiss()
+        },
         title = {
             Text("Add Custom Model", style = MaterialTheme.typography.titleLarge)
         },
         text = {
+            com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1381,6 +1411,7 @@ internal fun AddCustomModelDialog(
             MinimalButton(
                 text = "Add Model",
                 onClick = {
+                    clearDialogIme?.invoke()
                     onSave(
                         selectedProviderId,
                         rawModelId.trim(),
@@ -1395,7 +1426,10 @@ internal fun AddCustomModelDialog(
             )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                clearDialogIme?.invoke()
+                onDismiss()
+            }) {
                 Text("Cancel")
             }
         }

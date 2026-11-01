@@ -444,6 +444,38 @@ private fun OmniStudioRoot(
     // Persistent Media Gallery mode inside Create tab (Images | Videos | Gallery)
     var showPersistentGallery by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
 
+    val rootFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val rootKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val rootView = androidx.compose.ui.platform.LocalView.current
+
+    val anyOverlayOpen = agentState.isSheetOpen ||
+        uiState.showOnboardingSheet ||
+        uiState.showModelPickerSheet ||
+        uiState.showCompareTargetSheet ||
+        uiState.showTerminalAndHealthSheet ||
+        uiState.showPromptLibrarySheet ||
+        uiState.showParameterSheet ||
+        uiState.showSkillsAndToolsSheet ||
+        uiState.showGitCloneSheet ||
+        uiState.showRepoFileBrowserSheet ||
+        uiState.showSafetyApprovalSheet ||
+        uiState.pendingToolApproval != null ||
+        uiState.activeHtmlPreviewDocument != null ||
+        uiState.pendingCleartextApproval != null ||
+        uiState.exportPreview != null ||
+        uiState.gitHubPushDraft != null ||
+        uiState.youTubePublishDraft != null
+
+    LaunchedEffect(uiState.currentTab, moreSubTab, anyOverlayOpen) {
+        runCatching {
+            rootFocusManager.clearFocus(force = true)
+            rootKeyboardController?.hide()
+            val imm = rootView.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(rootView.windowToken, 0)
+        }
+    }
+
     // Sync More sub-tab when navigated via ViewModel or Agent
     LaunchedEffect(uiState.currentTab) {
         if (uiState.currentTab == WorkspaceTab.USAGE) {
@@ -1352,7 +1384,12 @@ private fun OmniStudioRoot(
                                                     onClearAllData = viewModel::clearAllWorkspaceData,
                                                     onOpenConnectors = { viewModel.openConnectorsScreen(null) },
                                                     onSaveJavaRunnerSettings = viewModel::saveJavaRunnerSettings,
-                                                    onClearJavaRunnerKey = viewModel::clearJavaRunnerKey
+                                                    onClearJavaRunnerKey = viewModel::clearJavaRunnerKey,
+                                                    onSetLiveInfoWebSearchEnabled = viewModel::setLiveInfoWebSearchEnabled,
+                                                    onSetLiveInfoNewsHeadlinesEnabled = viewModel::setLiveInfoNewsHeadlinesEnabled,
+                                                    onSetLiveInfoMaxSearchesPerMessage = viewModel::setLiveInfoMaxSearchesPerMessage,
+                                                    onAddLiveInfoRssFeed = viewModel::addLiveInfoRssFeed,
+                                                    onRemoveLiveInfoRssFeed = viewModel::removeLiveInfoRssFeed
                                                 )
                                             }
                                         }
@@ -1369,7 +1406,12 @@ private fun OmniStudioRoot(
                                                 onClearAllData = viewModel::clearAllWorkspaceData,
                                                 onOpenConnectors = { viewModel.openConnectorsScreen(null) },
                                                 onSaveJavaRunnerSettings = viewModel::saveJavaRunnerSettings,
-                                                onClearJavaRunnerKey = viewModel::clearJavaRunnerKey
+                                                onClearJavaRunnerKey = viewModel::clearJavaRunnerKey,
+                                                onSetLiveInfoWebSearchEnabled = viewModel::setLiveInfoWebSearchEnabled,
+                                                onSetLiveInfoNewsHeadlinesEnabled = viewModel::setLiveInfoNewsHeadlinesEnabled,
+                                                onSetLiveInfoMaxSearchesPerMessage = viewModel::setLiveInfoMaxSearchesPerMessage,
+                                                onAddLiveInfoRssFeed = viewModel::addLiveInfoRssFeed,
+                                                onRemoveLiveInfoRssFeed = viewModel::removeLiveInfoRssFeed
                                             )
                                         }
                                     }

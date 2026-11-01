@@ -981,6 +981,11 @@ fun CollapsibleToolCallCard(
 ) {
     val isCodeExecution = log.toolName == JsSandboxExecutor.RUN_CODE_TOOL_NAME ||
         log.serverId == JsSandboxExecutor.RUN_CODE_SERVER_ID
+    val isLiveInfo = com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(log.toolName) ||
+        log.serverId == com.example.data.mcp.LiveInfoToolsService.LIVE_INFO_SERVER_ID
+    val cleanResultText = remember(log.resultText) {
+        com.example.data.mcp.LiveInfoToolsService.stripSourcesMarker(log.resultText)
+    }
     var expanded by rememberSaveable(log.id) { mutableStateOf(isCodeExecution) }
     var showInlinePreview by rememberSaveable(log.id) { mutableStateOf(false) }
     val statusLabel = when {
@@ -1005,7 +1010,7 @@ fun CollapsibleToolCallCard(
     }
     val isJavaRunner = confirmDetails?.language == RunnerLanguage.JAVA
     val isHtmlCssJsRunner = isCodeExecution && !isJavaRunner
-    val previewHtmlDocument = remember(log.argumentsJson, isHtmlCssJsRunner, confirmDetails, log.resultText) {
+    val previewHtmlDocument = remember(log.argumentsJson, isHtmlCssJsRunner, confirmDetails, cleanResultText) {
         if (isHtmlCssJsRunner && confirmDetails != null) {
             when (confirmDetails.language) {
                 RunnerLanguage.HTML -> JsSandboxExecutor.buildFullHtmlDocument(
@@ -1019,7 +1024,7 @@ fun CollapsibleToolCallCard(
                     js = confirmDetails.js
                 )
                 else -> JsSandboxExecutor.buildFullHtmlDocument(
-                    html = "<div id=\"app\"></div><pre id=\"console-out\">${log.resultText.replace("<", "&lt;")}</pre>",
+                    html = "<div id=\"app\"></div><pre id=\"console-out\">${cleanResultText.replace("<", "&lt;")}</pre>",
                     css = confirmDetails.css.ifBlank { "body { font-family: monospace; padding: 12px; }" },
                     js = confirmDetails.code
                 )
@@ -1071,6 +1076,7 @@ fun CollapsibleToolCallCard(
                         text = when {
                             isJavaRunner -> "JAVA RUNNER"
                             isCodeExecution -> "WEBVIEW SANDBOX"
+                            isLiveInfo -> "LIVE INFO"
                             else -> "MCP TOOL"
                         },
                         color = if (isCodeExecution) ElectricIndigo else CyberCyan
@@ -1112,6 +1118,7 @@ fun CollapsibleToolCallCard(
                         text = when {
                             isJavaRunner -> "Executed at $timeLabel • Remote Java Runner (5s timeout • 10 KB output cap)"
                             isCodeExecution -> "Executed at $timeLabel • Isolated WebView Sandbox (5s timeout • 4 MB limit • 10 KB output cap)"
+                            isLiveInfo -> "Executed at $timeLabel • Read-Only HTTPS Live Info (2 KB output cap • Untrusted Data Guard)"
                             else -> "Executed at $timeLabel • ${if (!log.isDestructiveOrWrite) "Read-Only Tool" else "Write/Mutating Tool"}"
                         },
                         style = MaterialTheme.typography.labelSmall,
@@ -1144,7 +1151,7 @@ fun CollapsibleToolCallCard(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = log.resultText,
+                            text = cleanResultText,
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMonoFontFamily),
                             modifier = Modifier
                                 .heightIn(max = 180.dp)
