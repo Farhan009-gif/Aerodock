@@ -783,6 +783,16 @@ class OpenAICompatibleProvider(
             }
         }
 
+        // Bound the outbound payload (notably the agent tool loop, which re-sends its
+        // working history every iteration) before serialising it.
+        val outboundMessages = SmartContextTrimmer.compactToolLoopMessages(
+            request.messages,
+            SmartContextTrimmer.calculateTrimmingThresholdTokens(
+                SmartContextTrimmer.resolveContextWindowTokens(request.modelId)
+            ),
+            request.systemPrompt
+        )
+
         val messagesArr = JSONArray()
         val stableSystemText = if (request.baseSystemPrompt.isNotBlank() || request.enabledSkillsBlock.isNotBlank()) {
             PromptCacheManager.buildStableSystemPrefix(
@@ -799,7 +809,7 @@ class OpenAICompatibleProvider(
             messagesArr.put(sysObj)
         }
 
-        for (msg in request.messages) {
+        for (msg in outboundMessages) {
             val msgObj = JSONObject()
             val roleLower = msg.role.lowercase()
             msgObj.put("role", roleLower)
