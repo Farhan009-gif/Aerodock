@@ -236,8 +236,17 @@ class GeminiProvider(
             root.put("systemInstruction", JSONObject().put("parts", sysParts))
         }
 
+        // Bound the outbound payload (see SmartContextTrimmer.compactToolLoopMessages).
+        val outboundMessages = SmartContextTrimmer.compactToolLoopMessages(
+            request.messages,
+            SmartContextTrimmer.calculateTrimmingThresholdTokens(
+                SmartContextTrimmer.resolveContextWindowTokens(request.modelId)
+            ),
+            request.systemPrompt
+        )
+
         val contentsArr = JSONArray()
-        for (msg in request.messages) {
+        for (msg in outboundMessages) {
             if (msg.role.equals("system", ignoreCase = true)) continue
             val roleLower = msg.role.lowercase()
 
