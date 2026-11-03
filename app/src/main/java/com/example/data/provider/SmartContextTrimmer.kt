@@ -8,13 +8,16 @@ import kotlin.math.roundToInt
  *   summarises older messages while keeping the last 6 turns, using the selected model.
  * - Keeps the summary under 800 tokens.
  * - Summaries are INCREMENTAL: once a summary exists, later sends reuse it and only the
- *   messages that aged out since then are folded into an updated summary. The number of
- *   history messages a summary covers is tracked via summaryCoveredCount, so a long chat
- *   does not re-send (or re-summarise) its whole history on every message.
+ *   messages that aged out since then are folded into an updated summary, instead of
+ *   re-summarising (and re-sending) the whole history on every message.
+ * - Coverage bookkeeping rides inside the stored summary text itself as a plain footer
+ *   line ("[Summary covers the first N messages of this chat.]"). The footer is stripped
+ *   before anything is sent to a model, and it doubles as useful information in the
+ *   Context Summary dialog, which displays the stored summary text.
  * - Token estimation counts media attachments (images/videos) as well as text, so chats
  *   full of screenshots are not invisible to the trimmer.
- * - The agent/tool loop uses [compactToolLoopMessages] before every iteration so a long
- *   tool chain cannot re-send an ever-growing payload unchecked.
+ * - [compactToolLoopMessages] bounds provider payloads (notably the agent/tool loop,
+ *   which re-sends its working payload on every iteration) before they are serialised.
  * - Keeps the full message history visible in the app; only the outbound request uses the summary.
  * - If summarising fails, sends the full history and shows nothing extra.
  */
@@ -33,7 +36,7 @@ object SmartContextTrimmer {
     const val IMAGE_TOKENS_ESTIMATE: Int = 1_600
     const val VIDEO_TOKENS_ESTIMATE: Int = 3_000
 
-    // Tool-loop compaction: tool results older than the most recent few exchanges are
+    // Payload compaction: tool results older than the most recent few exchanges are
     // stubbed once they pass this size, and any remaining oversized message is truncated.
     const val TOOL_RESULT_STUB_MAX_CHARS: Int = 600
     const val TOOL_RESULT_STUB_PREVIEW_CHARS: Int = 160
@@ -41,13 +44,16 @@ object SmartContextTrimmer {
     const val LOOP_TRUNCATE_KEEP_CHARS: Int = 1_000
     const val LOOP_PROTECTED_RECENT_MESSAGES: Int = 4
 
+    private val COVERAGE_FOOTER_REGEX =
+        Regex("""\n*\[Summary covers the first (\d+) messages? of this chat\.\]\s*$""")
+
     data class ContextTrimResult(
         val outboundMessages: List<ChatMessagePayload>,
         val wasSummarised: Boolean,
         val summaryText: String?,
         val estimatedInputTokens: Int,
         val thresholdTokens: Int,
-        /** How many leading history messages [summaryText] covers (0 when there is no summary). */
+        /** How many leading history messages the summary covers (0 when there is no summary). */
         val summaryCoveredCount: Int = 0
     ) {
         val requestMessages: List<ChatMessagePayload>
@@ -231,6 +237,27 @@ object SmartContextTrimmer {
         }
     }
 
+    /**
+     * Splits a stored summary into (cleanSummaryText, coveredMessageCount) by removing the
+     * coverage footer. Summaries stored before footers existed return a count of 0.
+     */
+    fun parseStoredSummary(storedSummary: String?): Pair<String, Int> {
+        val raw = storedSummary?.trim().orEmpty()
+        if (raw.isEmpty()) return "" to 0
+        val match = COVERAGE_FOOTER_REGEX.find(raw) ?: return raw to 0
+        val covered = match.groupValues[1].toIntOrNull() ?: 0
+        val clean = raw.substring(0, match.range.first).trim()
+        return clean to covered
+    }
+
+    /** The stored form of a summary: clean text plus its coverage footer line. */
+    fun buildStoredSummary(cleanSummary: String, coveredCount: Int): String {
+        val clean = cleanSummary.trim()
+        if (clean.isEmpty() || coveredCount <= 0) return clean
+        val noun = if (coveredCount == 1) "message" else "messages"
+        return "$clean\n\n[Summary covers the first $coveredCount $noun of this chat.]"
+    }
+
     private fun summaryPayload(summaryText: String): ChatMessagePayload {
         return ChatMessagePayload(
             role = "user",
@@ -242,11 +269,12 @@ object SmartContextTrimmer {
      * Checks whether input tokens reach ~60% of the context window and, if so and [trimmingEnabledForChat]
      * is true, summarises older messages keeping the last 6 turns.
      *
-     * Incremental behaviour: when [existingCachedSummary] is provided together with a valid
-     * [cachedSummaryCoveredCount] (how many leading messages of [fullMessages] that summary
-     * already covers), the cached summary is reused as-is while the remaining tail stays
-     * under the threshold — no summarisation request at all. When the tail itself grows past
-     * the threshold, only the newly aged-out messages are folded into an updated summary.
+     * Incremental behaviour: a previously stored summary (passed as [existingCachedSummary])
+     * carries how many leading messages it covers, either via [cachedSummaryCoveredCount]
+     * or via its own coverage footer. While the not-yet-summarised tail stays under the
+     * threshold, the cached summary is reused untouched — no summarisation request and no
+     * history re-send. When the tail itself grows past the threshold, only the newly
+     * aged-out messages are folded into an updated summary.
      *
      * If summarising fails or returns blank, sends the full history and shows nothing extra.
      */
@@ -274,14 +302,19 @@ object SmartContextTrimmer {
             )
         }
 
-        val cachedSummary = existingCachedSummary?.trim().orEmpty()
-        val hasValidCache = cachedSummary.isNotBlank() &&
-            cachedSummaryCoveredCount in 1..fullMessages.size
+        val (cleanCachedSummary, footerCoveredCount) = parseStoredSummary(existingCachedSummary)
+        val effectiveCoveredCount = when {
+            cachedSummaryCoveredCount in 1..fullMessages.size -> cachedSummaryCoveredCount
+            footerCoveredCount in 1..fullMessages.size -> footerCoveredCount
+            else -> 0
+        }
+        val hasValidCache = cleanCachedSummary.isNotBlank() && effectiveCoveredCount > 0
 
         if (hasValidCache) {
-            val tail = fullMessages.drop(cachedSummaryCoveredCount)
-            val cachedPayload = summaryPayload(cachedSummary)
+            val tail = fullMessages.drop(effectiveCoveredCount)
+            val cachedPayload = summaryPayload(cleanCachedSummary)
             val tailTokens = estimateInputTokens(systemPrompt, listOf(cachedPayload) + tail)
+            val storedForm = buildStoredSummary(cleanCachedSummary, effectiveCoveredCount)
 
             if (tailTokens < threshold) {
                 // Steady state: reuse the cached summary untouched and send only the
@@ -289,10 +322,10 @@ object SmartContextTrimmer {
                 return ContextTrimResult(
                     outboundMessages = listOf(cachedPayload) + tail,
                     wasSummarised = true,
-                    summaryText = cachedSummary,
+                    summaryText = storedForm,
                     estimatedInputTokens = estimatedInput,
                     thresholdTokens = threshold,
-                    summaryCoveredCount = cachedSummaryCoveredCount
+                    summaryCoveredCount = effectiveCoveredCount
                 )
             }
 
@@ -302,14 +335,14 @@ object SmartContextTrimmer {
                 return ContextTrimResult(
                     outboundMessages = listOf(cachedPayload) + tail,
                     wasSummarised = true,
-                    summaryText = cachedSummary,
+                    summaryText = storedForm,
                     estimatedInputTokens = estimatedInput,
                     thresholdTokens = threshold,
-                    summaryCoveredCount = cachedSummaryCoveredCount
+                    summaryCoveredCount = effectiveCoveredCount
                 )
             }
 
-            val mergePrompt = buildIncrementalSummarisationPrompt(cachedSummary, olderTail)
+            val mergePrompt = buildIncrementalSummarisationPrompt(cleanCachedSummary, olderTail)
             val mergedResult = runCatching { summariseOlderMessages(mergePrompt) }
             val rawMerged = mergedResult.getOrNull()?.trim().orEmpty()
             if (mergedResult.isFailure || rawMerged.isBlank()) {
@@ -317,21 +350,22 @@ object SmartContextTrimmer {
                 return ContextTrimResult(
                     outboundMessages = listOf(cachedPayload) + tail,
                     wasSummarised = true,
-                    summaryText = cachedSummary,
+                    summaryText = storedForm,
                     estimatedInputTokens = estimatedInput,
                     thresholdTokens = threshold,
-                    summaryCoveredCount = cachedSummaryCoveredCount
+                    summaryCoveredCount = effectiveCoveredCount
                 )
             }
 
             val cappedMerged = enforceSummaryTokenLimit(rawMerged, MAX_SUMMARY_TOKENS)
+            val newCoveredCount = effectiveCoveredCount + olderTail.size
             return ContextTrimResult(
                 outboundMessages = listOf(summaryPayload(cappedMerged)) + recentTail,
                 wasSummarised = true,
-                summaryText = cappedMerged,
+                summaryText = buildStoredSummary(cappedMerged, newCoveredCount),
                 estimatedInputTokens = estimatedInput,
                 thresholdTokens = threshold,
-                summaryCoveredCount = cachedSummaryCoveredCount + olderTail.size
+                summaryCoveredCount = newCoveredCount
             )
         }
 
@@ -375,7 +409,7 @@ object SmartContextTrimmer {
         return ContextTrimResult(
             outboundMessages = listOf(summaryPayload(cappedSummary)) + recent,
             wasSummarised = true,
-            summaryText = cappedSummary,
+            summaryText = buildStoredSummary(cappedSummary, older.size),
             estimatedInputTokens = estimatedInput,
             thresholdTokens = threshold,
             summaryCoveredCount = older.size
@@ -383,17 +417,17 @@ object SmartContextTrimmer {
     }
 
     /**
-     * Bounds the payload sent on each iteration of the agent/tool loop.
+     * Bounds a provider-bound payload to [maxEstimatedTokens].
      *
-     * trimIfNeeded runs once per user message, but the tool loop then re-sends its working
-     * payload on every iteration while tool results keep growing it — with high or unlimited
-     * iteration settings that multiplies into the runaway token counts seen in usage stats.
-     * This compaction preserves message order, roles and tool-call structure (so provider
-     * tool-call pairing stays valid) and only shrinks CONTENT:
+     * trimIfNeeded runs once per user message, but the agent/tool loop then re-sends its
+     * working payload on every iteration while tool results keep growing it — with high or
+     * unlimited iteration settings that multiplies into runaway token counts. Providers call
+     * this right before serialising a request, so every iteration is bounded. Message order,
+     * roles and tool-call structure are preserved (provider tool-call pairing stays valid);
+     * only content shrinks, in stages, re-checking the estimate after each stage:
      *  1. Oversized tool results outside the most recent messages are replaced with a stub.
-     *  2. Media attachments on older messages are dropped (the model already saw them in
-     *     earlier iterations; the message text stays).
-     *  3. If still over budget, remaining oversized message bodies are truncated.
+     *  2. Media attachments on older messages are dropped (already seen in earlier turns).
+     *  3. Remaining oversized message bodies are truncated.
      */
     fun compactToolLoopMessages(
         messages: List<ChatMessagePayload>,
@@ -407,35 +441,43 @@ object SmartContextTrimmer {
 
         val protectedFromIndex = (messages.size - LOOP_PROTECTED_RECENT_MESSAGES).coerceAtLeast(0)
 
-        // Pass 1: stub oversized tool results and drop media on unprotected messages.
+        // Stage 1: stub oversized tool results on unprotected messages.
         var compacted = messages.mapIndexed { index, msg ->
-            if (index >= protectedFromIndex) {
-                msg
+            if (index < protectedFromIndex &&
+                msg.role.equals("tool", ignoreCase = true) &&
+                msg.content.length > TOOL_RESULT_STUB_MAX_CHARS
+            ) {
+                val toolLabel = msg.toolName?.takeIf { it.isNotBlank() } ?: "tool"
+                msg.copy(
+                    content = "[Tool result trimmed to save context — $toolLabel output, " +
+                        "${msg.content.length} chars]\n" +
+                        msg.content.take(TOOL_RESULT_STUB_PREVIEW_CHARS)
+                )
             } else {
-                var updated = msg
-                if (msg.role.equals("tool", ignoreCase = true) &&
-                    msg.content.length > TOOL_RESULT_STUB_MAX_CHARS
-                ) {
-                    val toolLabel = msg.toolName?.takeIf { it.isNotBlank() } ?: "tool"
-                    updated = updated.copy(
-                        content = "[Tool result trimmed to save context — $toolLabel output, " +
-                            "${msg.content.length} chars]\n" +
-                            msg.content.take(TOOL_RESULT_STUB_PREVIEW_CHARS)
-                    )
-                }
-                if (updated.imageDataUri != null || updated.mediaAttachments.isNotEmpty()) {
-                    updated = updated.copy(imageDataUri = null, mediaAttachments = emptyList())
-                }
-                updated
+                msg
             }
         }
         if (estimateInputTokens(systemPrompt, compacted) <= maxEstimatedTokens) {
             return compacted
         }
 
-        // Pass 2: truncate any remaining oversized bodies outside the last two messages.
-        val hardProtectFrom = (compacted.size - 2).coerceAtLeast(0)
+        // Stage 2: drop media attachments on unprotected messages.
         compacted = compacted.mapIndexed { index, msg ->
+            if (index < protectedFromIndex &&
+                (msg.imageDataUri != null || msg.mediaAttachments.isNotEmpty())
+            ) {
+                msg.copy(imageDataUri = null, mediaAttachments = emptyList())
+            } else {
+                msg
+            }
+        }
+        if (estimateInputTokens(systemPrompt, compacted) <= maxEstimatedTokens) {
+            return compacted
+        }
+
+        // Stage 3: truncate any remaining oversized bodies outside the last two messages.
+        val hardProtectFrom = (compacted.size - 2).coerceAtLeast(0)
+        return compacted.mapIndexed { index, msg ->
             if (index >= hardProtectFrom || msg.content.length <= LOOP_TRUNCATE_TRIGGER_CHARS) {
                 msg
             } else {
@@ -445,6 +487,5 @@ object SmartContextTrimmer {
                 )
             }
         }
-        return compacted
     }
 }
