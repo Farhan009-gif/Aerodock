@@ -320,8 +320,17 @@ class AnthropicProvider(
             }
         }
 
+        // Bound the outbound payload (see SmartContextTrimmer.compactToolLoopMessages).
+        val outboundMessages = SmartContextTrimmer.compactToolLoopMessages(
+            request.messages,
+            SmartContextTrimmer.calculateTrimmingThresholdTokens(
+                SmartContextTrimmer.resolveContextWindowTokens(request.modelId)
+            ),
+            request.systemPrompt
+        )
+
         val messagesArr = JSONArray()
-        for (msg in request.messages) {
+        for (msg in outboundMessages) {
             if (msg.role.equals("system", ignoreCase = true)) continue
             val roleLower = msg.role.lowercase()
 
