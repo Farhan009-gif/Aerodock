@@ -301,7 +301,11 @@ data class OmniUiState(
     val liveInfoNewsHeadlinesEnabled: Boolean = false,
     val liveInfoMaxSearchesPerMessage: Int = com.example.data.mcp.LiveInfoToolsService.DEFAULT_MAX_SEARCHES_PER_MESSAGE,
     val liveInfoRssFeeds: List<com.example.data.mcp.RssFeedConfig> = com.example.data.mcp.LiveInfoToolsService.DEFAULT_RSS_FEEDS,
-    val liveInfoSourcesByMessageId: Map<String, List<com.example.data.mcp.LiveInfoSource>> = emptyMap()
+    val liveInfoSourcesByMessageId: Map<String, List<com.example.data.mcp.LiveInfoSource>> = emptyMap(),
+    // 10. Automatic Provider Failover
+    val providerFailoverEnabled: Boolean = false,
+    val providerFailoverChain: List<com.example.data.provider.FailoverChainEntry> = emptyList(),
+    val restartedOnProviderByMessageId: Map<String, String> = emptyMap()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -481,6 +485,21 @@ class OmniStudioViewModel(
                         liveInfoNewsHeadlinesEnabled = newsEnabled,
                         liveInfoMaxSearchesPerMessage = maxSearches,
                         liveInfoRssFeeds = feedsList
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                repository.secretVault.runwayFallbackEnabledFlow,
+                repository.secretVault.runwayFallbackChainJsonFlow
+            ) { enabled, chainJson ->
+                enabled to com.example.data.provider.FailoverResolver.parseChainFromJson(chainJson)
+            }.collect { (enabled, chainList) ->
+                _uiState.update { state ->
+                    state.copy(
+                        providerFailoverEnabled = enabled,
+                        providerFailoverChain = chainList
                     )
                 }
             }
@@ -3506,25 +3525,35 @@ class OmniStudioViewModel(
         allowAutoFallback: Boolean = true
     ) {
         val startTime = System.currentTimeMillis()
-        val matchedCombo = EmbeddedOmniRouteServer.findCombo(modelId)
-        val rawProviderKey = repository.secretVault.getApiKey(provider.id)
-        val effectiveProvider = if (matchedCombo != null &&
-            provider.presetEnum() != ProviderPresetType.OMNIROUTE &&
-            !provider.baseUrl.contains("20128") &&
-            rawProviderKey.isBlank()
-        ) {
-            providers.value.firstOrNull {
-                it.presetEnum() == ProviderPresetType.OMNIROUTE || it.baseUrl.contains("20128")
-            } ?: provider
-        } else {
-            provider
+        suspend fun resolveProviderRuntime(
+            targetProvider: ProviderInstanceEntity,
+            targetModelId: String
+        ): Triple<ProviderInstanceEntity, String, ModelDescriptorEntity> {
+            val combo = EmbeddedOmniRouteServer.findCombo(targetModelId)
+            val rawKey = repository.secretVault.getApiKey(targetProvider.id)
+            val effProv = if (combo != null &&
+                targetProvider.presetEnum() != ProviderPresetType.OMNIROUTE &&
+                !targetProvider.baseUrl.contains("20128") &&
+                rawKey.isBlank()
+            ) {
+                providers.value.firstOrNull {
+                    it.presetEnum() == ProviderPresetType.OMNIROUTE || it.baseUrl.contains("20128")
+                } ?: targetProvider
+            } else {
+                targetProvider
+            }
+            val key = repository.secretVault.getApiKey(effProv.id)
+            val descriptor = models.value.firstOrNull {
+                it.providerInstanceId == effProv.id && it.modelId == targetModelId
+            } ?: models.value.firstOrNull {
+                it.providerInstanceId == targetProvider.id && it.modelId == targetModelId
+            } ?: ModelCapabilityRegistry.buildDescriptor(effProv.id, targetModelId)
+            return Triple(effProv, key, descriptor)
         }
-        val apiKey = repository.secretVault.getApiKey(effectiveProvider.id)
-        val modelDescriptor = models.value.firstOrNull {
-            it.providerInstanceId == effectiveProvider.id && it.modelId == modelId
-        } ?: models.value.firstOrNull {
-            it.providerInstanceId == provider.id && it.modelId == modelId
-        } ?: ModelCapabilityRegistry.buildDescriptor(effectiveProvider.id, modelId)
+
+        var currentProvider: ProviderInstanceEntity = provider
+        var currentModelId: String = modelId
+        val (effectiveProvider, apiKey, modelDescriptor) = resolveProviderRuntime(currentProvider, currentModelId)
 
         // Resolve active SKILL.md instruction packs for this conversation & prompt in deterministic order
         val latestUserPrompt = payloadMessages.lastOrNull { it.role.equals("user", ignoreCase = true) }?.content.orEmpty()
@@ -3690,7 +3719,9 @@ class OmniStudioViewModel(
         var lastToolCallSignature: String? = null
         var consecutiveIdenticalToolCalls = 0
         var iteration = 0
-        val accumulatedText = StringBuilder()
+        val failoverSession = com.example.data.provider.FailoverStreamSession()
+        val attemptedFailoverKeys = mutableSetOf("${currentProvider.id}:$currentModelId")
+        val retriedContextOverflowOnProvider = mutableSetOf<String>()
         var reportedPromptTokens = 0
         var reportedCompletionTokens = 0
         var reportedCachedInputTokens = 0
@@ -3706,49 +3737,195 @@ class OmniStudioViewModel(
             val turnText = StringBuilder()
             val turnToolCalls = mutableListOf<ModelToolCallRequest>()
 
-            val request = ChatCompletionRequest(
-                provider = effectiveProvider,
-                apiKey = apiKey,
-                modelId = modelId,
-                messages = workingPayloadMessages.toList(),
-                systemPrompt = effectiveSystemPrompt,
-                baseSystemPrompt = conv.systemPrompt,
-                enabledSkillsBlock = deterministicSkillsBlock,
-                enablePromptCaching = providerSupportsCaching,
-                temperature = conv.temperature,
-                maxTokens = conv.maxTokens,
-                topP = conv.topP,
-                supportsTemperature = modelDescriptor.supportsTemperature,
-                supportsTopP = modelDescriptor.supportsTopP,
-                supportsSystemPrompt = modelDescriptor.supportsSystemPrompt,
-                tools = toolDefinitions
-            )
-
-            repository.streamChat(request).collect { event ->
-                when (event) {
-                    is ChatStreamEvent.Delta -> {
-                        turnText.append(event.textChunk)
-                        accumulatedText.append(event.textChunk)
-                        dao.upsertMessage(
-                            initialAssistantMsg.copy(
-                                content = accumulatedText.toString(),
-                                isStreaming = true
-                            )
-                        )
-                    }
-                    is ChatStreamEvent.ToolCall -> {
-                        turnToolCalls.add(event.call)
-                    }
-                    is ChatStreamEvent.Usage -> {
-                        reportedPromptTokens += event.promptTokens
-                        reportedCompletionTokens += event.completionTokens
-                        reportedCachedInputTokens += event.cachedInputTokens
-                    }
-                    is ChatStreamEvent.Error -> {
-                        streamError = event.error
-                    }
-                    is ChatStreamEvent.Done -> Unit
+            while (true) {
+                if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
+                    break
                 }
+                turnText.setLength(0)
+                turnToolCalls.clear()
+                streamError = null
+                var attemptPromptTokens = 0
+                var attemptCompletionTokens = 0
+                var attemptCachedInputTokens = 0
+
+                val (activeEffectiveProvider, activeApiKey, activeModelDescriptor) =
+                    resolveProviderRuntime(currentProvider, currentModelId)
+                val activeProviderSupportsCaching =
+                    com.example.data.provider.PromptCacheManager.supportsPromptCaching(activeEffectiveProvider)
+
+                val request = ChatCompletionRequest(
+                    provider = activeEffectiveProvider,
+                    apiKey = activeApiKey,
+                    modelId = currentModelId,
+                    messages = workingPayloadMessages.toList(),
+                    systemPrompt = effectiveSystemPrompt,
+                    baseSystemPrompt = conv.systemPrompt,
+                    enabledSkillsBlock = deterministicSkillsBlock,
+                    enablePromptCaching = activeProviderSupportsCaching,
+                    temperature = conv.temperature,
+                    maxTokens = conv.maxTokens,
+                    topP = conv.topP,
+                    supportsTemperature = activeModelDescriptor.supportsTemperature,
+                    supportsTopP = activeModelDescriptor.supportsTopP,
+                    supportsSystemPrompt = activeModelDescriptor.supportsSystemPrompt,
+                    tools = if (activeModelDescriptor.supportsFunctionCalling) toolDefinitions else emptyList()
+                )
+
+                repository.streamChat(request).collect { event ->
+                    when (event) {
+                        is ChatStreamEvent.Delta -> {
+                            turnText.append(event.textChunk)
+                            val visible = failoverSession.onDelta(event.textChunk)
+                            dao.upsertMessage(
+                                initialAssistantMsg.copy(
+                                    content = visible,
+                                    providerInstanceId = currentProvider.id,
+                                    modelId = currentModelId,
+                                    isStreaming = true
+                                )
+                            )
+                        }
+                        is ChatStreamEvent.ToolCall -> {
+                            turnToolCalls.add(event.call)
+                        }
+                        is ChatStreamEvent.Usage -> {
+                            attemptPromptTokens += event.promptTokens
+                            attemptCompletionTokens += event.completionTokens
+                            attemptCachedInputTokens += event.cachedInputTokens
+                        }
+                        is ChatStreamEvent.Error -> {
+                            streamError = event.error
+                        }
+                        is ChatStreamEvent.Done -> Unit
+                    }
+                }
+
+                val isCancelled = !kotlinx.coroutines.currentCoroutineContext().isActive
+                if (isCancelled) {
+                    break
+                }
+
+                val errOnAttempt = streamError
+                if (errOnAttempt == null) {
+                    reportedPromptTokens += attemptPromptTokens
+                    reportedCompletionTokens += attemptCompletionTokens
+                    reportedCachedInputTokens += attemptCachedInputTokens
+                    failoverSession.commitCurrentAttempt()
+                    break
+                }
+
+                // Do not fail over across models during multi-column Compare mode
+                if (comparisonGroupId != null) {
+                    break
+                }
+
+                val currentCompositeKey = "${currentProvider.id}:$currentModelId"
+                val errorAction = com.example.data.provider.FailoverResolver.classifyError(
+                    error = errOnAttempt,
+                    isUserCancelled = isCancelled,
+                    alreadyRetriedContextOverflowOnSameProvider = currentCompositeKey in retriedContextOverflowOnProvider
+                )
+
+                if (errorAction == com.example.data.provider.FailoverErrorAction.RETRY_SAME_PROVIDER_AFTER_CONTEXT_TRIM) {
+                    retriedContextOverflowOnProvider.add(currentCompositeKey)
+                    failoverSession.onRetrySameProvider()
+                    dao.upsertMessage(
+                        initialAssistantMsg.copy(
+                            content = failoverSession.visibleText,
+                            providerInstanceId = currentProvider.id,
+                            modelId = currentModelId,
+                            isStreaming = true
+                        )
+                    )
+                    // Context-overflow: re-run payload through SmartContextTrimmer and retry once on the same provider
+                    val overflowTrimResult = com.example.data.provider.SmartContextTrimmer.trimIfNeeded(
+                        fullMessages = workingPayloadMessages.toList(),
+                        systemPrompt = effectiveSystemPrompt,
+                        modelContextWindowTokens = 1,
+                        trimmingEnabledForChat = true,
+                        existingCachedSummary = _uiState.value.contextSummaryByChatId[conv.id],
+                        summariseOlderMessages = { summaryPrompt ->
+                            val summaryBuilder = StringBuilder()
+                            var summaryError: NormalizedAiError? = null
+                            val summaryRequest = ChatCompletionRequest(
+                                provider = activeEffectiveProvider,
+                                apiKey = activeApiKey,
+                                modelId = currentModelId,
+                                messages = listOf(ChatMessagePayload(role = "user", content = summaryPrompt)),
+                                systemPrompt = "Summarise the conversation history concisely in under 600 tokens.",
+                                temperature = 0.2f,
+                                maxTokens = 800,
+                                topP = 1.0f,
+                                supportsTemperature = activeModelDescriptor.supportsTemperature,
+                                supportsTopP = activeModelDescriptor.supportsTopP,
+                                supportsSystemPrompt = activeModelDescriptor.supportsSystemPrompt
+                            )
+                            repository.streamChat(summaryRequest).collect { ev ->
+                                when (ev) {
+                                    is ChatStreamEvent.Delta -> summaryBuilder.append(ev.textChunk)
+                                    is ChatStreamEvent.Error -> summaryError = ev.error
+                                    else -> Unit
+                                }
+                            }
+                            if (summaryError != null || summaryBuilder.isBlank()) {
+                                throw IllegalStateException(summaryError?.message ?: "Empty summary")
+                            }
+                            summaryBuilder.toString()
+                        }
+                    )
+                    if (overflowTrimResult.wasSummarised && !overflowTrimResult.summaryText.isNullOrBlank()) {
+                        _uiState.update { state ->
+                            state.copy(
+                                contextSummaryByChatId = state.contextSummaryByChatId + (conv.id to overflowTrimResult.summaryText)
+                            )
+                        }
+                    }
+                    workingPayloadMessages.clear()
+                    workingPayloadMessages.addAll(overflowTrimResult.requestMessages)
+                    continue
+                }
+
+                if (errorAction == com.example.data.provider.FailoverErrorAction.FAILOVER_TO_NEXT_PROVIDER &&
+                    _uiState.value.providerFailoverEnabled
+                ) {
+                    val providersById = providers.value.associateBy { it.id }
+                    val nextEntry = com.example.data.provider.FailoverResolver.selectNextTarget(
+                        failoverEnabled = _uiState.value.providerFailoverEnabled,
+                        chain = _uiState.value.providerFailoverChain,
+                        attemptedCompositeKeys = attemptedFailoverKeys,
+                        availableProvidersById = providersById
+                    )
+                    val nextProvider = nextEntry?.let { providersById[it.providerInstanceId] }
+                    if (nextEntry != null && nextProvider != null) {
+                        attemptedFailoverKeys.add(nextEntry.compositeKey)
+                        currentProvider = nextProvider
+                        currentModelId = nextEntry.modelId
+                        val restartOutcome = failoverSession.onFailoverToProvider(nextProvider.displayName)
+                        val updatedAssistantMsg = initialAssistantMsg.copy(
+                            content = restartOutcome.visibleTextAfterReset,
+                            providerInstanceId = currentProvider.id,
+                            modelId = currentModelId,
+                            isStreaming = true
+                        )
+                        dao.upsertMessage(updatedAssistantMsg)
+                        com.example.data.local.RunwayDataMigrationManager.syncMessageToRunwayTree(
+                            dao = dao,
+                            message = updatedAssistantMsg,
+                            providerName = currentProvider.displayName
+                        )
+                        if (restartOutcome.restartedNote != null) {
+                            _uiState.update { state ->
+                                state.copy(
+                                    restartedOnProviderByMessageId = state.restartedOnProviderByMessageId +
+                                        (assistantMsgId to restartOutcome.restartedNote)
+                                )
+                            }
+                        }
+                        continue
+                    }
+                }
+
+                break
             }
 
             // Check if user tapped Stop or cancelled
@@ -3777,13 +3954,13 @@ class OmniStudioViewModel(
             }
             if (repeatedToolCallDetected) {
                 val stopMsg = "Stopped: repeated identical tool call"
-                if (accumulatedText.isNotEmpty() && !accumulatedText.endsWith("\n\n")) {
-                    accumulatedText.append("\n\n")
-                }
-                accumulatedText.append("[$stopMsg]")
+                failoverSession.appendSeparatorIfNeeded("\n\n")
+                val visibleWithStop = failoverSession.appendCommittedText("[$stopMsg]")
                 dao.upsertMessage(
                     initialAssistantMsg.copy(
-                        content = accumulatedText.toString(),
+                        content = visibleWithStop,
+                        providerInstanceId = currentProvider.id,
+                        modelId = currentModelId,
                         isStreaming = true
                     )
                 )
@@ -4105,16 +4282,14 @@ class OmniStudioViewModel(
                 )
             }
 
-            if (accumulatedText.isNotEmpty() && !accumulatedText.endsWith("\n\n")) {
-                accumulatedText.append("\n\n")
-            }
+            failoverSession.appendSeparatorIfNeeded("\n\n")
             _uiState.update { it.copy(activeToolLoopStatus = turnCounter) }
         }
 
         _uiState.update { it.copy(activeToolLoopStatus = null, pendingToolApproval = null) }
 
         val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1L)
-        val finalContent = accumulatedText.toString()
+        val finalContent = failoverSession.visibleText
         val promptFallbackText = buildString {
             append(effectiveSystemPrompt)
             workingPayloadMessages.forEach { msg ->
@@ -4128,7 +4303,7 @@ class OmniStudioViewModel(
             }
         }
         val turnUsage = com.example.data.provider.ModelPriceTable.resolveTurnUsage(
-            modelId = modelId,
+            modelId = currentModelId,
             reportedInputTokens = reportedPromptTokens,
             reportedOutputTokens = reportedCompletionTokens,
             fallbackInputText = promptFallbackText,
@@ -4165,15 +4340,19 @@ class OmniStudioViewModel(
                     "${err.title} ${err.message} ${err.suggestedFix}"
                 )
                 val isLowPriorityOrScraperModel =
-                    com.example.data.provider.EndpointUrlNormalizer.modelPriorityRank(modelId) >= 2
+                    com.example.data.provider.EndpointUrlNormalizer.modelPriorityRank(currentModelId) >= 2
                 if (isUpstreamModelFailure || isLowPriorityOrScraperModel) {
-                    failedModelsInSession.add("${provider.id}:$modelId")
+                    failedModelsInSession.add("${currentProvider.id}:$currentModelId")
                 }
-                if (allowAutoFallback && comparisonGroupId == null && (isUpstreamModelFailure || isLowPriorityOrScraperModel)) {
-                    val directCandidate = dao.getModelsForProviderOnce(provider.id)
+                if (allowAutoFallback &&
+                    !_uiState.value.providerFailoverEnabled &&
+                    comparisonGroupId == null &&
+                    (isUpstreamModelFailure || isLowPriorityOrScraperModel)
+                ) {
+                    val directCandidate = dao.getModelsForProviderOnce(currentProvider.id)
                         .filter {
-                            it.modelId != modelId &&
-                                "${provider.id}:${it.modelId}" !in failedModelsInSession &&
+                            it.modelId != currentModelId &&
+                                "${currentProvider.id}:${it.modelId}" !in failedModelsInSession &&
                                 CapabilityTag.CHAT in it.capabilitySet() &&
                                 com.example.data.provider.EndpointUrlNormalizer.modelPriorityRank(it.modelId, it.isCombo) <= 1
                         }
@@ -4191,15 +4370,15 @@ class OmniStudioViewModel(
                                 updatedAt = System.currentTimeMillis()
                             )
                         )
-                        dao.upsertProvider(provider.copy(defaultChatModelId = directCandidate))
+                        dao.upsertProvider(currentProvider.copy(defaultChatModelId = directCandidate))
                         _uiState.update {
                             it.copy(
-                                statusToast = "Model '$modelId' failed upstream → auto-switched to '$directCandidate'"
+                                statusToast = "Model '$currentModelId' failed upstream → auto-switched to '$directCandidate'"
                             )
                         }
                         executeModelStream(
                             conv = conv.copy(modelId = directCandidate),
-                            provider = provider,
+                            provider = currentProvider,
                             modelId = directCandidate,
                             payloadMessages = payloadMessages,
                             comparisonGroupId = null,
@@ -4212,6 +4391,8 @@ class OmniStudioViewModel(
             } else {
                 val errMsg = initialAssistantMsg.copy(
                     content = finalContent,
+                    providerInstanceId = currentProvider.id,
+                    modelId = currentModelId,
                     isStreaming = false,
                     errorText = err.title,
                     latencyMs = elapsedMs
@@ -4220,14 +4401,16 @@ class OmniStudioViewModel(
                 com.example.data.local.RunwayDataMigrationManager.syncMessageToRunwayTree(
                     dao = dao,
                     message = errMsg,
-                    providerName = provider.displayName
+                    providerName = currentProvider.displayName
                 )
             }
-            recordProviderFailure(provider, err)
+            recordProviderFailure(currentProvider, err)
         } else {
-            recordProviderSuccess(provider.id, elapsedMs)
+            recordProviderSuccess(currentProvider.id, elapsedMs)
             val completedMsg = initialAssistantMsg.copy(
                 content = finalContent.ifBlank { "(Completed tool execution)" },
+                providerInstanceId = currentProvider.id,
+                modelId = currentModelId,
                 promptTokens = pTokens,
                 completionTokens = cTokens,
                 estimatedCostUsd = costUsd,
@@ -4238,11 +4421,11 @@ class OmniStudioViewModel(
             com.example.data.local.RunwayDataMigrationManager.syncMessageToRunwayTree(
                 dao = dao,
                 message = completedMsg,
-                providerName = provider.displayName
+                providerName = currentProvider.displayName
             )
             repository.recordUsage(
-                provider = provider,
-                modelId = modelId,
+                provider = currentProvider,
+                modelId = currentModelId,
                 modality = if (comparisonGroupId != null) "COMPARE" else "CHAT",
                 promptTokens = pTokens,
                 completionTokens = cTokens,
@@ -4263,10 +4446,10 @@ class OmniStudioViewModel(
                 val allConvMsgs = dao.getMessagesOnce(conv.id)
                 val totalConvTokens = allConvMsgs.sumOf { (it.promptTokens + it.completionTokens).coerceAtLeast(0) }
                 val availableProviderModelIds = models.value
-                    .filter { it.providerInstanceId == provider.id }
+                    .filter { it.providerInstanceId == currentProvider.id }
                     .map { it.modelId }
                 val suggestion = com.example.data.provider.ModelPriceTable.evaluateCheaperModelSuggestion(
-                    currentModelId = modelId,
+                    currentModelId = currentModelId,
                     totalConversationTokens = totalConvTokens,
                     availableModelIds = availableProviderModelIds
                 )
@@ -5877,6 +6060,72 @@ class OmniStudioViewModel(
                     it.copy(statusToast = logEntry.resultText.lines().firstOrNull() ?: "Code execution failed")
                 }
             }
+        }
+    }
+
+    // --- 10. Automatic Provider Failover Settings Actions ---
+
+    fun setProviderFailoverEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.secretVault.setRunwayFallbackEnabled(enabled)
+            _uiState.update { it.copy(providerFailoverEnabled = enabled) }
+        }
+    }
+
+    fun addProviderFailoverChainEntry(providerInstanceId: String, modelId: String) {
+        val cleanProviderId = providerInstanceId.trim()
+        val cleanModelId = modelId.trim()
+        if (cleanProviderId.isBlank() || cleanModelId.isBlank()) return
+        viewModelScope.launch {
+            val prov = providers.value.firstOrNull { it.id == cleanProviderId }
+            val mod = models.value.firstOrNull {
+                it.providerInstanceId == cleanProviderId && it.modelId == cleanModelId
+            }
+            val newEntry = com.example.data.provider.FailoverChainEntry(
+                id = "$cleanProviderId:$cleanModelId",
+                providerInstanceId = cleanProviderId,
+                modelId = cleanModelId,
+                providerDisplayName = prov?.displayName ?: cleanProviderId,
+                modelDisplayName = mod?.displayName ?: cleanModelId
+            )
+            val currentList = _uiState.value.providerFailoverChain
+            if (currentList.any { it.compositeKey == newEntry.compositeKey }) {
+                _uiState.update { it.copy(statusToast = "Fallback pair already in chain") }
+                return@launch
+            }
+            val updated = currentList + newEntry
+            repository.secretVault.setRunwayFallbackChainJson(
+                com.example.data.provider.FailoverResolver.serializeChainToJson(updated)
+            )
+            _uiState.update { it.copy(providerFailoverChain = updated) }
+        }
+    }
+
+    fun removeProviderFailoverChainEntry(index: Int) {
+        viewModelScope.launch {
+            val currentList = _uiState.value.providerFailoverChain
+            if (index !in currentList.indices) return@launch
+            val updated = currentList.toMutableList().apply { removeAt(index) }
+            repository.secretVault.setRunwayFallbackChainJson(
+                com.example.data.provider.FailoverResolver.serializeChainToJson(updated)
+            )
+            _uiState.update { it.copy(providerFailoverChain = updated) }
+        }
+    }
+
+    fun moveProviderFailoverChainEntry(fromIndex: Int, toIndex: Int) {
+        viewModelScope.launch {
+            val currentList = _uiState.value.providerFailoverChain
+            val updated = com.example.data.provider.FailoverResolver.moveChainEntry(
+                chain = currentList,
+                fromIndex = fromIndex,
+                toIndex = toIndex
+            )
+            if (updated == currentList) return@launch
+            repository.secretVault.setRunwayFallbackChainJson(
+                com.example.data.provider.FailoverResolver.serializeChainToJson(updated)
+            )
+            _uiState.update { it.copy(providerFailoverChain = updated) }
         }
     }
 

@@ -232,7 +232,23 @@ class TinkSecretVault(private val context: Context) {
     }
 
     val runwayFallbackEnabledFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
-        prefs[KEY_RUNWAY_FALLBACK_ENABLED] ?: true
+        prefs[KEY_RUNWAY_FALLBACK_ENABLED] ?: false
+    }
+
+    val runwayFallbackChainJsonFlow: Flow<String> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_RUNWAY_FALLBACK_CHAIN_JSON] ?: "[]"
+    }
+
+    suspend fun setRunwayFallbackEnabled(enabled: Boolean) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_RUNWAY_FALLBACK_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setRunwayFallbackChainJson(json: String) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_RUNWAY_FALLBACK_CHAIN_JSON] = json
+        }
     }
 
     suspend fun setReadRepliesAloud(enabled: Boolean) {

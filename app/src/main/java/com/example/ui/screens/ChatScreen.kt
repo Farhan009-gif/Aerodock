@@ -1479,6 +1479,7 @@ private fun MinimalChatCanvas(
                                     isTokenCountEstimated = msg.id in uiState.estimatedTokenMessageIds,
                                     cachedInputTokens = uiState.cachedTokensByMessageId[msg.id] ?: 0,
                                     activeToolLoopStatus = if (msg.isStreaming) uiState.activeToolLoopStatus else null,
+                                    restartedOnNote = uiState.restartedOnProviderByMessageId[msg.id],
                                     onEditUserMessage = { onStartEditMessage(msg) },
                                     onRegenerate = onRegenerateLast,
                                     onCopiedToast = onCopiedToast,
@@ -1955,6 +1956,7 @@ private fun MinimalChatMessageItem(
     isTokenCountEstimated: Boolean = false,
     cachedInputTokens: Int = 0,
     activeToolLoopStatus: String? = null,
+    restartedOnNote: String? = null,
     onEditUserMessage: () -> Unit,
     onRegenerate: () -> Unit,
     onCopiedToast: (String) -> Unit,
@@ -2091,6 +2093,15 @@ private fun MinimalChatMessageItem(
                     message = message,
                     identity = assistantIdentity
                 )
+
+                if (!restartedOnNote.isNullOrBlank()) {
+                    Text(
+                        text = restartedOnNote,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("failover_restarted_note_${message.id}")
+                    )
+                }
 
                 if (toolLogs.isNotEmpty()) {
                     toolLogs.forEach { log ->

@@ -1344,7 +1344,13 @@ private fun OmniStudioRoot(
                                                     viewModel = providersViewModel,
                                                     usageRecords = usageRecords,
                                                     providerMonthlyLimitsUsd = uiState.providerMonthlyLimitsUsd,
-                                                    onSetProviderMonthlyLimitUsd = viewModel::setProviderMonthlyLimitUsd
+                                                    onSetProviderMonthlyLimitUsd = viewModel::setProviderMonthlyLimitUsd,
+                                                    failoverEnabled = uiState.providerFailoverEnabled,
+                                                    failoverChain = uiState.providerFailoverChain,
+                                                    onSetFailoverEnabled = viewModel::setProviderFailoverEnabled,
+                                                    onAddFailoverEntry = viewModel::addProviderFailoverChainEntry,
+                                                    onRemoveFailoverEntry = viewModel::removeProviderFailoverChainEntry,
+                                                    onMoveFailoverEntry = viewModel::moveProviderFailoverChainEntry
                                                 )
                                             } else {
                                                 SettingsWorkspaceScreen(

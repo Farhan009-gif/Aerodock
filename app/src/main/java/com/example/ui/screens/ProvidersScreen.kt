@@ -78,11 +78,18 @@ fun ProvidersScreen(
     usageRecords: List<UsageRecordEntity> = emptyList(),
     providerMonthlyLimitsUsd: Map<String, Double> = emptyMap(),
     onSetProviderMonthlyLimitUsd: (providerId: String, limitUsd: Double?) -> Unit = { _, _ -> },
+    failoverEnabled: Boolean = false,
+    failoverChain: List<com.example.data.provider.FailoverChainEntry> = emptyList(),
+    onSetFailoverEnabled: (Boolean) -> Unit = {},
+    onAddFailoverEntry: (providerInstanceId: String, modelId: String) -> Unit = { _, _ -> },
+    onRemoveFailoverEntry: (index: Int) -> Unit = {},
+    onMoveFailoverEntry: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     var showComboDialog by rememberSaveable { mutableStateOf(false) }
     var editingCombo by remember { mutableStateOf<OmniRouteComboDefinition?>(null) }
     var showAddCustomModelDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddFailoverEntryDialog by rememberSaveable { mutableStateOf(false) }
     var editingLimitProvider by remember { mutableStateOf<ProviderInstanceEntity?>(null) }
 
     val filteredProviders = remember(uiState.providers, uiState.selectedFilter, uiState.searchQuery) {
@@ -138,6 +145,18 @@ fun ProvidersScreen(
                     isCombo = isCombo
                 )
                 showAddCustomModelDialog = false
+            }
+        )
+    }
+
+    if (showAddFailoverEntryDialog) {
+        AddFailoverEntryDialog(
+            providers = uiState.providers,
+            models = uiState.models,
+            onDismiss = { showAddFailoverEntryDialog = false },
+            onAdd = { providerId, modelId ->
+                onAddFailoverEntry(providerId, modelId)
+                showAddFailoverEntryDialog = false
             }
         )
     }
@@ -339,6 +358,20 @@ fun ProvidersScreen(
                 onAddCustomModel = {
                     showAddCustomModelDialog = true
                 }
+            )
+        }
+
+        item {
+            ProviderFailoverSettingsCard(
+                failoverEnabled = failoverEnabled,
+                failoverChain = failoverChain,
+                providers = uiState.providers,
+                models = uiState.models,
+                onSetFailoverEnabled = onSetFailoverEnabled,
+                onMoveUp = { idx -> onMoveFailoverEntry(idx, idx - 1) },
+                onMoveDown = { idx -> onMoveFailoverEntry(idx, idx + 1) },
+                onRemove = onRemoveFailoverEntry,
+                onOpenAddDialog = { showAddFailoverEntryDialog = true }
             )
         }
 
@@ -1435,4 +1468,318 @@ internal fun AddCustomModelDialog(
         }
     )
 }
+
+@Composable
+private fun ProviderFailoverSettingsCard(
+    failoverEnabled: Boolean,
+    failoverChain: List<com.example.data.provider.FailoverChainEntry>,
+    providers: List<ProviderInstanceEntity>,
+    models: List<com.example.data.local.ModelDescriptorEntity>,
+    onSetFailoverEnabled: (Boolean) -> Unit,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
+    onOpenAddDialog: () -> Unit
+) {
+    val providersById = remember(providers) { providers.associateBy { it.id } }
+    val modelsByComposite = remember(models) {
+        models.associateBy { "${it.providerInstanceId}:${it.modelId}" }
+    }
+
+    MinimalCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("provider_failover_settings_card")
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.RefreshCw,
+                            contentDescription = "Failover",
+                            tint = SoftIndigo,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Failover",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Retry failed sends on the next provider + model in order (429, 5xx, timeouts, stream drops).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                MinimalToggle(
+                    checked = failoverEnabled,
+                    onCheckedChange = onSetFailoverEnabled,
+                    testTag = "provider_failover_toggle"
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+
+            if (failoverChain.isEmpty()) {
+                Text(
+                    text = "No fallback providers configured. Add provider + model pairs below to build your fallback chain.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("provider_failover_empty_state")
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    failoverChain.forEachIndexed { index, entry ->
+                        val resolvedProviderName = providersById[entry.providerInstanceId]?.displayName
+                            ?: entry.providerDisplayName.ifBlank { entry.providerInstanceId }
+                        val resolvedModelName = modelsByComposite[entry.compositeKey]?.displayName
+                            ?: entry.modelDisplayName.ifBlank { entry.modelId }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.background,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("failover_chain_item_$index")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${index + 1}. $resolvedProviderName",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = resolvedModelName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SoftIndigo,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { onMoveUp(index) },
+                                        enabled = index > 0,
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .testTag("failover_chain_up_$index")
+                                    ) {
+                                        Icon(
+                                            imageVector = LucideIcons.ChevronUp,
+                                            contentDescription = "Move up",
+                                            tint = if (index > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { onMoveDown(index) },
+                                        enabled = index < failoverChain.lastIndex,
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .testTag("failover_chain_down_$index")
+                                    ) {
+                                        Icon(
+                                            imageVector = LucideIcons.ChevronDown,
+                                            contentDescription = "Move down",
+                                            tint = if (index < failoverChain.lastIndex) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { onRemove(index) },
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .testTag("failover_chain_remove_$index")
+                                    ) {
+                                        Icon(
+                                            imageVector = LucideIcons.Trash2,
+                                            contentDescription = "Remove fallback",
+                                            tint = CoralError,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                MinimalButton(
+                    text = "Add fallback",
+                    onClick = onOpenAddDialog,
+                    icon = LucideIcons.Plus,
+                    filled = false,
+                    testTag = "add_failover_entry_button"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddFailoverEntryDialog(
+    providers: List<ProviderInstanceEntity>,
+    models: List<com.example.data.local.ModelDescriptorEntity>,
+    onDismiss: () -> Unit,
+    onAdd: (providerInstanceId: String, modelId: String) -> Unit
+) {
+    val chatProviders = remember(providers) {
+        providers.filter { it.isEnabled && CapabilityTag.CHAT in it.capabilitySet() }
+            .ifEmpty { providers }
+    }
+    var selectedProviderId by rememberSaveable {
+        mutableStateOf(chatProviders.firstOrNull()?.id ?: "")
+    }
+    val providerModels = remember(models, selectedProviderId) {
+        models.filter {
+            it.providerInstanceId == selectedProviderId &&
+                CapabilityTag.CHAT in it.capabilitySet()
+        }
+    }
+    val selectedProvider = remember(chatProviders, selectedProviderId) {
+        chatProviders.firstOrNull { it.id == selectedProviderId }
+    }
+    var selectedModelId by rememberSaveable(selectedProviderId) {
+        mutableStateOf(
+            providerModels.firstOrNull()?.modelId
+                ?: selectedProvider?.defaultChatModelId.orEmpty()
+        )
+    }
+
+    var clearDialogIme by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    AlertDialog(
+        onDismissRequest = {
+            clearDialogIme?.invoke()
+            onDismiss()
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        title = {
+            Text(
+                text = "Add Fallback Provider + Model",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
+        text = {
+            com.example.ui.components.DialogWindowFocusGuard(onRegisterCleaner = { clearDialogIme = it })
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Select a provider and model to try next when a chat request fails:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = "Provider",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    chatProviders.forEach { prov ->
+                        MinimalChip(
+                            label = prov.displayName,
+                            selected = selectedProviderId == prov.id,
+                            onClick = {
+                                selectedProviderId = prov.id
+                            },
+                            testTag = "failover_pick_provider_${prov.id}"
+                        )
+                    }
+                }
+
+                if (providerModels.isNotEmpty()) {
+                    Text(
+                        text = "Suggested Chat Models",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        providerModels.take(15).forEach { mod ->
+                            MinimalChip(
+                                label = mod.displayName.ifBlank { mod.modelId },
+                                selected = selectedModelId == mod.modelId,
+                                onClick = { selectedModelId = mod.modelId },
+                                testTag = "failover_pick_model_${mod.modelId}"
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = selectedModelId,
+                    onValueChange = { selectedModelId = it },
+                    label = { Text("Model ID") },
+                    placeholder = { Text("gpt-4o-mini, claude-3-5-haiku-latest, gemini-2.5-flash") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("failover_model_id_input")
+                )
+            }
+        },
+        confirmButton = {
+            MinimalButton(
+                text = "Add to chain",
+                onClick = {
+                    clearDialogIme?.invoke()
+                    onAdd(selectedProviderId, selectedModelId.trim())
+                },
+                enabled = selectedProviderId.isNotBlank() && selectedModelId.isNotBlank(),
+                filled = true,
+                testTag = "confirm_add_failover_entry_button"
+            )
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    clearDialogIme?.invoke()
+                    onDismiss()
+                }
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 
