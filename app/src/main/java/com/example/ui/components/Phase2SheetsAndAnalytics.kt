@@ -1018,8 +1018,8 @@ private fun ProviderSpendRowCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(
             1.dp,
             if (item.requestsCount > 0) accentColor.copy(alpha = 0.4f)
