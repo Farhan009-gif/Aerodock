@@ -620,7 +620,7 @@ private fun ConnectorListRow(
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (server.isEnabled) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
