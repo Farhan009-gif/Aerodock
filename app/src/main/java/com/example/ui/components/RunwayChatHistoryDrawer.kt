@@ -67,7 +67,8 @@ import com.example.data.local.RunwayDocumentEntity
 import com.example.data.local.RunwayFolderEntity
 import com.example.data.local.RunwayMessageNodeEntity
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.SoftIndigo
+import com.example.ui.theme.Sage
+
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -94,7 +95,7 @@ private val folderPaletteHex = listOf(
     "#A855F7"
 )
 
-fun parseHexColorSafe(hex: String, fallback: Color = SoftIndigo): Color {
+fun parseHexColorSafe(hex: String, fallback: Color = Sage): Color {
     return runCatching {
         val cleaned = hex.trim().removePrefix("#")
         when (cleaned.length) {
@@ -349,7 +350,7 @@ fun RunwayChatHistoryDrawerContent(
                     Icon(
                         imageVector = LucideIcons.Plug,
                         contentDescription = "Connectors",
-                        tint = SoftIndigo,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -479,10 +480,10 @@ fun RunwayChatHistoryDrawerContent(
 
                 Surface(
                     shape = RoundedCornerShape(50),
-                    color = if (isSelected) SoftIndigo.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (isSelected) SoftIndigo.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
+                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
                     ),
                     modifier = Modifier
                         .heightIn(min = 32.dp)
@@ -512,13 +513,13 @@ fun RunwayChatHistoryDrawerContent(
                         Text(
                             text = if (count > 0) "${folder.name} ($count)" else folder.name,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isSelected) SoftIndigo else MaterialTheme.colorScheme.onSurface
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
                         if (isSelected) {
                             Icon(
                                 imageVector = LucideIcons.Edit2,
                                 contentDescription = "Edit folder",
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .size(11.dp)
                                     .clickable {
@@ -551,7 +552,7 @@ fun RunwayChatHistoryDrawerContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, SoftIndigo.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("drawer_undo_delete_bar")
@@ -570,7 +571,7 @@ fun RunwayChatHistoryDrawerContent(
                         Icon(
                             imageVector = LucideIcons.Check,
                             contentDescription = null,
-                            tint = SoftIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
@@ -582,7 +583,7 @@ fun RunwayChatHistoryDrawerContent(
                     Text(
                         text = "Undo",
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clickable(onClick = onUndoDeleteConversation)
                             .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -624,7 +625,7 @@ fun RunwayChatHistoryDrawerContent(
                         Text(
                             text = sectionTitle,
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = if (sectionTitle == "Pinned") SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (sectionTitle == "Pinned") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 6.dp, bottom = 2.dp, start = 4.dp)
                         )
                     }
@@ -695,10 +696,10 @@ fun RunwayChatHistoryDrawerContent(
                             actionTargetConversation = null
                         },
                         shape = RoundedCornerShape(50),
-                        color = if (selected) SoftIndigo.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
+                        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface,
                         border = BorderStroke(
                             1.dp,
-                            if (selected) SoftIndigo else MaterialTheme.colorScheme.outline
+                            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         )
                     ) {
                         Row(
@@ -715,7 +716,7 @@ fun RunwayChatHistoryDrawerContent(
                             Text(
                                 text = folder.name,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) SoftIndigo else MaterialTheme.colorScheme.onSurface
+                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -900,19 +901,20 @@ private fun HistoryConversationRow(
     onDeleteQuick: () -> Unit
 ) {
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    val accentColor = MaterialTheme.colorScheme.primary
 
-    val highlightedTitle = remember(conversation.title, searchQuery) {
-        highlightMatchAnnotatedString(conversation.title, searchQuery)
+    val highlightedTitle = remember(conversation.title, searchQuery, accentColor) {
+        highlightMatchAnnotatedString(conversation.title, searchQuery, accentColor)
     }
-    val highlightedSnippet = remember(matchedSnippet, searchQuery) {
-        matchedSnippet?.let { highlightMatchAnnotatedString(it, searchQuery) }
+    val highlightedSnippet = remember(matchedSnippet, searchQuery, accentColor) {
+        matchedSnippet?.let { highlightMatchAnnotatedString(it, searchQuery, accentColor) }
     }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) SoftIndigo.copy(alpha = 0.14f) else Color.Transparent,
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent,
         border = if (isSelected) {
-            BorderStroke(1.dp, SoftIndigo.copy(alpha = 0.4f))
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
         } else null,
         modifier = Modifier
             .fillMaxWidth()
@@ -966,7 +968,7 @@ private fun HistoryConversationRow(
                         Text(
                             text = highlightedTitle,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (isSelected) SoftIndigo else MaterialTheme.colorScheme.onSurface,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1105,7 +1107,7 @@ private fun FolderEditDialog(
                     }
                 }
             ) {
-                Text("Save", color = SoftIndigo)
+                Text("Save", color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
@@ -1156,7 +1158,7 @@ private fun extractSnippetAroundQuery(content: String, lowerQuery: String): Stri
     return "$prefix${flat.substring(start, end)}$suffix"
 }
 
-private fun highlightMatchAnnotatedString(text: String, rawQuery: String): AnnotatedString {
+private fun highlightMatchAnnotatedString(text: String, rawQuery: String, accentColor: Color): AnnotatedString {
     val q = rawQuery.trim()
     if (q.isEmpty()) return AnnotatedString(text)
     val lowerText = text.lowercase()
@@ -1174,9 +1176,9 @@ private fun highlightMatchAnnotatedString(text: String, rawQuery: String): Annot
             }
             withStyle(
                 SpanStyle(
-                    color = SoftIndigo,
+                    color = accentColor,
                     fontWeight = FontWeight.SemiBold,
-                    background = SoftIndigo.copy(alpha = 0.16f)
+                    background = accentColor.copy(alpha = 0.16f)
                 )
             ) {
                 append(text.substring(matchIdx, matchIdx + q.length))
