@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 val GeminiDarkBg = DarkBackground
 val GeminiSurface = DarkSurface
 val GeminiSurfaceElevated = DarkElevatedSurface
-val GeminiAccent = SoftIndigo
+val GeminiAccent = SageDark
 val GeminiEmerald = EmeraldSuccess
 val GeminiCoral = CoralError
 val GeminiAmber = AmberWarning
@@ -27,10 +27,10 @@ val GeminiTextSecondary = TextSecondary
 val GeminiBorder = DarkDivider
 
 /**
- * True when the currently active color scheme is the dark (near-black) one.
- * Used for the few places that need a structural difference between modes
- * (e.g. the forest-filled model pill / user bubble that only exist in the
- * Concept A light design).
+ * True when the currently active color scheme is the dark (Concept A Dark)
+ * one. The design is structurally identical in both modes; this survives
+ * only for genuinely mode-specific artwork (e.g. the deliberately-dark
+ * terminal console and logo tile).
  */
 @Composable
 fun runwayIsDarkTheme(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -45,12 +45,12 @@ private val RunwayShapes = Shapes(
 )
 
 private val RunwayDarkColorScheme = darkColorScheme(
-    primary = SoftIndigo,
-    onPrimary = Color.White,
-    primaryContainer = SoftIndigoDim,
-    onPrimaryContainer = TextPrimary,
-    secondary = TextSecondary,
-    onSecondary = DarkBackground,
+    primary = SageDark,
+    onPrimary = SageDarkOnPrimary,
+    primaryContainer = SageDarkDim,
+    onPrimaryContainer = SageDarkOnContainer,
+    secondary = SageDark,
+    onSecondary = SageDarkOnPrimary,
     secondaryContainer = DarkElevatedSurface,
     onSecondaryContainer = TextPrimary,
     tertiary = EmeraldSuccess,
@@ -62,15 +62,15 @@ private val RunwayDarkColorScheme = darkColorScheme(
     surfaceVariant = DarkElevatedSurface,
     onSurfaceVariant = TextSecondary,
     surfaceDim = DarkBackground,
-    surfaceBright = Color(0xFF2A2F38),
+    surfaceBright = Color(0xFF2E3641),
     surfaceContainerLowest = Color(0xFF07080A),
-    surfaceContainerLow = Color(0xFF11141A),
+    surfaceContainerLow = Color(0xFF10131A),
     surfaceContainer = DarkSurface,
     surfaceContainerHigh = DarkElevatedSurface,
-    surfaceContainerHighest = Color(0xFF22272F),
+    surfaceContainerHighest = Color(0xFF262D37),
     inverseSurface = TextPrimary,
     inverseOnSurface = DarkBackground,
-    inversePrimary = SoftIndigo,
+    inversePrimary = SageDark,
     outline = DarkDivider,
     outlineVariant = DarkDivider,
     error = CoralError,
