@@ -65,7 +65,7 @@ import coil.compose.AsyncImage
 import com.example.data.local.CapabilityTag
 import com.example.data.local.ModelDescriptorEntity
 import com.example.data.local.ProviderInstanceEntity
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniUiState
 
 /**
@@ -208,7 +208,7 @@ fun ChatMediaGenerateBottomSheet(
                         Icon(
                             imageVector = if (isVideo) LucideIcons.Video else LucideIcons.Image,
                             contentDescription = null,
-                            tint = SoftIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                         Text(
@@ -276,7 +276,7 @@ fun ChatMediaGenerateBottomSheet(
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = if (isVideo) SoftIndigo.copy(alpha = 0.25f) else Color.Transparent,
+                    color = if (isVideo) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent,
                     modifier = Modifier
                         .weight(1f)
                         .clickable { currentModality = "VIDEO" }
@@ -290,7 +290,7 @@ fun ChatMediaGenerateBottomSheet(
                         Icon(
                             imageVector = LucideIcons.Video,
                             contentDescription = null,
-                            tint = if (isVideo) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isVideo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
@@ -298,7 +298,7 @@ fun ChatMediaGenerateBottomSheet(
                             text = "AI Video",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = if (isVideo) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isVideo) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isVideo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -331,7 +331,7 @@ fun ChatMediaGenerateBottomSheet(
                         .testTag("chat_media_prompt_input"),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SoftIndigo,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline
                     )
                 )
@@ -407,7 +407,7 @@ fun ChatMediaGenerateBottomSheet(
                                 Text(
                                     text = "${selectedProvider?.displayName ?: "Provider"} · ${if (isVideo) "Video" else "Image"}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SoftIndigo
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                             Icon(
@@ -427,7 +427,7 @@ fun ChatMediaGenerateBottomSheet(
                             Text(
                                 text = prov.displayName.uppercase(),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = SoftIndigo,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
@@ -488,10 +488,10 @@ fun ChatMediaGenerateBottomSheet(
                         val isSelected = selectedAspectRatio == ratio
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) SoftIndigo.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                             border = BorderStroke(
                                 1.dp,
-                                if (isSelected) SoftIndigo else MaterialTheme.colorScheme.outline
+                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                             ),
                             modifier = Modifier
                                 .clickable { selectedAspectRatio = ratio }
@@ -501,7 +501,7 @@ fun ChatMediaGenerateBottomSheet(
                                 text = ratio,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) SoftIndigo else MaterialTheme.colorScheme.onSurface,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                             )
                         }
@@ -524,10 +524,10 @@ fun ChatMediaGenerateBottomSheet(
                             val isSelected = selectedDurationSeconds == sec
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) SoftIndigo.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isSelected) SoftIndigo else MaterialTheme.colorScheme.outline
+                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                 ),
                                 modifier = Modifier
                                     .clickable { selectedDurationSeconds = sec }
@@ -537,7 +537,7 @@ fun ChatMediaGenerateBottomSheet(
                                     text = "${sec}s",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) SoftIndigo else MaterialTheme.colorScheme.onSurface,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
                             }
@@ -608,7 +608,7 @@ fun ChatMediaGenerateBottomSheet(
                             Icon(
                                 imageVector = LucideIcons.Plus,
                                 contentDescription = null,
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
@@ -642,7 +642,7 @@ fun ChatMediaGenerateBottomSheet(
                 },
                 enabled = promptText.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = SoftIndigo,
+                    containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White
                 ),
                 shape = RoundedCornerShape(12.dp),
