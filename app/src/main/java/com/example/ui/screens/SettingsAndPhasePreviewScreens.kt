@@ -62,13 +62,14 @@ import com.example.ui.components.IntegrationsSettingsSection
 import com.example.ui.components.LucideIcons
 import com.example.ui.components.MinimalButton
 import com.example.ui.components.MinimalCard
+import com.example.ui.components.MinimalSegmentedControl
 import com.example.ui.components.MinimalChip
 import com.example.ui.components.MinimalSectionHeader
 import com.example.ui.components.MinimalStatusDot
 import com.example.ui.components.MinimalToggle
 import com.example.ui.components.SkillsAndMcpSection
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniUiState
 
 @Composable
@@ -227,7 +228,7 @@ fun MinimalSettingsAndThemeScreen(
                             Icon(
                                 imageVector = if (isLightMode) LucideIcons.Sun else LucideIcons.Moon,
                                 contentDescription = "Theme",
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column {
@@ -249,6 +250,27 @@ fun MinimalSettingsAndThemeScreen(
                                 onSetThemeMode(if (light) "LIGHT" else "DARK")
                             },
                             testTag = "theme_mode_toggle"
+                        )
+                    }
+
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+
+                    // Explicit Light / Dark mode switch (Concept A light <-> near-black dark)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Mode",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        MinimalSegmentedControl(
+                            options = listOf("Light", "Dark"),
+                            selectedIndex = if (isLightMode) 0 else 1,
+                            onSelect = { idx ->
+                                onSetThemeMode(if (idx == 0) "LIGHT" else "DARK")
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("theme_mode_segmented_control")
                         )
                     }
                 }
@@ -393,7 +415,7 @@ fun MinimalSettingsAndThemeScreen(
                         Icon(
                             imageVector = LucideIcons.Plug,
                             contentDescription = "Connectors",
-                            tint = SoftIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                         Column {
@@ -654,7 +676,7 @@ fun MinimalSettingsAndThemeScreen(
                             Icon(
                                 imageVector = LucideIcons.Code,
                                 contentDescription = "Java Remote Runner",
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column {
@@ -1321,7 +1343,7 @@ private fun ConnectServiceRow(
             Surface(
                 onClick = onAction,
                 shape = CircleShape,
-                color = if (isConnected) MaterialTheme.colorScheme.background else SoftIndigo,
+                color = if (isConnected) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.primary,
                 border = if (isConnected) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                 modifier = Modifier.height(36.dp)
             ) {
@@ -1358,7 +1380,7 @@ fun PhasePreviewScreen(
     ) {
         MinimalCard(modifier = Modifier.widthIn(max = 520.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                BadgePill(text = phaseLabel, color = SoftIndigo)
+                BadgePill(text = phaseLabel, color = MaterialTheme.colorScheme.primary)
                 Text(text = modalityTitle, style = MaterialTheme.typography.titleLarge)
                 Text(
                     text = description,
