@@ -62,8 +62,7 @@ import com.example.data.local.McpServerEntity
 import com.example.data.local.McpToolEntity
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
 
@@ -85,7 +84,7 @@ fun McpSafetyPolicyOverviewBanner(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        border = BorderStroke(1.5.dp, CyberCyan.copy(alpha = 0.8f)),
+        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)),
         shape = RoundedCornerShape(14.dp),
         modifier = modifier
             .fillMaxWidth()
@@ -105,13 +104,13 @@ fun McpSafetyPolicyOverviewBanner(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Surface(
-                        color = CyberCyan.copy(alpha = 0.15f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Security,
                             contentDescription = null,
-                            tint = CyberCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .padding(8.dp)
                                 .size(24.dp)
@@ -160,7 +159,7 @@ fun McpSafetyPolicyOverviewBanner(
                                 "$strictCount/${mcpServers.size} Strict"
                             },
                             style = MaterialTheme.typography.titleSmall,
-                            color = CyberCyan,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -190,7 +189,7 @@ fun McpSafetyPolicyOverviewBanner(
             Button(
                 onClick = onOpenSafetyConfig,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = CyberCyan,
+                    containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.scrim
                 ),
                 modifier = Modifier
@@ -250,13 +249,13 @@ fun McpSafetyApprovalSheet(
                         modifier = Modifier.weight(1f)
                     ) {
                         Surface(
-                            color = CyberCyan.copy(alpha = 0.15f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Security,
                                 contentDescription = null,
-                                tint = CyberCyan,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .padding(8.dp)
                                     .size(24.dp)
@@ -436,7 +435,7 @@ private fun PerServerSafetyConfigCard(
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (server.isEnabled) CyberCyan.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
+            color = if (server.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
         ),
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier
@@ -468,7 +467,7 @@ private fun PerServerSafetyConfigCard(
                         )
                         BadgePill(
                             text = server.transportEnum().label,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                         BadgePill(
                             text = when (currentMode) {
@@ -477,8 +476,8 @@ private fun PerServerSafetyConfigCard(
                                 McpApprovalMode.ALWAYS_ALLOW_READ_ONLY -> "AUTO READ-ONLY"
                             },
                             color = when (currentMode) {
-                                McpApprovalMode.ASK_EVERY_TIME -> CyberCyan
-                                McpApprovalMode.ASK_ONCE_PER_CONVERSATION -> ElectricIndigo
+                                McpApprovalMode.ASK_EVERY_TIME -> MaterialTheme.colorScheme.primary
+                                McpApprovalMode.ASK_ONCE_PER_CONVERSATION -> MaterialTheme.colorScheme.primary
                                 McpApprovalMode.ALWAYS_ALLOW_READ_ONLY -> EmeraldConnected
                             }
                         )
@@ -516,7 +515,7 @@ private fun PerServerSafetyConfigCard(
                         isSelected = currentMode == McpApprovalMode.ASK_EVERY_TIME,
                         title = "Ask Every Time (Maximum Security)",
                         badge = "RECOMMENDED FOR UNTRUSTED SERVERS",
-                        badgeColor = CyberCyan,
+                        badgeColor = MaterialTheme.colorScheme.primary,
                         description = "Strict manual review: requires user confirmation before ANY tool call runs (reads, writes, and deletes). Zero automatic execution.",
                         onClick = { onUpdateApprovalMode(McpApprovalMode.ASK_EVERY_TIME) },
                         testTag = "mode_ask_every_time_${server.id}"
@@ -527,7 +526,7 @@ private fun PerServerSafetyConfigCard(
                         isSelected = currentMode == McpApprovalMode.ASK_ONCE_PER_CONVERSATION,
                         title = "Ask Once Per Chat Thread",
                         badge = "SESSION-SCOPED READS",
-                        badgeColor = ElectricIndigo,
+                        badgeColor = MaterialTheme.colorScheme.primary,
                         description = "Confirms the first read-only call in each chat thread, then remembers it for that session. All sensitive write/delete actions ALWAYS prompt every time.",
                         onClick = { onUpdateApprovalMode(McpApprovalMode.ASK_ONCE_PER_CONVERSATION) },
                         testTag = "mode_ask_once_${server.id}"
@@ -642,7 +641,7 @@ private fun PerServerSafetyConfigCard(
                                             Icon(
                                                 imageVector = Icons.Default.PlayArrow,
                                                 contentDescription = "Test Approval Dialog",
-                                                tint = CyberCyan,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                         }
@@ -691,7 +690,7 @@ private fun SafetyModeOptionCard(
         shape = RoundedCornerShape(10.dp),
         border = BorderStroke(
             width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) CyberCyan else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -706,7 +705,7 @@ private fun SafetyModeOptionCard(
             verticalAlignment = Alignment.Top
         ) {
             Surface(
-                color = if (isSelected) CyberCyan else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.size(20.dp)
             ) {
