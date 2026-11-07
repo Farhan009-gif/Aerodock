@@ -102,10 +102,11 @@ import com.example.ui.screens.IntegrationsWorkspaceScreen
 import com.example.ui.screens.MinimalSettingsAndThemeScreen
 import com.example.ui.screens.PersistentMediaGalleryScreen
 import com.example.ui.screens.ProvidersScreen
+import com.example.ui.screens.RunwayHomeScreen
 import com.example.ui.screens.SettingsWorkspaceScreen
 import com.example.ui.screens.VideoStudioScreen
 import com.example.ui.theme.OmniAIStudioTheme
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniStudioViewModel
 import com.example.ui.viewmodel.ProvidersUiState
 import com.example.ui.viewmodel.ProvidersViewModel
@@ -223,7 +224,7 @@ private fun RunwaySplashScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color(0xFF0B0D10))
+            .background(MaterialTheme.colorScheme.background)
             .testTag("runway_splash_screen"),
         contentAlignment = Alignment.Center
     ) {
@@ -233,7 +234,7 @@ private fun RunwaySplashScreen() {
         ) {
             com.example.ui.components.RunwayLogoIcon(size = 84.dp)
             com.example.ui.components.RunwayWordmark(
-                color = androidx.compose.ui.graphics.Color.White
+                color = MaterialTheme.colorScheme.onBackground
             )
         }
     }
@@ -443,6 +444,9 @@ private fun OmniStudioRoot(
     var moreSubTab by rememberSaveable { mutableIntStateOf(1) }
     // Persistent Media Gallery mode inside Create tab (Images | Videos | Gallery)
     var showPersistentGallery by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    // Concept A navigation: the app opens on the Home hub; sections are
+    // entered from Home and return here via the back affordance / Back.
+    var homeVisible by rememberSaveable { mutableStateOf(true) }
 
     val rootFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val rootKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -493,10 +497,14 @@ private fun OmniStudioRoot(
         }
     }
 
-    if (uiState.currentTab != WorkspaceTab.CHAT) {
+    if (uiState.showConnectorsScreen) {
+        BackHandler {
+            viewModel.closeConnectorsScreen()
+        }
+    } else if (!homeVisible) {
         BackHandler {
             viewModel.setCompareModeEnabled(false)
-            viewModel.selectTab(WorkspaceTab.CHAT)
+            homeVisible = true
         }
     }
 
@@ -786,6 +794,7 @@ private fun OmniStudioRoot(
     val saveableStateHolder = rememberSaveableStateHolder()
 
     fun switchToBottomTab(tab: RunwayBottomTab) {
+        homeVisible = false
         viewModel.setCompareModeEnabled(false)
         when (tab) {
             RunwayBottomTab.CHAT -> viewModel.selectTab(WorkspaceTab.CHAT)
@@ -807,50 +816,40 @@ private fun OmniStudioRoot(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val useNavigationRail = maxWidth >= 760.dp
         val screenWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
         val canSwipeLeft = currentPrimaryTab.index < RunwayBottomTab.entries.size - 1
         val canSwipeRight = currentPrimaryTab.index > 0
 
         Scaffold(
             contentWindowInsets = WindowInsets.safeDrawing,
-            containerColor = MaterialTheme.colorScheme.background,
-            bottomBar = {
-                if (!useNavigationRail) {
-                    MinimalBottomNavBar(
-                        isChatSelected = isChatSelected,
-                        isCreateSelected = isCreateSelected,
-                        isAutopilotSelected = isAutopilotSelected,
-                        isConnectSelected = isConnectSelected,
-                        isMoreSelected = isMoreSelected,
-                        onSelectChat = { switchToBottomTab(RunwayBottomTab.CHAT) },
-                        onSelectCreate = { switchToBottomTab(RunwayBottomTab.CREATE) },
-                        onSelectAutopilot = { switchToBottomTab(RunwayBottomTab.AUTOPILOT) },
-                        onSelectConnect = { switchToBottomTab(RunwayBottomTab.CONNECT) },
-                        onSelectMore = { switchToBottomTab(RunwayBottomTab.MORE) },
-                        areAnimationsDisabled = areAnimationsDisabled
-                    )
-                }
-            }
+            containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                if (useNavigationRail) {
-                    MinimalSideNavRail(
-                        isChatSelected = isChatSelected,
-                        isCreateSelected = isCreateSelected,
-                        isAutopilotSelected = isAutopilotSelected,
-                        isConnectSelected = isConnectSelected,
-                        isMoreSelected = isMoreSelected,
-                        onSelectChat = { switchToBottomTab(RunwayBottomTab.CHAT) },
-                        onSelectCreate = { switchToBottomTab(RunwayBottomTab.CREATE) },
-                        onSelectAutopilot = { switchToBottomTab(RunwayBottomTab.AUTOPILOT) },
-                        onSelectConnect = { switchToBottomTab(RunwayBottomTab.CONNECT) },
-                        onSelectMore = { switchToBottomTab(RunwayBottomTab.MORE) },
-                        areAnimationsDisabled = areAnimationsDisabled
+                if (!homeVisible) {
+                    RunwaySectionHeader(
+                        title = if (uiState.showConnectorsScreen) {
+                            "Connectors"
+                        } else {
+                            when (currentPrimaryTab) {
+                                RunwayBottomTab.CHAT -> "Chat"
+                                RunwayBottomTab.CREATE -> "Create studio"
+                                RunwayBottomTab.AUTOPILOT -> "Autopilot"
+                                RunwayBottomTab.CONNECT -> "Connect"
+                                RunwayBottomTab.MORE -> "More"
+                            }
+                        },
+                        onBack = {
+                            if (uiState.showConnectorsScreen) {
+                                viewModel.closeConnectorsScreen()
+                            } else {
+                                viewModel.setCompareModeEnabled(false)
+                                homeVisible = true
+                            }
+                        }
                     )
                 }
 
@@ -858,7 +857,7 @@ private fun OmniStudioRoot(
                     modifier = Modifier
                         .weight(1f)
                         .tabSwipeGestures(
-                            enabled = !uiState.showConnectorsScreen,
+                            enabled = !homeVisible && !uiState.showConnectorsScreen,
                             screenWidthPx = screenWidthPx,
                             canSwipeLeft = canSwipeLeft,
                             canSwipeRight = canSwipeRight,
@@ -876,7 +875,25 @@ private fun OmniStudioRoot(
                             }
                         )
                 ) {
-                    if (uiState.showConnectorsScreen) {
+                    if (homeVisible) {
+                        RunwayHomeScreen(
+                            models = models,
+                            conversations = conversations,
+                            activeConversation = activeConversation,
+                            enabledSkillsCount = skills.count { it.isEnabled },
+                            mcpToolsCount = mcpTools.size,
+                            onOpenChat = { switchToBottomTab(RunwayBottomTab.CHAT) },
+                            onOpenCreate = { switchToBottomTab(RunwayBottomTab.CREATE) },
+                            onOpenAutopilot = { switchToBottomTab(RunwayBottomTab.AUTOPILOT) },
+                            onOpenConnect = { switchToBottomTab(RunwayBottomTab.CONNECT) },
+                            onOpenMore = { switchToBottomTab(RunwayBottomTab.MORE) },
+                            onOpenConversation = { conversation ->
+                                viewModel.selectConversation(conversation.id)
+                                switchToBottomTab(RunwayBottomTab.CHAT)
+                            },
+                            onSelectModel = viewModel::switchActiveConversationModel
+                        )
+                    } else if (uiState.showConnectorsScreen) {
                         ConnectorsScreen(
                             mcpServers = mcpServers,
                             mcpTools = mcpTools,
@@ -1456,227 +1473,44 @@ private fun OmniStudioRoot(
 }
 
 /**
- * 5-Tab Minimal Bottom Navigation Bar (icon + small label, no filled pill backgrounds).
- * Tabs: Chat, Create, Autopilot, Connect, More
+ * Concept A detail-screen header: a white circular back button (returns to
+ * the Home hub) plus the section title. Shown above every section entered
+ * from Home.
  */
 @Composable
-private fun MinimalBottomNavBar(
-    isChatSelected: Boolean,
-    isCreateSelected: Boolean,
-    isAutopilotSelected: Boolean,
-    isConnectSelected: Boolean,
-    isMoreSelected: Boolean,
-    onSelectChat: () -> Unit,
-    onSelectCreate: () -> Unit,
-    onSelectAutopilot: () -> Unit,
-    onSelectConnect: () -> Unit,
-    onSelectMore: () -> Unit,
-    areAnimationsDisabled: Boolean = false
+private fun RunwaySectionHeader(
+    title: String,
+    onBack: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .navigationBarsPadding()
-            .testTag("bottom_navigation_bar")
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outline
-        )
-        Row(
+        Surface(
+            onClick = onBack,
+            shape = androidx.compose.foundation.shape.CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+                .size(38.dp)
+                .testTag("section_back_button")
         ) {
-            MinimalNavTabItem(
-                label = "Chat",
-                icon = LucideIcons.Chat,
-                selected = isChatSelected,
-                onClick = onSelectChat,
-                testTag = "nav_tab_chat",
-                areAnimationsDisabled = areAnimationsDisabled,
-                modifier = Modifier.weight(1f)
-            )
-            MinimalNavTabItem(
-                label = "Create",
-                icon = LucideIcons.Sparkles,
-                selected = isCreateSelected,
-                onClick = onSelectCreate,
-                testTag = "nav_tab_images",
-                areAnimationsDisabled = areAnimationsDisabled,
-                modifier = Modifier.weight(1f)
-            )
-            MinimalNavTabItem(
-                label = "Autopilot",
-                icon = LucideIcons.Bot,
-                selected = isAutopilotSelected,
-                onClick = onSelectAutopilot,
-                testTag = "nav_tab_autopilot",
-                areAnimationsDisabled = areAnimationsDisabled,
-                modifier = Modifier.weight(1f)
-            )
-            MinimalNavTabItem(
-                label = "Connect",
-                icon = LucideIcons.Plug,
-                selected = isConnectSelected,
-                onClick = onSelectConnect,
-                testTag = "nav_tab_integrations",
-                areAnimationsDisabled = areAnimationsDisabled,
-                modifier = Modifier.weight(1f)
-            )
-            MinimalNavTabItem(
-                label = "More",
-                icon = LucideIcons.MoreHorizontal,
-                selected = isMoreSelected,
-                onClick = onSelectMore,
-                testTag = "nav_tab_settings",
-                areAnimationsDisabled = areAnimationsDisabled,
-                modifier = Modifier.weight(1f)
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = LucideIcons.ArrowLeft,
+                    contentDescription = "Back to Home",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
-    }
-}
-
-@Composable
-private fun MinimalNavTabItem(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    testTag: String,
-    areAnimationsDisabled: Boolean = false,
-    modifier: Modifier = Modifier
-) {
-    val tint = if (selected) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
-    val interactionSource = remember { MutableInteractionSource() }
-    val iconScale by animateFloatAsState(
-        targetValue = if (selected) 1.1f else 1.0f,
-        animationSpec = tween(
-            durationMillis = if (areAnimationsDisabled) 0 else 200,
-            easing = FastOutSlowInEasing
-        ),
-        label = "tab_icon_scale"
-    )
-
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .testTag(testTag),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier
-                .size(20.dp)
-                .graphicsLayer {
-                    scaleX = iconScale
-                    scaleY = iconScale
-                }
-        )
-        Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
-            ),
-            color = tint,
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun MinimalSideNavRail(
-    isChatSelected: Boolean,
-    isCreateSelected: Boolean,
-    isAutopilotSelected: Boolean,
-    isConnectSelected: Boolean,
-    isMoreSelected: Boolean,
-    onSelectChat: () -> Unit,
-    onSelectCreate: () -> Unit,
-    onSelectAutopilot: () -> Unit,
-    onSelectConnect: () -> Unit,
-    onSelectMore: () -> Unit,
-    areAnimationsDisabled: Boolean = false
-) {
-    Row(modifier = Modifier.fillMaxHeight()) {
-        Column(
-            modifier = Modifier
-                .width(76.dp)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(vertical = 16.dp)
-                .testTag("side_navigation_rail"),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            MinimalRailItem("Chat", LucideIcons.Chat, isChatSelected, onSelectChat, "rail_tab_chat", areAnimationsDisabled)
-            MinimalRailItem("Create", LucideIcons.Sparkles, isCreateSelected, onSelectCreate, "rail_tab_images", areAnimationsDisabled)
-            MinimalRailItem("Autopilot", LucideIcons.Bot, isAutopilotSelected, onSelectAutopilot, "rail_tab_autopilot", areAnimationsDisabled)
-            MinimalRailItem("Connect", LucideIcons.Plug, isConnectSelected, onSelectConnect, "rail_tab_integrations", areAnimationsDisabled)
-            MinimalRailItem("More", LucideIcons.MoreHorizontal, isMoreSelected, onSelectMore, "rail_tab_settings", areAnimationsDisabled)
-        }
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.outline)
-        )
-    }
-}
-
-@Composable
-private fun MinimalRailItem(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    testTag: String,
-    areAnimationsDisabled: Boolean = false
-) {
-    val tint = if (selected) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
-    val iconScale by animateFloatAsState(
-        targetValue = if (selected) 1.1f else 1.0f,
-        animationSpec = tween(
-            durationMillis = if (areAnimationsDisabled) 0 else 200,
-            easing = FastOutSlowInEasing
-        ),
-        label = "rail_icon_scale"
-    )
-    Column(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 8.dp)
-            .testTag(testTag),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier
-                .size(20.dp)
-                .graphicsLayer {
-                    scaleX = iconScale
-                    scaleY = iconScale
-                }
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = tint
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground
         )
     }
 }
