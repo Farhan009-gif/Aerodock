@@ -69,7 +69,6 @@ import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
-import com.example.ui.theme.SoftIndigo
 
 /**
  * Pending confirmation state when a user tries to set a write or delete tool
@@ -338,14 +337,14 @@ fun ConnectorsScreen(
                                 ) {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = SoftIndigo.copy(alpha = 0.14f),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
                                         modifier = Modifier.size(38.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = LucideIcons.Compass,
                                                 contentDescription = null,
-                                                tint = SoftIndigo,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
@@ -404,7 +403,7 @@ fun ConnectorsScreen(
                                                 Icon(
                                                     imageVector = LucideIcons.GitBranch,
                                                     contentDescription = null,
-                                                    tint = SoftIndigo,
+                                                    tint = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Column(modifier = Modifier.weight(1f)) {
@@ -578,7 +577,7 @@ private fun ConnectorsTopBar(
                         Icon(
                             imageVector = LucideIcons.Plus,
                             contentDescription = "Add connector",
-                            tint = SoftIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -621,7 +620,7 @@ private fun ConnectorListRow(
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (server.isEnabled) {
-                        SoftIndigo.copy(alpha = 0.15f)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
@@ -631,7 +630,7 @@ private fun ConnectorListRow(
                         Icon(
                             imageVector = if (isGitHub) LucideIcons.GitBranch else LucideIcons.Server,
                             contentDescription = server.name,
-                            tint = if (server.isEnabled) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (server.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -671,13 +670,13 @@ private fun ConnectorListRow(
                 if (isBusy) {
                     CircularProgressIndicator(
                         strokeWidth = 2.dp,
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
                 BadgePill(
                     text = "$toolCount ${if (toolCount == 1) "tool" else "tools"}",
-                    color = if (toolCount > 0) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (toolCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("connector_tool_badge_${server.id}")
                 )
                 Icon(
@@ -818,7 +817,7 @@ private fun ConnectorDetailView(
                                     )
                                     BadgePill(
                                         text = "${tools.size} ${if (tools.size == 1) "tool" else "tools"}",
-                                        color = SoftIndigo
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -1119,10 +1118,11 @@ private fun ApprovalChoiceSegmentedRow(
     }
 }
 
+@Composable
 private fun choiceColor(choice: ToolApprovalChoice): Color {
     return when (choice) {
         ToolApprovalChoice.ALWAYS -> EmeraldConnected
-        ToolApprovalChoice.ASK -> SoftIndigo
+        ToolApprovalChoice.ASK -> MaterialTheme.colorScheme.primary
         ToolApprovalChoice.NEVER -> CoralError
     }
 }
@@ -1227,8 +1227,8 @@ private fun AddMcpConnectorDialog(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = SoftIndigo.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, SoftIndigo.copy(alpha = 0.4f)),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("github_pat_readonly_note")
@@ -1241,7 +1241,7 @@ private fun AddMcpConnectorDialog(
                             Icon(
                                 imageVector = LucideIcons.Shield,
                                 contentDescription = null,
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
