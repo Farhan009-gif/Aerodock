@@ -78,9 +78,9 @@ import com.example.data.integrations.GitHubRepoSummary
 import com.example.data.integrations.YouTubeIntegrationClient
 import com.example.data.local.IntegrationAuditLogEntity
 import com.example.ui.theme.AmberWarning
+import com.example.ui.theme.runwayIsDarkTheme
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.viewmodel.GitHubPushDraft
@@ -137,7 +137,7 @@ fun GitHubPushDialog(
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.6f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .widthIn(max = 640.dp)
@@ -164,7 +164,7 @@ fun GitHubPushDialog(
                         Icon(
                             imageVector = Icons.Default.Code,
                             contentDescription = null,
-                            tint = CyberCyan
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Column {
                             Text(
@@ -339,7 +339,7 @@ fun GitHubPushDialog(
                         Text(
                             text = "Quick-Select Repository:",
                             style = MaterialTheme.typography.labelSmall,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Row(
                             modifier = Modifier
@@ -450,8 +450,8 @@ fun GitHubPushDialog(
                         },
                         enabled = !isBusy && editableContent.isNotBlank() && maskedGitHubPat.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CyberCyan,
-                            contentColor = Color(0xFF04121D)
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = if (runwayIsDarkTheme()) Color(0xFF04121D) else MaterialTheme.colorScheme.onPrimary
                         ),
                         modifier = Modifier.testTag("github_confirm_push_button")
                     ) {
@@ -459,7 +459,7 @@ fun GitHubPushDialog(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
-                                color = Color(0xFF04121D)
+                                color = if (runwayIsDarkTheme()) Color(0xFF04121D) else MaterialTheme.colorScheme.onPrimary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Publishing…")
@@ -499,7 +499,7 @@ fun YouTubePublishDialog(
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.6f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .widthIn(max = 640.dp)
@@ -525,7 +525,7 @@ fun YouTubePublishDialog(
                         Icon(
                             imageVector = Icons.Default.VideoLibrary,
                             contentDescription = null,
-                            tint = CyberCyan
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Column {
                             Text(
@@ -613,7 +613,7 @@ fun YouTubePublishDialog(
                             Text(
                                 text = youTubeChannelSummary,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = CyberCyan,
+                                color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -703,8 +703,8 @@ fun YouTubePublishDialog(
                             },
                             enabled = !isBusy && title.isNotBlank() && maskedYouTubeToken.isNotBlank(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = CyberCyan,
-                                contentColor = Color(0xFF04121D)
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = if (runwayIsDarkTheme()) Color(0xFF04121D) else MaterialTheme.colorScheme.onPrimary
                             ),
                             modifier = Modifier.testTag("youtube_confirm_upload_button")
                         ) {
@@ -712,7 +712,7 @@ fun YouTubePublishDialog(
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp,
-                                    color = Color(0xFF04121D)
+                                    color = if (runwayIsDarkTheme()) Color(0xFF04121D) else MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Uploading MP4…")
@@ -761,7 +761,7 @@ fun IntegrationsSettingsSection(
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.65f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("integrations_settings_card")
@@ -782,7 +782,7 @@ fun IntegrationsSettingsSection(
                     Icon(
                         imageVector = Icons.Default.CloudUpload,
                         contentDescription = null,
-                        tint = CyberCyan
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Column {
                         Text(
@@ -797,7 +797,7 @@ fun IntegrationsSettingsSection(
                         )
                     }
                 }
-                BadgePill(text = "MANUAL ONLY", color = CyberCyan)
+                BadgePill(text = "MANUAL ONLY", color = MaterialTheme.colorScheme.primary)
             }
 
             // --- Part A: GitHub Integration (Gists & Repository File Commits) ---
@@ -820,7 +820,7 @@ fun IntegrationsSettingsSection(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.Code, contentDescription = null, tint = CyberCyan)
+                            Icon(Icons.Default.Code, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Column {
                                 Text(
                                     text = "GitHub (Gists & Repository Commits)",
@@ -957,7 +957,7 @@ fun IntegrationsSettingsSection(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.VideoLibrary, contentDescription = null, tint = CyberCyan)
+                            Icon(Icons.Default.VideoLibrary, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Column {
                                 Text(
                                     text = "YouTube Data API v3 (OAuth 2.0 PKCE + Resumable Upload)",
@@ -1046,7 +1046,7 @@ fun IntegrationsSettingsSection(
                         Surface(
                             color = MaterialTheme.colorScheme.surface,
                             shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f))
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                         ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
@@ -1055,7 +1055,7 @@ fun IntegrationsSettingsSection(
                                 Text(
                                     text = "RFC 7636 OAuth 2.0 PKCE Authorization (No Client Secret in APK)",
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = CyberCyan,
+                                    color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 OutlinedTextField(
@@ -1250,7 +1250,7 @@ fun IntegrationsSettingsSection(
                                             Icon(
                                                 imageVector = Icons.Default.Launch,
                                                 contentDescription = "Open in browser",
-                                                tint = CyberCyan,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(15.dp)
                                             )
                                         }
