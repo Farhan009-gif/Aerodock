@@ -487,7 +487,7 @@ fun RunwayRichMarkdownRenderer(
                                         Text(
                                             text = "•",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = SoftIndigo,
+                                            color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.width(16.dp)
                                         )
                                         Box(modifier = Modifier.weight(1f)) {
@@ -516,7 +516,7 @@ fun RunwayRichMarkdownRenderer(
                                         Text(
                                             text = item.numberLabel,
                                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                            color = SoftIndigo,
+                                            color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.width(24.dp)
                                         )
                                         Box(modifier = Modifier.weight(1f)) {
@@ -546,11 +546,11 @@ fun RunwayRichMarkdownRenderer(
                                                 .size(16.dp)
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(
-                                                    if (item.isChecked) SoftIndigo else Color.Transparent
+                                                    if (item.isChecked) MaterialTheme.colorScheme.primary else Color.Transparent
                                                 )
                                                 .border(
                                                     width = 1.dp,
-                                                    color = if (item.isChecked) SoftIndigo else MaterialTheme.colorScheme.outline,
+                                                    color = if (item.isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                                                     shape = RoundedCornerShape(4.dp)
                                                 ),
                                             contentAlignment = Alignment.Center
@@ -701,7 +701,7 @@ private fun RunwayMarkdownBlockquote(
                 .width(2.dp)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(2.dp))
-                .background(SoftIndigo.copy(alpha = 0.75f))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(
@@ -736,6 +736,7 @@ private fun RunwayInlineRichText(
     val uriHandler = LocalUriHandler.current
     val inlineCodeBg = MaterialTheme.colorScheme.surface
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val accentColor = MaterialTheme.colorScheme.primary
 
     // Extract inline images if embedded inside a paragraph
     val inlineImages = remember(text) {
@@ -747,13 +748,14 @@ private fun RunwayInlineRichText(
         if (inlineImages.isEmpty()) text else inlineImageExtractRegex.replace(text, "").trim()
     }
 
-    val annotated = remember(textWithoutImages, isStreaming, color, inlineCodeBg, onSurfaceVariant) {
+    val annotated = remember(textWithoutImages, isStreaming, color, inlineCodeBg, onSurfaceVariant, accentColor) {
         buildInlineMarkdownAnnotatedString(
             raw = textWithoutImages,
             isStreaming = isStreaming,
             baseColor = color,
             codeBg = inlineCodeBg,
-            mutedColor = onSurfaceVariant
+            mutedColor = onSurfaceVariant,
+            accentColor = accentColor
         )
     }
 
@@ -797,7 +799,8 @@ private fun buildInlineMarkdownAnnotatedString(
     isStreaming: Boolean,
     baseColor: Color,
     codeBg: Color,
-    mutedColor: Color
+    mutedColor: Color,
+    accentColor: Color
 ): AnnotatedString {
     return buildAnnotatedString {
         var i = 0
@@ -813,7 +816,7 @@ private fun buildInlineMarkdownAnnotatedString(
                         SpanStyle(
                             fontFamily = MonospaceFontFamily,
                             fontSize = 13.sp,
-                            color = SoftIndigo,
+                            color = accentColor,
                             background = codeBg
                         )
                     ) {
@@ -836,7 +839,7 @@ private fun buildInlineMarkdownAnnotatedString(
                     if (LaTeXMathFormatter.looksLikeMath(rawLatex)) {
                         val rendered = LaTeXMathFormatter.formatToAnnotatedString(
                             latex = rawLatex,
-                            mathColor = SoftIndigo,
+                            mathColor = accentColor,
                             fallbackColor = mutedColor
                         )
                         withStyle(SpanStyle(background = codeBg.copy(alpha = 0.7f))) {
@@ -863,7 +866,7 @@ private fun buildInlineMarkdownAnnotatedString(
                         pushStringAnnotation(tag = "URL", annotation = url)
                         withStyle(
                             SpanStyle(
-                                color = SoftIndigo,
+                                color = accentColor,
                                 textDecoration = TextDecoration.Underline,
                                 fontWeight = FontWeight.Medium
                             )
@@ -941,7 +944,7 @@ private fun buildInlineMarkdownAnnotatedString(
                     pushStringAnnotation(tag = "URL", annotation = url)
                     withStyle(
                         SpanStyle(
-                            color = SoftIndigo,
+                            color = accentColor,
                             textDecoration = TextDecoration.Underline
                         )
                     ) {
@@ -1053,7 +1056,7 @@ fun RunwaySyntaxCodeBlock(
                         Text(
                             text = "streaming…",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SoftIndigo
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -1075,13 +1078,13 @@ fun RunwaySyntaxCodeBlock(
                             Icon(
                                 imageVector = LucideIcons.Play,
                                 contentDescription = "Run code",
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = "Run",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = SoftIndigo
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1089,7 +1092,7 @@ fun RunwaySyntaxCodeBlock(
                     Text(
                         text = if (wrapLines) "Wrap: On" else "Wrap",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (wrapLines) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (wrapLines) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .clickable { wrapLines = !wrapLines }
@@ -1118,13 +1121,13 @@ fun RunwaySyntaxCodeBlock(
                         Icon(
                             imageVector = if (isCopied) LucideIcons.Check else LucideIcons.Copy,
                             contentDescription = "Copy code",
-                            tint = if (isCopied) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isCopied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
                             text = if (isCopied) "Copied" else "Copy",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isCopied) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isCopied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1173,7 +1176,7 @@ fun RunwaySyntaxCodeBlock(
                             "Show more ($totalLineCount lines)"
                         },
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = SoftIndigo
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -1344,13 +1347,13 @@ fun RunwayStickyMarkdownTable(
                     Icon(
                         imageVector = if (copiedCsv) LucideIcons.Check else LucideIcons.Copy,
                         contentDescription = "Copy as CSV",
-                        tint = if (copiedCsv) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (copiedCsv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
                         text = if (copiedCsv) "Copied CSV" else "Copy as CSV",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (copiedCsv) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (copiedCsv) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -1441,17 +1444,18 @@ fun RunwayMathBlockCard(
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var isCopied by remember { mutableStateOf(false) }
+    val mathAccentColor = MaterialTheme.colorScheme.primary
 
     val isValidLatex = remember(expression) {
         LaTeXMathFormatter.isBalancedAndValid(expression)
     }
-    val formattedMath = remember(expression, isIncompleteStream, isValidLatex) {
+    val formattedMath = remember(expression, isIncompleteStream, isValidLatex, mathAccentColor) {
         if (isIncompleteStream || !isValidLatex) {
             AnnotatedString(expression)
         } else {
             LaTeXMathFormatter.formatToAnnotatedString(
                 latex = expression,
-                mathColor = SoftIndigo,
+                mathColor = mathAccentColor,
                 fallbackColor = Color.Unspecified
             )
         }
@@ -1500,13 +1504,13 @@ fun RunwayMathBlockCard(
                     Icon(
                         imageVector = if (isCopied) LucideIcons.Check else LucideIcons.Copy,
                         contentDescription = "Copy formula",
-                        tint = if (isCopied) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isCopied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(12.dp)
                     )
                     Text(
                         text = if (isCopied) "Copied" else "Copy",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isCopied) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (isCopied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -1930,7 +1934,7 @@ fun RunwayMermaidDiagramCard(
                     Text(
                         text = if (showSource) "Diagram" else "Source",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .clickable { showSource = !showSource }
@@ -2058,7 +2062,7 @@ private fun MermaidNodeChip(
     Surface(
         shape = shape,
         color = nodeSurface,
-        border = BorderStroke(1.dp, if (node.isDiamond) SoftIndigo.copy(alpha = 0.7f) else outlineColor),
+        border = BorderStroke(1.dp, if (node.isDiamond) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else outlineColor),
         modifier = Modifier.widthIn(min = 88.dp, max = 220.dp)
     ) {
         Text(
@@ -2073,6 +2077,7 @@ private fun MermaidNodeChip(
 
 @Composable
 private fun MermaidVerticalArrow(label: String, mutedColor: Color) {
+    val accentColor = MaterialTheme.colorScheme.primary
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -2080,7 +2085,7 @@ private fun MermaidVerticalArrow(label: String, mutedColor: Color) {
         Canvas(modifier = Modifier.size(width = 14.dp, height = 22.dp)) {
             val cx = size.width / 2f
             drawLine(
-                color = SoftIndigo,
+                color = accentColor,
                 start = Offset(cx, 0f),
                 end = Offset(cx, size.height - 4f),
                 strokeWidth = 3f,
@@ -2091,7 +2096,7 @@ private fun MermaidVerticalArrow(label: String, mutedColor: Color) {
                 lineTo(cx, size.height)
                 lineTo(cx + 4.5f, size.height - 7f)
             }
-            drawPath(arrowPath, color = SoftIndigo, style = Stroke(width = 3f, cap = StrokeCap.Round))
+            drawPath(arrowPath, color = accentColor, style = Stroke(width = 3f, cap = StrokeCap.Round))
         }
         if (label.isNotBlank()) {
             Text(
@@ -2105,6 +2110,7 @@ private fun MermaidVerticalArrow(label: String, mutedColor: Color) {
 
 @Composable
 private fun MermaidHorizontalArrow(label: String, mutedColor: Color) {
+    val accentColor = MaterialTheme.colorScheme.primary
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (label.isNotBlank()) {
             Text(
@@ -2116,7 +2122,7 @@ private fun MermaidHorizontalArrow(label: String, mutedColor: Color) {
         Canvas(modifier = Modifier.size(width = 28.dp, height = 14.dp)) {
             val cy = size.height / 2f
             drawLine(
-                color = SoftIndigo,
+                color = accentColor,
                 start = Offset(0f, cy),
                 end = Offset(size.width - 4f, cy),
                 strokeWidth = 3f,
@@ -2127,7 +2133,7 @@ private fun MermaidHorizontalArrow(label: String, mutedColor: Color) {
                 lineTo(size.width, cy)
                 lineTo(size.width - 7f, cy + 4.5f)
             }
-            drawPath(arrowPath, color = SoftIndigo, style = Stroke(width = 3f, cap = StrokeCap.Round))
+            drawPath(arrowPath, color = accentColor, style = Stroke(width = 3f, cap = StrokeCap.Round))
         }
     }
 }
