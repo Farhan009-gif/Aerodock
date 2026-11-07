@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.data.mcp.JsSandboxExecutor
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
@@ -266,7 +266,7 @@ fun WebViewPreviewer(
 
     Surface(
         shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, ElectricIndigo.copy(alpha = 0.6f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
         color = MaterialTheme.colorScheme.background,
         modifier = modifier.testTag("webview_previewer")
     ) {
@@ -283,7 +283,7 @@ fun WebViewPreviewer(
                     text = title,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = ElectricIndigo
+                    color = MaterialTheme.colorScheme.primary
                 )
                 BadgePill(
                     text = "NO NETWORK • NO BRIDGES",
