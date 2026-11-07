@@ -83,8 +83,7 @@ import com.example.data.local.ClonedRepoEntity
 import com.example.data.local.SkillEntity
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
 
@@ -141,13 +140,13 @@ fun GitCloneBottomSheet(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(ElectricIndigo.copy(alpha = 0.2f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Code,
                             contentDescription = null,
-                            tint = CyberCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -211,8 +210,8 @@ fun GitCloneBottomSheet(
                 enabled = !isCloning,
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CyberCyan,
-                    focusedLabelColor = CyberCyan
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -231,13 +230,13 @@ fun GitCloneBottomSheet(
                 Text(
                     text = if (showAdvanced) "Hide Advanced Options" else "Branch & Private Token Options",
                     style = MaterialTheme.typography.bodySmall,
-                    color = CyberCyan,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
                 Icon(
                     imageVector = if (showAdvanced) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
-                    tint = CyberCyan,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -288,7 +287,7 @@ fun GitCloneBottomSheet(
                         CircularProgressIndicator(
                             strokeWidth = 2.5.dp,
                             modifier = Modifier.size(24.dp),
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Text(
                             text = progressMessage.ifBlank { "Cloning repository..." },
@@ -342,7 +341,7 @@ fun GitCloneBottomSheet(
                     },
                     enabled = !isCloning && repoUrlInput.isNotBlank(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier
                         .weight(1.5f)
                         .testTag("git_clone_submit_button")
@@ -411,7 +410,7 @@ fun ClonedReposSection(
                     Icon(
                         imageVector = Icons.Default.Code,
                         contentDescription = null,
-                        tint = CyberCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                     Column {
@@ -431,7 +430,7 @@ fun ClonedReposSection(
                 Button(
                     onClick = onCloneNewRepo,
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     modifier = Modifier.testTag("clone_new_repo_button")
                 ) {
@@ -568,7 +567,7 @@ fun ClonedRepoCard(
                     Icon(
                         imageVector = Icons.Default.Folder,
                         contentDescription = null,
-                        tint = CyberCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                     Column {
@@ -639,7 +638,7 @@ fun ClonedRepoCard(
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = null,
-                                    tint = if (skill.isEnabled) CyberCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (skill.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Column {
@@ -663,8 +662,8 @@ fun ClonedRepoCard(
                                 checked = skill.isEnabled,
                                 onCheckedChange = { onToggleSkillEnabled(skill) },
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = CyberCyan,
-                                    checkedTrackColor = CyberCyan.copy(alpha = 0.4f)
+                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                                 ),
                                 modifier = Modifier.size(36.dp).testTag("toggle_skill_${skill.id}")
                             )
@@ -679,7 +678,7 @@ fun ClonedRepoCard(
                             Text(
                                 text = if (expanded) "Show less" else "View all ${repoSkills.size} skills",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = CyberCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -897,7 +896,7 @@ fun RepoFileBrowserBottomSheet(
                             Icon(
                                 imageVector = if (isSkill) Icons.Default.AutoAwesome else Icons.Default.InsertDriveFile,
                                 contentDescription = null,
-                                tint = if (isSkill) CyberCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isSkill) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
@@ -905,20 +904,20 @@ fun RepoFileBrowserBottomSheet(
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = if (isSkill) FontFamily.Default else JetBrainsMonoFontFamily,
                                 fontWeight = if (isSkill) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSkill) CyberCyan else MaterialTheme.colorScheme.onSurface,
+                                color = if (isSkill) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
                             if (isSkill) {
                                 Surface(
-                                    color = CyberCyan.copy(alpha = 0.15f),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(6.dp)
                                 ) {
                                     Text(
                                         text = "SKILL",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = CyberCyan,
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
