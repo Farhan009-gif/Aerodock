@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -439,7 +440,7 @@ private fun ProviderCardItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Left: Status dot + Provider Name + Masked Key
+                // Left: Tinted key chip + Provider Name + Masked Key
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -447,7 +448,20 @@ private fun ProviderCardItem(
                         .weight(1f)
                         .clickable(onClick = onEditFull)
                 ) {
-                    MinimalStatusDot(isConnected = provider.isEnabled && (hasKey || provider.presetEnum() == ProviderPresetType.OMNIROUTE))
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Key,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = provider.displayName,
