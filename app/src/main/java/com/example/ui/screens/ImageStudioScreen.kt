@@ -75,7 +75,7 @@ import com.example.ui.components.MinimalButton
 import com.example.ui.components.MinimalCard
 import com.example.ui.components.MinimalChip
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniUiState
 import java.io.File
 import java.text.SimpleDateFormat
@@ -323,7 +323,7 @@ fun ImageStudioScreen(
                         minLines = 3,
                         maxLines = 5,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SoftIndigo,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                             focusedContainerColor = MaterialTheme.colorScheme.background,
                             unfocusedContainerColor = MaterialTheme.colorScheme.background
@@ -422,7 +422,7 @@ fun ImageStudioScreen(
                                     Text(
                                         String.format(Locale.US, "%.1f", uiState.imageGuidanceScale),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = SoftIndigo
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 Slider(
@@ -438,7 +438,7 @@ fun ImageStudioScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text("Steps", style = MaterialTheme.typography.labelSmall)
-                                    Text("${uiState.imageSteps}", style = MaterialTheme.typography.labelSmall, color = SoftIndigo)
+                                    Text("${uiState.imageSteps}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                 }
                                 Slider(
                                     value = uiState.imageSteps.toFloat(),
@@ -484,7 +484,7 @@ fun ImageStudioScreen(
                                     Text(
                                         String.format(Locale.US, "%.2f", uiState.imageStrength),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = SoftIndigo
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 Slider(
@@ -879,10 +879,10 @@ private fun ImageModelPickerSheet(
                     Surface(
                         onClick = { onSelect(mod.providerInstanceId, mod.modelId) },
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) SoftIndigo.copy(alpha = 0.12f) else MaterialTheme.colorScheme.background,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.background,
                         border = BorderStroke(
                             1.dp,
-                            if (isSelected) SoftIndigo else MaterialTheme.colorScheme.outline
+                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -905,12 +905,12 @@ private fun ImageModelPickerSheet(
                                     if (mod.isCombo || comboDef != null) {
                                         Surface(
                                             shape = RoundedCornerShape(4.dp),
-                                            color = SoftIndigo.copy(alpha = 0.16f)
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                                         ) {
                                             Text(
                                                 text = if (comboDef != null) "COMBO · ${comboDef.strategy}" else "COMBO",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = SoftIndigo,
+                                                color = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
@@ -932,7 +932,7 @@ private fun ImageModelPickerSheet(
                                 Icon(
                                     imageVector = LucideIcons.Check,
                                     contentDescription = "Selected",
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
