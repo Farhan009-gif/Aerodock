@@ -679,7 +679,7 @@ private fun McpServerItemCard(
     var showToolsList by rememberSaveable(server.id) { mutableStateOf(true) }
 
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(
             1.dp,
@@ -1327,7 +1327,7 @@ fun ConversationSkillsAndToolsSheet(
             // Section A: Per-Conversation Skills
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 modifier = Modifier.fillMaxWidth()
@@ -1425,7 +1425,7 @@ fun ConversationSkillsAndToolsSheet(
             if (supportsFunctionCalling) {
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     modifier = Modifier.fillMaxWidth()
