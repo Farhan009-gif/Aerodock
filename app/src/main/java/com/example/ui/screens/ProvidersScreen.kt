@@ -61,7 +61,7 @@ import com.example.data.local.UsageRecordEntity
 import com.example.data.provider.ProviderSpendingLimitEvaluator
 import com.example.ui.theme.CoralError
 import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.ProvidersUiState
 import com.example.ui.viewmodel.ProvidersViewModel
 import androidx.compose.material3.LinearProgressIndicator
@@ -471,7 +471,7 @@ private fun ProviderCardItem(
                                     Text(
                                         text = "· ${health.latencyMs}ms",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = SoftIndigo
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 is ProviderHealth.Unhealthy -> {
@@ -560,14 +560,14 @@ private fun ProviderCardItem(
                     Text(
                         text = if (monthlyLimitUsd != null && monthlyLimitUsd > 0.0) "Edit limit" else "Set limit",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.testTag("provider_set_limit_button_${provider.id}")
                     )
                 }
                 if (monthlyLimitUsd != null && monthlyLimitUsd > 0.0) {
                     val barColor = when {
                         progressFraction >= 1.0f -> CoralError
-                        progressFraction >= 0.8f -> SoftIndigo
+                        progressFraction >= 0.8f -> MaterialTheme.colorScheme.primary
                         else -> EmeraldSuccess
                     }
                     LinearProgressIndicator(
@@ -1000,7 +1000,7 @@ private fun OmniRouteGatewayCombosCard(
                                     Surface(
                                         shape = RoundedCornerShape(4.dp),
                                         color = when (combo.modality.uppercase()) {
-                                            "VIDEO" -> SoftIndigo.copy(alpha = 0.14f)
+                                            "VIDEO" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                                             "IMAGE" -> EmeraldSuccess.copy(alpha = 0.14f)
                                             else -> MaterialTheme.colorScheme.surfaceVariant
                                         }
@@ -1009,7 +1009,7 @@ private fun OmniRouteGatewayCombosCard(
                                             text = "${combo.modality} · ${combo.strategy}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = when (combo.modality.uppercase()) {
-                                                "VIDEO" -> SoftIndigo
+                                                "VIDEO" -> MaterialTheme.colorScheme.primary
                                                 "IMAGE" -> EmeraldSuccess
                                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                                             },
@@ -1505,7 +1505,7 @@ private fun ProviderFailoverSettingsCard(
                         Icon(
                             imageVector = LucideIcons.RefreshCw,
                             contentDescription = "Failover",
-                            tint = SoftIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
@@ -1572,7 +1572,7 @@ private fun ProviderFailoverSettingsCard(
                                     Text(
                                         text = resolvedModelName,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = SoftIndigo,
+                                        color = MaterialTheme.colorScheme.primary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
