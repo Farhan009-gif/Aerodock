@@ -10,6 +10,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -34,6 +36,21 @@ val GeminiBorder = DarkDivider
  */
 @Composable
 fun runwayIsDarkTheme(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+/**
+ * Filled user-bubble colours for the active theme accent (Round 3). The
+ * bubble fill is a deep shade of the selected accent family, used in BOTH
+ * modes (Sage = the original DeepForest); [dot] is the pale status-dot tint
+ * shown on the deep-filled model pill in light mode.
+ */
+data class RunwayAccentBubble(
+    val fill: Color,
+    val dot: Color
+)
+
+val LocalRunwayAccentBubble = staticCompositionLocalOf {
+    RunwayAccentBubble(fill = DeepForest, dot = Color(0xFFA8C69A))
+}
 
 // Concept A corner language: cards 16–22dp, sheets/dialogs 24dp top corners.
 private val RunwayShapes = Shapes(
@@ -113,6 +130,7 @@ private val RunwayLightColorScheme = lightColorScheme(
 @Composable
 fun OmniAIStudioTheme(
     themeMode: String = "DARK",
+    themeAccent: String = "SAGE",
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -123,19 +141,48 @@ fun OmniAIStudioTheme(
         else -> true
     }
 
+    // Round 3: recolour the Concept A schemes with the selected accent
+    // family. With the default SAGE accent every copied value equals the
+    // static schemes above, so the original look is reproduced exactly.
+    val accentPalette = runwayAccentPalette(themeAccent)
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        useDarkTheme -> RunwayDarkColorScheme
-        else -> RunwayLightColorScheme
+        useDarkTheme -> RunwayDarkColorScheme.copy(
+            primary = accentPalette.darkPrimary,
+            onPrimary = accentPalette.darkOnPrimary,
+            primaryContainer = accentPalette.darkContainer,
+            onPrimaryContainer = accentPalette.darkOnContainer,
+            secondary = accentPalette.darkPrimary,
+            onSecondary = accentPalette.darkOnPrimary,
+            inversePrimary = accentPalette.darkPrimary
+        )
+        else -> RunwayLightColorScheme.copy(
+            primary = accentPalette.lightPrimary,
+            onPrimary = accentPalette.lightOnPrimary,
+            primaryContainer = accentPalette.lightContainer,
+            onPrimaryContainer = accentPalette.lightOnContainer,
+            secondary = accentPalette.userBubble,
+            onSecondary = Color.White,
+            secondaryContainer = accentPalette.lightContainer,
+            onSecondaryContainer = accentPalette.lightOnContainer,
+            inversePrimary = accentPalette.lightContainer
+        )
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = RunwayShapes,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalRunwayAccentBubble provides RunwayAccentBubble(
+            fill = accentPalette.userBubble,
+            dot = accentPalette.userBubbleDot
+        )
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = RunwayShapes,
+            content = content
+        )
+    }
 }

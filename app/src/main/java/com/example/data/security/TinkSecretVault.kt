@@ -103,6 +103,7 @@ class TinkSecretVault(private val context: Context) {
 
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
+        private val KEY_THEME_ACCENT = stringPreferencesKey("theme_accent")
         private val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color_enabled")
         private val KEY_BIOMETRIC_GATE = booleanPreferencesKey("biometric_gate_enabled")
         private val KEY_ENTER_TO_SEND = booleanPreferencesKey("enter_to_send_enabled")
@@ -151,6 +152,10 @@ class TinkSecretVault(private val context: Context) {
 
     val themeModeFlow: Flow<String> = context.omniDataStore.data.map { prefs ->
         prefs[KEY_THEME_MODE] ?: "DARK"
+    }
+
+    val themeAccentFlow: Flow<String> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_THEME_ACCENT] ?: "SAGE"
     }
 
     val dynamicColorFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
@@ -386,6 +391,12 @@ class TinkSecretVault(private val context: Context) {
     suspend fun setThemeMode(mode: String) {
         context.omniDataStore.edit { prefs ->
             prefs[KEY_THEME_MODE] = mode
+        }
+    }
+
+    suspend fun setThemeAccent(accent: String) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_THEME_ACCENT] = accent
         }
     }
 

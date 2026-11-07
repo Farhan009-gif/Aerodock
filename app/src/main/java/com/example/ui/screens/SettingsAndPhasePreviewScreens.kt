@@ -70,6 +70,7 @@ import com.example.ui.components.MinimalStatusDot
 import com.example.ui.components.MinimalToggle
 import com.example.ui.components.SkillsAndMcpSection
 import com.example.ui.theme.CoralError
+import com.example.ui.theme.RunwayAccentPalettes
 
 import com.example.ui.viewmodel.OmniUiState
 
@@ -109,6 +110,7 @@ fun SettingsWorkspaceScreen(
     onApproveCleartextHostManually: (String) -> Unit,
     onRevokeCleartextHost: (String) -> Unit,
     onSetThemeMode: (String) -> Unit,
+    onSetThemeAccent: (String) -> Unit = {},
     onSetDynamicColor: (Boolean) -> Unit,
     onSetBiometricGate: (Boolean) -> Unit,
     onSetEnterToSend: (Boolean) -> Unit,
@@ -130,6 +132,7 @@ fun SettingsWorkspaceScreen(
     MinimalSettingsAndThemeScreen(
         uiState = uiState,
         onSetThemeMode = onSetThemeMode,
+        onSetThemeAccent = onSetThemeAccent,
         onSetBiometricGate = onSetBiometricGate,
         onSetEnterToSend = onSetEnterToSend,
         onSetReadRepliesAloud = onSetReadRepliesAloud,
@@ -155,6 +158,7 @@ fun SettingsWorkspaceScreen(
 fun MinimalSettingsAndThemeScreen(
     uiState: OmniUiState,
     onSetThemeMode: (String) -> Unit,
+    onSetThemeAccent: (String) -> Unit = {},
     onSetBiometricGate: (Boolean) -> Unit,
     onSetEnterToSend: (Boolean) -> Unit,
     onSetReadRepliesAloud: (Boolean) -> Unit = {},
@@ -273,6 +277,73 @@ fun MinimalSettingsAndThemeScreen(
                                 .fillMaxWidth()
                                 .testTag("theme_mode_segmented_control")
                         )
+                    }
+
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+
+                    // Theme accent picker (Round 3): recolours the accent
+                    // family app-wide; surfaces stay Concept A in both modes.
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Accent",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Buttons, selections and your chat bubbles follow the accent colour.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            RunwayAccentPalettes.forEach { palette ->
+                                val isSelected = uiState.themeAccent.equals(palette.id, ignoreCase = true)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Surface(
+                                        onClick = { onSetThemeAccent(palette.id) },
+                                        shape = CircleShape,
+                                        color = if (isLightMode) palette.lightPrimary else palette.darkPrimary,
+                                        border = if (isSelected) {
+                                            BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface)
+                                        } else {
+                                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                        },
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .testTag("theme_accent_swatch_${palette.id.lowercase()}")
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = LucideIcons.Check,
+                                                    contentDescription = palette.displayName,
+                                                    tint = if (isLightMode) palette.lightOnPrimary else palette.darkOnPrimary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = palette.displayName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

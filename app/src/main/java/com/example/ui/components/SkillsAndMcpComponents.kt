@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -1279,35 +1280,54 @@ fun ConversationSkillsAndToolsSheet(
         skills.filter { it.id in enabledSkillsForConv }.sumOf { it.estimatedTokens }
     }
 
+    // Fix 4 (Round 3): pure view state for collapsing the long sections —
+    // never touches any skill/tool enabled state or the Auto-Select toggle.
+    var skillsSectionExpanded by remember { mutableStateOf(true) }
+    var mcpSectionExpanded by remember { mutableStateOf(true) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.testTag("conversation_skills_tools_sheet")
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Fix 4 (Round 3): pinned header — stays at the top of the sheet
+            // while the sections below scroll, so Close and Collapse all are
+            // always reachable without scrolling the whole list.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Thread Skills & MCP Tools",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Configure per-conversation SKILL.md instruction packs and remote MCP function calling.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Thread Skills & MCP Tools",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Configure per-conversation SKILL.md instruction packs and remote MCP function calling.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("conversation_skills_tools_close_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(
@@ -1321,8 +1341,26 @@ fun ConversationSkillsAndToolsSheet(
                     TextButton(onClick = onOpenIntegrationsHub) {
                         Text("Manage All")
                     }
+                    TextButton(
+                        onClick = {
+                            val expand = !(skillsSectionExpanded || mcpSectionExpanded)
+                            skillsSectionExpanded = expand
+                            mcpSectionExpanded = expand
+                        },
+                        modifier = Modifier.testTag("conversation_skills_tools_collapse_all_button")
+                    ) {
+                        Text(if (skillsSectionExpanded || mcpSectionExpanded) "Collapse all" else "Expand all")
+                    }
                 }
             }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
 
             // Section A: Per-Conversation Skills
             Card(
@@ -1337,7 +1375,9 @@ fun ConversationSkillsAndToolsSheet(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { skillsSectionExpanded = !skillsSectionExpanded },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1353,8 +1393,14 @@ fun ConversationSkillsAndToolsSheet(
                             text = "+~$totalSkillTokens prompt tokens",
                             color = MaterialTheme.colorScheme.primary
                         )
+                        Icon(
+                            imageVector = if (skillsSectionExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (skillsSectionExpanded) "Collapse skills" else "Expand skills",
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
 
+                    if (skillsSectionExpanded) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1379,7 +1425,9 @@ fun ConversationSkillsAndToolsSheet(
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    }
 
+                    if (skillsSectionExpanded) {
                     skills.forEach { skill ->
                         val isChecked = skill.id in enabledSkillsForConv
                         Row(
@@ -1418,6 +1466,7 @@ fun ConversationSkillsAndToolsSheet(
                             )
                         }
                     }
+                    }
                 }
             }
 
@@ -1439,7 +1488,11 @@ fun ConversationSkillsAndToolsSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { mcpSectionExpanded = !mcpSectionExpanded }
+                            ) {
                                 Text(
                                     text = "MCP Function-Calling Loop",
                                     style = MaterialTheme.typography.titleSmall,
@@ -1456,8 +1509,14 @@ fun ConversationSkillsAndToolsSheet(
                                 onCheckedChange = onSetMcpToolsEnabled,
                                 modifier = Modifier.testTag("conv_mcp_tools_enabled_switch")
                             )
+                            Icon(
+                                imageVector = if (mcpSectionExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (mcpSectionExpanded) "Collapse MCP tools" else "Expand MCP tools",
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
 
+                        if (mcpSectionExpanded) {
                         val maxIter = (conversation?.maxToolIterations ?: 12).coerceIn(1, 51)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
@@ -1562,6 +1621,7 @@ fun ConversationSkillsAndToolsSheet(
                                 }
                             }
                         }
+                        }
                     }
                 }
             } else {
@@ -1580,6 +1640,7 @@ fun ConversationSkillsAndToolsSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+            }
         }
     }
 }

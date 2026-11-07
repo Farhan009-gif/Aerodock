@@ -162,6 +162,7 @@ data class OmniUiState(
     val compareModeEnabled: Boolean = false,
     val compareTargets: List<CompareTargetModel> = emptyList(),
     val themeMode: String = "DARK",
+    val themeAccent: String = "SAGE",
     val dynamicColorEnabled: Boolean = false,
     val biometricGateEnabled: Boolean = false,
     val isBiometricUnlocked: Boolean = true,
@@ -565,6 +566,12 @@ class OmniStudioViewModel(
                         enterToSendEnabled = enterSend
                     )
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            repository.secretVault.themeAccentFlow.collect { accent ->
+                _uiState.update { it.copy(themeAccent = accent) }
             }
         }
 
@@ -4529,6 +4536,13 @@ class OmniStudioViewModel(
         _uiState.update { it.copy(themeMode = mode) }
         viewModelScope.launch {
             repository.secretVault.setThemeMode(mode)
+        }
+    }
+
+    fun setThemeAccent(accent: String) {
+        _uiState.update { it.copy(themeAccent = accent) }
+        viewModelScope.launch {
+            repository.secretVault.setThemeAccent(accent)
         }
     }
 

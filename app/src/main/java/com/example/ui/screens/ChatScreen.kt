@@ -121,7 +121,7 @@ import com.example.ui.components.MinimalSheet
 import com.example.ui.components.RunwayChatHistoryDrawerContent
 import com.example.ui.theme.CoralError
 import com.example.ui.theme.CreamOnDark
-import com.example.ui.theme.DeepForest
+import com.example.ui.theme.LocalRunwayAccentBubble
 import com.example.ui.theme.runwayIsDarkTheme
 
 import com.example.ui.theme.MonospaceFontFamily
@@ -989,6 +989,7 @@ private fun MinimalChatCanvas(
 ) {
     val listState = rememberLazyListState()
     val isDarkTheme = runwayIsDarkTheme()
+    val accentBubble = LocalRunwayAccentBubble.current
 
     val threadItems = remember(messages) {
         val result = mutableListOf<ThreadDisplayItem>()
@@ -1035,13 +1036,13 @@ private fun MinimalChatCanvas(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
+            .imePadding()
     ) {
         // 1. Minimal Top Bar: Menu left, Model pill + Combo chip center, Overflow right
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1071,8 +1072,8 @@ private fun MinimalChatCanvas(
                 Surface(
                     onClick = onOpenModelPicker,
                     shape = RoundedCornerShape(50),
-                    color = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerHigh else DeepForest,
-                    border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else DeepForest),
+                    color = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerHigh else accentBubble.fill,
+                    border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else accentBubble.fill),
                     modifier = Modifier
                         .heightIn(min = 38.dp)
                         .widthIn(max = 210.dp)
@@ -1087,7 +1088,7 @@ private fun MinimalChatCanvas(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(if (isDarkTheme) MaterialTheme.colorScheme.primary else Color(0xFFA8C69A))
+                                .background(if (isDarkTheme) MaterialTheme.colorScheme.primary else accentBubble.dot)
                         )
                         Text(
                             text = activeModelName.substringAfterLast("/"),
@@ -1985,6 +1986,7 @@ private fun MinimalChatMessageItem(
 ) {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
+    val accentBubble = LocalRunwayAccentBubble.current
     val resolvedSources = remember(toolLogs, liveInfoSources) {
         val fromLogs = com.example.data.mcp.LiveInfoToolsService.extractSourcesFromToolLogs(toolLogs)
         (liveInfoSources + fromLogs).distinctBy { it.link }
@@ -2011,12 +2013,12 @@ private fun MinimalChatMessageItem(
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         if (isUser) {
-            // User bubble: deep-forest filled in BOTH modes (Concept A) —
-            // the design's signature filled bubble; cream text on top.
+            // User bubble: deep shade of the active theme accent, filled
+            // in BOTH modes (Concept A) — cream text on top.
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = DeepForest,
-                border = BorderStroke(1.dp, DeepForest),
+                color = accentBubble.fill,
+                border = BorderStroke(1.dp, accentBubble.fill),
                 modifier = Modifier
                     .widthIn(max = 310.dp)
                     .clickable(onClick = onEditUserMessage)

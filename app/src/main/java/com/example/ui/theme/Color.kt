@@ -101,3 +101,117 @@ val DeepIndigo = SoftIndigo
 val DeepIndigoContainer = SoftIndigoDim
 val DeepCyan = SoftIndigo
 val DeepCyanContainer = SoftIndigoDim
+
+// ============================================================================
+// Theme accent palettes (Round 3): the user picks ONE accent family in
+// Settings -> Appearance; surfaces/backgrounds stay Concept A in both modes
+// and only the accent family (primary, containers, user bubble) changes.
+// Sage is the original Concept A accent and reproduces the pre-round-3
+// schemes exactly.
+// ============================================================================
+
+class RunwayAccentPalette(
+    val id: String,
+    val displayName: String,
+    val lightPrimary: Color,
+    val lightOnPrimary: Color,
+    val lightContainer: Color,
+    val lightOnContainer: Color,
+    val darkPrimary: Color,
+    val darkOnPrimary: Color,
+    val darkContainer: Color,
+    val darkOnContainer: Color,
+    val userBubble: Color,
+    val userBubbleDot: Color
+)
+
+val RunwayAccentPalettes: List<RunwayAccentPalette> = listOf(
+    RunwayAccentPalette(
+        id = "SAGE",
+        displayName = "Sage",
+        lightPrimary = Sage,
+        lightOnPrimary = Color.White,
+        lightContainer = SageTint,
+        lightOnContainer = ForestInk,
+        darkPrimary = SageDark,
+        darkOnPrimary = SageDarkOnPrimary,
+        darkContainer = SageDarkDim,
+        darkOnContainer = SageDarkOnContainer,
+        userBubble = DeepForest,
+        userBubbleDot = Color(0xFFA8C69A)
+    ),
+    RunwayAccentPalette(
+        id = "OCEAN",
+        displayName = "Ocean",
+        lightPrimary = Color(0xFF0F6BAE),
+        lightOnPrimary = Color.White,
+        lightContainer = Color(0xFFE1EFFA),
+        lightOnContainer = Color(0xFF0A3353),
+        darkPrimary = Color(0xFF7FB8E8),
+        darkOnPrimary = Color(0xFF072A42),
+        darkContainer = Color(0xFF16334A),
+        darkOnContainer = Color(0xFFCDE7FA),
+        userBubble = Color(0xFF0C4A75),
+        userBubbleDot = Color(0xFFA9D3F2)
+    ),
+    RunwayAccentPalette(
+        id = "INDIGO",
+        displayName = "Indigo",
+        lightPrimary = Color(0xFF4F46E5),
+        lightOnPrimary = Color.White,
+        lightContainer = Color(0xFFE6E4FC),
+        lightOnContainer = Color(0xFF28206E),
+        darkPrimary = Color(0xFFA5B4FC),
+        darkOnPrimary = Color(0xFF1C1850),
+        darkContainer = Color(0xFF2C2960),
+        darkOnContainer = Color(0xFFDFE3FF),
+        userBubble = Color(0xFF3730A3),
+        userBubbleDot = Color(0xFFC7D0FE)
+    ),
+    RunwayAccentPalette(
+        id = "VIOLET",
+        displayName = "Violet",
+        lightPrimary = Color(0xFF7C3AED),
+        lightOnPrimary = Color.White,
+        lightContainer = Color(0xFFF0E7FD),
+        lightOnContainer = Color(0xFF3E1470),
+        darkPrimary = Color(0xFFC4B5FD),
+        darkOnPrimary = Color(0xFF2C1052),
+        darkContainer = Color(0xFF3B2563),
+        darkOnContainer = Color(0xFFEBE3FF),
+        userBubble = Color(0xFF5B21B6),
+        userBubbleDot = Color(0xFFDDD0FE)
+    ),
+    RunwayAccentPalette(
+        id = "AMBER",
+        displayName = "Amber",
+        lightPrimary = Color(0xFFB45309),
+        lightOnPrimary = Color.White,
+        lightContainer = Color(0xFFFAEFDB),
+        lightOnContainer = Color(0xFF5E2E02),
+        darkPrimary = Color(0xFFF2C063),
+        darkOnPrimary = Color(0xFF3A2702),
+        darkContainer = Color(0xFF4A340E),
+        darkOnContainer = Color(0xFFFBEAC4),
+        userBubble = Color(0xFF92400E),
+        userBubbleDot = Color(0xFFF6D79B)
+    ),
+    RunwayAccentPalette(
+        id = "ROSE",
+        displayName = "Rose",
+        lightPrimary = Color(0xFFBE3455),
+        lightOnPrimary = Color.White,
+        lightContainer = Color(0xFFFBE6EB),
+        lightOnContainer = Color(0xFF5E1124),
+        darkPrimary = Color(0xFFF49AB4),
+        darkOnPrimary = Color(0xFF430D1E),
+        darkContainer = Color(0xFF51202E),
+        darkOnContainer = Color(0xFFFBDCE4),
+        userBubble = Color(0xFF9F2543),
+        userBubbleDot = Color(0xFFF8C3D2)
+    )
+)
+
+fun runwayAccentPalette(id: String): RunwayAccentPalette =
+    RunwayAccentPalettes.firstOrNull { it.id.equals(id, ignoreCase = true) }
+        ?: RunwayAccentPalettes.first()

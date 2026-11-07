@@ -157,6 +157,7 @@ class MainActivity : FragmentActivity() {
 
             OmniAIStudioTheme(
                 themeMode = uiState.themeMode,
+                themeAccent = uiState.themeAccent,
                 dynamicColor = uiState.dynamicColorEnabled
             ) {
                 var showInitialSplash by rememberSaveable { androidx.compose.runtime.mutableStateOf(true) }
@@ -1396,6 +1397,7 @@ private fun OmniStudioRoot(
                                                     onApproveCleartextHostManually = viewModel::approveCleartextHostManually,
                                                     onRevokeCleartextHost = viewModel::revokeCleartextHost,
                                                     onSetThemeMode = viewModel::setThemeMode,
+                                                    onSetThemeAccent = viewModel::setThemeAccent,
                                                     onSetDynamicColor = viewModel::setDynamicColor,
                                                     onSetBiometricGate = viewModel::setBiometricGate,
                                                     onSetEnterToSend = viewModel::setEnterToSend,
@@ -1420,6 +1422,7 @@ private fun OmniStudioRoot(
                                             MinimalSettingsAndThemeScreen(
                                                 uiState = uiState,
                                                 onSetThemeMode = viewModel::setThemeMode,
+                                                onSetThemeAccent = viewModel::setThemeAccent,
                                                 onSetBiometricGate = viewModel::setBiometricGate,
                                                 onSetEnterToSend = viewModel::setEnterToSend,
                                                 onSetReadRepliesAloud = viewModel::setReadRepliesAloud,
