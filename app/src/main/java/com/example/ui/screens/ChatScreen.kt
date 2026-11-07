@@ -1071,7 +1071,7 @@ private fun MinimalChatCanvas(
                 Surface(
                     onClick = onOpenModelPicker,
                     shape = RoundedCornerShape(50),
-                    color = if (isDarkTheme) MaterialTheme.colorScheme.surface else DeepForest,
+                    color = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerHigh else DeepForest,
                     border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else DeepForest),
                     modifier = Modifier
                         .heightIn(min = 38.dp)
@@ -1083,6 +1083,12 @@ private fun MinimalChatCanvas(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (isDarkTheme) MaterialTheme.colorScheme.primary else Color(0xFFA8C69A))
+                        )
                         Text(
                             text = activeModelName.substringAfterLast("/"),
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
@@ -1871,12 +1877,21 @@ private fun AssistantResponderHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Icon(
-            imageVector = LucideIcons.Sparkles,
-            contentDescription = "AI Responder",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(14.dp)
-        )
+        // Tinted logo chip (Concept A reply-card header, both modes)
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(MaterialTheme.colorScheme.primary),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = LucideIcons.Sparkles,
+                contentDescription = "AI Responder",
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(13.dp)
+            )
+        }
         Text(
             text = identity.modelDisplayName,
             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -1970,7 +1985,6 @@ private fun MinimalChatMessageItem(
 ) {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
-    val isDarkTheme = runwayIsDarkTheme()
     val resolvedSources = remember(toolLogs, liveInfoSources) {
         val fromLogs = com.example.data.mcp.LiveInfoToolsService.extractSourcesFromToolLogs(toolLogs)
         (liveInfoSources + fromLogs).distinctBy { it.link }
@@ -1997,12 +2011,12 @@ private fun MinimalChatMessageItem(
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         if (isUser) {
-            // User bubble: deep-forest filled in the Concept A light design,
-            // soft outlined card in the dark design.
+            // User bubble: deep-forest filled in BOTH modes (Concept A) —
+            // the design's signature filled bubble; cream text on top.
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = if (isDarkTheme) MaterialTheme.colorScheme.surface else DeepForest,
-                border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else DeepForest),
+                color = DeepForest,
+                border = BorderStroke(1.dp, DeepForest),
                 modifier = Modifier
                     .widthIn(max = 310.dp)
                     .clickable(onClick = onEditUserMessage)
@@ -2083,28 +2097,22 @@ private fun MinimalChatMessageItem(
                         Text(
                             text = message.content,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else CreamOnDark
+                            color = CreamOnDark
                         )
                     }
                 }
             }
         } else {
-            // AI responses: full-width white card in the Concept A light design;
-            // plain text on the background in the dark design (unchanged).
+            // AI responses: full-width card in BOTH modes (Concept A) —
+            // white card on cream in light, #151920 card with a subtle
+            // light outline on near-black in dark.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(
-                        if (isDarkTheme) {
-                            Modifier
-                        } else {
-                            Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
-                                .padding(14.dp)
-                        }
-                    ),
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
+                    .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Top header showing which AI model and provider is responding to the request
@@ -2193,7 +2201,7 @@ private fun MinimalChatMessageItem(
                 if (resolvedSources.isNotEmpty()) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surface,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2764,7 +2772,7 @@ private fun MinimalFloatingComposerBar(
                         Icon(
                             imageVector = if (isStreaming) LucideIcons.Square else LucideIcons.ArrowUp,
                             contentDescription = if (isStreaming) "Stop" else "Send",
-                            tint = if (isStreaming || canSend) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isStreaming || canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -2803,12 +2811,21 @@ private fun MinimalToolRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
-            )
+            // Tinted icon chip (Concept A row language, both modes)
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
