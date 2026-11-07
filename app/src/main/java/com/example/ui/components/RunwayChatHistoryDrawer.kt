@@ -911,11 +911,13 @@ private fun HistoryConversationRow(
     }
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         border = if (isSelected) {
             BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-        } else null,
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        },
         modifier = Modifier
             .fillMaxWidth()
             .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
@@ -934,7 +936,7 @@ private fun HistoryConversationRow(
                     }
                 )
             }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = onSelect,
                 onLongClick = onOpenActions
