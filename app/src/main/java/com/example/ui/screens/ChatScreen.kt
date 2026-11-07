@@ -37,7 +37,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -46,6 +45,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -1036,7 +1036,7 @@ private fun MinimalChatCanvas(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .imePadding()
+            .windowInsetsPadding(WindowInsets.ime)
     ) {
         // 1. Minimal Top Bar: Menu left, Model pill + Combo chip center, Overflow right
         Row(
@@ -2520,7 +2520,6 @@ private fun MinimalFloatingComposerBar(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .imePadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -2665,7 +2664,7 @@ private fun MinimalFloatingComposerBar(
             shape = RoundedCornerShape(28.dp),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
         ) {
             Row(
                 modifier = Modifier

@@ -4,19 +4,11 @@
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
-    <!-- Runway lines: stroke #6C7CFF, 28px at 512 scale, round caps and joins -->
+    <!-- Spark mark: four-point spark above a runway strip, cream on transparent -->
     <path
-        android:fillColor="#00000000"
-        android:pathData="M156,400 L236,112 L276,112 L356,400"
-        android:strokeColor="#6C7CFF"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="28" />
-    <!-- Center dashes: white, 16px, round caps, getting shorter toward the top -->
+        android:fillColor="#FCECCF"
+        android:pathData="M256.0,112.2 C259.3,153.2 280.6,204.8 353.5,208.1 C280.6,211.4 259.3,263.0 256.0,303.9 C252.7,263.0 231.4,211.4 158.5,208.1 C231.4,204.8 252.7,153.2 256.0,112.2 z" />
     <path
-        android:fillColor="#00000000"
-        android:pathData="M256,360 L256,312 M256,266 L256,230 M256,192 L256,168"
-        android:strokeColor="#FFFFFF"
-        android:strokeLineCap="round"
-        android:strokeWidth="16" />
+        android:fillColor="#FCECCF"
+        android:pathData="M138.9,360.9 L373.1,360.9 A9.0,9.0 0 0 1 382.2,369.9 L382.2,370.3 A9.0,9.0 0 0 1 373.1,379.3 L138.9,379.3 A9.0,9.0 0 0 1 129.8,370.3 L129.8,369.9 A9.0,9.0 0 0 1 138.9,360.9 z M198.2,336.7 L198.2,336.7 A5.3,5.3 0 0 1 203.6,342.0 L203.6,358.4 A5.3,5.3 0 0 1 198.2,363.7 L198.2,363.7 A5.3,5.3 0 0 1 192.9,358.4 L192.9,342.0 A5.3,5.3 0 0 1 198.2,336.7 z M255.6,336.7 L256.4,336.7 A5.3,5.3 0 0 1 261.7,342.0 L261.7,358.4 A5.3,5.3 0 0 1 256.4,363.7 L255.6,363.7 A5.3,5.3 0 0 1 250.3,358.4 L250.3,342.0 A5.3,5.3 0 0 1 255.6,336.7 z M313.3,336.7 L313.8,336.7 A5.3,5.3 0 0 1 319.1,342.0 L319.1,358.4 A5.3,5.3 0 0 1 313.8,363.7 L313.3,363.7 A5.3,5.3 0 0 1 308.0,358.4 L308.0,342.0 A5.3,5.3 0 0 1 313.3,336.7 z" />
 </vector>
