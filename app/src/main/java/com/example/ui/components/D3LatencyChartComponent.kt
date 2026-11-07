@@ -79,11 +79,11 @@ enum class D3ChartDisplayMode {
 
 private val ChartSeriesPalette = listOf(
     EmeraldConnected,
-    Color(0xFF6C7CFF),
+    Color(0xFF8FAE8B),
     AmberWarning,
-    Color(0xFF6C7CFF),
+    Color(0xFF5F7D5A),
     CoralError,
-    Color(0xFF6C7CFF)
+    Color(0xFFC9A86A)
 )
 
 private data class ProviderLatencySummary(
