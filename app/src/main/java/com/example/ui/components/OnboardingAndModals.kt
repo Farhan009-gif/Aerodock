@@ -102,8 +102,7 @@ import com.example.data.local.ModelDescriptorEntity
 import com.example.data.local.ProviderInstanceEntity
 import com.example.data.local.ProviderPresetType
 import com.example.ui.theme.AmberWarning
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.ObsidianCanvas
@@ -124,9 +123,9 @@ fun OmniStudioVectorBanner(
     badgeText: String = "RUNWAY • READY"
 ) {
     Surface(
-        color = DarkElevatedSurface,
+        color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, DarkDivider),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -140,7 +139,7 @@ fun OmniStudioVectorBanner(
             Text(
                 text = badgeText,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextSecondary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -353,7 +352,7 @@ fun OmniRouteOnboardingSheet(
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = null,
-                                tint = CyberCyan,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
@@ -584,7 +583,7 @@ fun ModelPickerBottomSheet(
                     Surface(
                         onClick = { selectedProviderId = prov.id },
                         shape = RoundedCornerShape(50),
-                        color = if (isSelected) com.example.ui.theme.SoftIndigo.copy(alpha = 0.16f) else Color.Transparent,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
                         modifier = Modifier
                             .heightIn(min = 36.dp)
                             .testTag("picker_provider_tab_${prov.id}")
@@ -598,7 +597,7 @@ fun ModelPickerBottomSheet(
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
                                 ),
-                                color = if (isSelected) com.example.ui.theme.SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1
                             )
                         }
@@ -677,14 +676,14 @@ fun ModelPickerBottomSheet(
                             },
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) {
-                                com.example.ui.theme.SoftIndigo.copy(alpha = 0.12f)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                             } else {
                                 MaterialTheme.colorScheme.background
                             },
                             border = BorderStroke(
                                 width = 1.dp,
                                 color = if (isSelected) {
-                                    com.example.ui.theme.SoftIndigo.copy(alpha = 0.6f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                                 } else {
                                     MaterialTheme.colorScheme.outline
                                 }
@@ -710,7 +709,7 @@ fun ModelPickerBottomSheet(
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
                                         ),
-                                        color = if (isSelected) com.example.ui.theme.SoftIndigo else MaterialTheme.colorScheme.onSurface,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -726,7 +725,7 @@ fun ModelPickerBottomSheet(
                                     Icon(
                                         imageVector = LucideIcons.Check,
                                         contentDescription = "Selected",
-                                        tint = com.example.ui.theme.SoftIndigo,
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -881,7 +880,7 @@ fun ParameterTuningBottomSheet(
                         Text(
                             text = String.format(Locale.US, "%.2f", temperature),
                             style = MaterialTheme.typography.labelMedium,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                     Slider(
@@ -903,7 +902,7 @@ fun ParameterTuningBottomSheet(
                         Text(
                             text = String.format(Locale.US, "%.2f", topP),
                             style = MaterialTheme.typography.labelMedium,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                     Slider(
@@ -983,7 +982,7 @@ fun CleartextHostWarningDialog(
                     Text(
                         text = pending.fullUrl,
                         style = MaterialTheme.typography.labelMedium,
-                        color = CyberCyan,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(10.dp)
                     )
                 }
@@ -1193,7 +1192,7 @@ fun TerminalAndHealthBottomSheet(
                         Icon(
                             imageVector = androidx.compose.material.icons.Icons.Default.Terminal,
                             contentDescription = null,
-                            tint = CyberCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
@@ -1312,7 +1311,7 @@ fun TerminalAndHealthBottomSheet(
                                         context.startActivity(intent)
                                     }
                                 },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = CyberCyan),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 modifier = Modifier
                                     .height(32.dp)
@@ -1373,7 +1372,7 @@ fun TerminalAndHealthBottomSheet(
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
-                                color = CyberCyan,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
@@ -1427,7 +1426,7 @@ fun TerminalAndHealthBottomSheet(
                         ) {
                             items(terminalLogs) { line ->
                                 val tint = when {
-                                    line.startsWith("$") -> CyberCyan
+                                    line.startsWith("$") -> MaterialTheme.colorScheme.primary
                                     line.contains("OK") || line.contains("SUCCESS") || line.contains("HEALTHY") -> EmeraldConnected
                                     line.contains("ERR") || line.contains("FAIL") || line.contains("UNHEALTHY") -> CoralError
                                     line.contains("WARN") || line.contains("NOTE") -> AmberWarning
@@ -1465,7 +1464,7 @@ fun TerminalAndHealthBottomSheet(
                             Text(
                                 "$",
                                 style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoFontFamily),
-                                color = CyberCyan,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 8.dp)
                             )
                         },
@@ -1493,7 +1492,7 @@ fun TerminalAndHealthBottomSheet(
                             }
                         },
                         enabled = inputCommand.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier
                             .height(52.dp)
                             .testTag("omniroute_terminal_run_button")
@@ -1609,7 +1608,7 @@ fun TerminalAndHealthBottomSheet(
                                         text = "${prov.displayName} (${prov.baseUrl})",
                                         style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFontFamily),
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                        color = CyberCyan,
+                                        color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
@@ -1664,7 +1663,7 @@ fun TerminalAndHealthBottomSheet(
                                                     }
                                                 }
                                                 if (model.modelId.startsWith("ddgw/")) {
-                                                    BadgePill(text = "ZERO-CONFIG", color = CyberCyan)
+                                                    BadgePill(text = "ZERO-CONFIG", color = MaterialTheme.colorScheme.primary)
                                                 }
                                             }
                                             Spacer(modifier = Modifier.height(4.dp))
