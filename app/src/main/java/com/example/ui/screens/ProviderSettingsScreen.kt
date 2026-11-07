@@ -83,7 +83,7 @@ import com.example.data.provider.RequestDiagnosticEntry
 import com.example.ui.components.BadgePill
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.viewmodel.OmniUiState
@@ -326,7 +326,7 @@ fun ProviderSettingsScreen(
                     Text(
                         text = "Cipher: ${vault.cipherAlgorithm} • Master Key: ${vault.masterKeyUri}",
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = "API keys are encrypted with per-provider Associated Data (AAD) inside Jetpack DataStore, masked in UI, never written to SQLite or URLs, and excluded from cloud/ADB backups (allowBackup=\"false\").",
@@ -349,7 +349,7 @@ fun ProviderSettingsScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
-                border = BorderStroke(1.5.dp, CyberCyan.copy(alpha = 0.75f)),
+                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
@@ -369,7 +369,7 @@ fun ProviderSettingsScreen(
                                 text = "OmniRoute Clean Terminal",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = CyberCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Text(
                                 text = "Pre-configured engine that bypasses Chromium/Playwright (cfp/) and unlinked OAuth/IDE scrapers (aug/, cu/, ws/, gh/, gc/) so OmniRoute runs smoothly out of the box.",
@@ -398,7 +398,7 @@ fun ProviderSettingsScreen(
                         ) {
                             uiState.omniRouteTerminalLogs.takeLast(12).forEach { line ->
                                 val lineColor = when {
-                                    line.startsWith("$") -> CyberCyan
+                                    line.startsWith("$") -> MaterialTheme.colorScheme.primary
                                     line.startsWith("[SUCCESS]") || line.startsWith("[OK]") || line.startsWith("[ACTIVE]") || line.startsWith("[LIVE]") -> EmeraldConnected
                                     line.startsWith("[PURGE]") || line.startsWith("[ROUTE]") -> AmberWarning
                                     else -> MaterialTheme.colorScheme.onSurface
@@ -497,7 +497,7 @@ fun ProviderSettingsScreen(
             } else {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -508,7 +508,7 @@ fun ProviderSettingsScreen(
                             text = "OmniRoute Endpoint is Not Configured",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Text(
                             text = "OmniRoute is an optional OpenAI-compatible router for local and remote models across Chat, Image, and Video.",
@@ -1012,7 +1012,7 @@ fun ProviderSettingsScreen(
                             Icon(
                                 imageVector = Icons.Default.NetworkCheck,
                                 contentDescription = null,
-                                tint = CyberCyan
+                                tint = MaterialTheme.colorScheme.primary
                             )
                             Column {
                                 Text(
@@ -1077,7 +1077,7 @@ fun ProviderSettingsScreen(
                                             ) {
                                                 BadgePill(
                                                     text = entry.method,
-                                                    color = CyberCyan
+                                                    color = MaterialTheme.colorScheme.primary
                                                 )
                                                 BadgePill(
                                                     text = entry.statusCode?.let { "HTTP $it" } ?: (entry.errorClass ?: "ERR"),
@@ -1136,7 +1136,7 @@ private fun ModalityDefaultPill(
             Text(
                 text = modality,
                 style = MaterialTheme.typography.labelSmall,
-                color = CyberCyan,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
@@ -1225,7 +1225,7 @@ private fun OmniRouteEndpointCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    BadgePill(text = "OMNI", color = CyberCyan)
+                    BadgePill(text = "OMNI", color = MaterialTheme.colorScheme.primary)
                     Column {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1281,7 +1281,7 @@ private fun OmniRouteEndpointCard(
                         text = "Endpoint Base URL (OpenAI-Compatible):",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     TextButton(onClick = { showLanHelp = !showLanHelp }) {
                         Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -1573,7 +1573,7 @@ private fun OmniRouteEndpointCard(
                         else "Discovered Models & Combos (${providerModels.size}) [Show]",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     if (provider.defaultChatModelId.isNotBlank()) {
                         Text(
@@ -1778,7 +1778,7 @@ private fun ProviderInstanceCard(
                 ) {
                     BadgePill(
                         text = preset.badgeShort,
-                        color = if (isOmniRoute) CyberCyan else MaterialTheme.colorScheme.primary
+                        color = if (isOmniRoute) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                     )
                     Column {
                         Row(
@@ -1828,7 +1828,7 @@ private fun ProviderInstanceCard(
                         Text(
                             text = "OmniRoute Gateway Base URL (OpenAI-Compatible):",
                             style = MaterialTheme.typography.labelMedium,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                         TextButton(onClick = { showLanHelp = !showLanHelp }) {
                             Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -1932,7 +1932,7 @@ private fun ProviderInstanceCard(
                 Text(
                     text = provider.baseUrl,
                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFontFamily),
-                    color = CyberCyan
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -2089,7 +2089,7 @@ private fun ProviderInstanceCard(
                         text = if (showModelsList) "Hide Models & Combos (${providerModels.size})"
                         else "Show Models & Combos (${providerModels.size})",
                         style = MaterialTheme.typography.labelMedium,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     if (provider.defaultChatModelId.isNotBlank()) {
                         Text(
