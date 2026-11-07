@@ -96,8 +96,7 @@ import com.example.data.mcp.SkillMarkdownParser
 import com.example.data.provider.ModelCapabilityRegistry
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.viewmodel.OmniUiState
@@ -235,7 +234,7 @@ fun SkillsAndMcpSection(
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = CyberCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                         Column {
@@ -254,7 +253,7 @@ fun SkillsAndMcpSection(
                     val totalEnabledTokens = skills.filter { it.isEnabled }.sumOf { it.estimatedTokens }
                     BadgePill(
                         text = "${skills.count { it.isEnabled }} ACTIVE • ~$totalEnabledTokens TOK",
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -345,7 +344,7 @@ fun SkillsAndMcpSection(
                         Icon(
                             imageVector = Icons.Default.Hub,
                             contentDescription = null,
-                            tint = ElectricIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                         Column {
@@ -492,7 +491,7 @@ fun SkillsAndMcpSection(
                         Icon(
                             imageVector = Icons.Default.History,
                             contentDescription = null,
-                            tint = CyberCyan,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Column {
@@ -550,7 +549,7 @@ private fun SkillItemCard(
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(
             1.dp,
-            if (skill.isEnabled) CyberCyan.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
+            if (skill.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -580,7 +579,7 @@ private fun SkillItemCard(
                         )
                         BadgePill(
                             text = "~${skill.estimatedTokens} tok",
-                            color = if (skill.isEnabled) CyberCyan else MaterialTheme.colorScheme.outline
+                            color = if (skill.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         )
                     }
                     Text(
@@ -684,7 +683,7 @@ private fun McpServerItemCard(
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(
             1.dp,
-            if (server.isEnabled) ElectricIndigo.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outline
+            if (server.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.outline
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -714,7 +713,7 @@ private fun McpServerItemCard(
                         )
                         BadgePill(
                             text = server.transportEnum().label,
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                     Text(
@@ -865,14 +864,14 @@ private fun McpServerItemCard(
                             Text(
                                 text = "Resources (${discoverySummary.resourceNames.size}): ${discoverySummary.resourceNames.joinToString()}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = CyberCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                         if (discoverySummary.promptNames.isNotEmpty()) {
                             Text(
                                 text = "Prompts (${discoverySummary.promptNames.size}): ${discoverySummary.promptNames.joinToString()}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ElectricIndigo
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -892,7 +891,7 @@ private fun McpServerItemCard(
                     Text(
                         text = "Discovered Tools (${serverTools.count { it.isEnabled }}/${serverTools.size} enabled)",
                         style = MaterialTheme.typography.labelLarge,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Icon(
                         imageVector = if (showToolsList) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -1069,7 +1068,7 @@ fun CollapsibleToolCallCard(
                     Icon(
                         imageVector = if (isCodeExecution) Icons.Default.Code else Icons.Default.Build,
                         contentDescription = null,
-                        tint = if (isCodeExecution) ElectricIndigo else CyberCyan,
+                        tint = if (isCodeExecution) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                     BadgePill(
@@ -1079,7 +1078,7 @@ fun CollapsibleToolCallCard(
                             isLiveInfo -> "LIVE INFO"
                             else -> "MCP TOOL"
                         },
-                        color = if (isCodeExecution) ElectricIndigo else CyberCyan
+                        color = if (isCodeExecution) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = if (isCodeExecution) {
@@ -1127,7 +1126,7 @@ fun CollapsibleToolCallCard(
                     Text(
                         text = if (isCodeExecution) "${confirmDetails?.languageLabel ?: "JavaScript"} Code:" else "Arguments JSON:",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isCodeExecution) ElectricIndigo else CyberCyan
+                        color = if (isCodeExecution) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                     )
                     Surface(
                         color = MaterialTheme.colorScheme.background,
@@ -1185,7 +1184,7 @@ fun CollapsibleToolCallCard(
                                             "${confirmDetails?.languageLabel ?: "HTML / CSS / JS"} Preview"
                                         )
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = ElectricIndigo),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                     modifier = Modifier
                                         .weight(1f)
                                         .testTag("open_html_preview_panel_button_${log.id}")
@@ -1352,7 +1351,7 @@ fun ConversationSkillsAndToolsSheet(
                         )
                         BadgePill(
                             text = "+~$totalSkillTokens prompt tokens",
-                            color = CyberCyan
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -1402,7 +1401,7 @@ fun ConversationSkillsAndToolsSheet(
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
-                                    BadgePill(text = "~${skill.estimatedTokens} tok", color = CyberCyan)
+                                    BadgePill(text = "~${skill.estimatedTokens} tok", color = MaterialTheme.colorScheme.primary)
                                 }
                                 Text(
                                     text = skill.description,
@@ -1472,7 +1471,7 @@ fun ConversationSkillsAndToolsSheet(
                                 Text(
                                     text = if (maxIter >= 51) "Unlimited" else "$maxIter turns",
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = CyberCyan
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                             Slider(
@@ -1484,12 +1483,10 @@ fun ConversationSkillsAndToolsSheet(
                             )
                         }
 
-
-
                         Button(
                             onClick = onOpenSafetyApprovalSheet,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = CyberCyan,
+                                containerColor = MaterialTheme.colorScheme.primary,
                                 contentColor = MaterialTheme.colorScheme.scrim
                             ),
                             modifier = Modifier
@@ -1644,8 +1641,8 @@ fun ToolCallApprovalDialog(
                         imageVector = if (isCodeExecution) Icons.Default.Code else Icons.Default.Security,
                         contentDescription = null,
                         tint = when {
-                            isCodeExecution -> ElectricIndigo
-                            request.tool.isReadOnlyHint -> CyberCyan
+                            isCodeExecution -> MaterialTheme.colorScheme.primary
+                            request.tool.isReadOnlyHint -> MaterialTheme.colorScheme.primary
                             else -> CoralError
                         }
                     )
@@ -1683,7 +1680,7 @@ fun ToolCallApprovalDialog(
                                         fontFamily = JetBrainsMonoFontFamily,
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = ElectricIndigo,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.testTag("run_confirmation_language")
                                 )
                             }
@@ -1770,7 +1767,7 @@ fun ToolCallApprovalDialog(
                         Box(modifier = Modifier.wrapContentWidth()) {
                             BadgePill(
                                 text = request.server.name,
-                                color = CyberCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                         Box(modifier = Modifier.wrapContentWidth()) {
@@ -1782,7 +1779,7 @@ fun ToolCallApprovalDialog(
                         Box(modifier = Modifier.wrapContentWidth()) {
                             BadgePill(
                                 text = if (request.maxIterations >= 51) "Tool turn ${request.iterationIndex} • Unlimited" else "Step ${request.iterationIndex}/${request.maxIterations}",
-                                color = ElectricIndigo
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1808,7 +1805,7 @@ fun ToolCallApprovalDialog(
                         "Arguments JSON to send:"
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (isCodeExecution) ElectricIndigo else CyberCyan
+                    color = if (isCodeExecution) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                 )
                 Surface(
                     color = MaterialTheme.colorScheme.background,
@@ -1861,8 +1858,8 @@ fun ToolCallApprovalDialog(
                     onClick = { onDecision(ToolApprovalDecision.APPROVE_ONCE) },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = when {
-                            isCodeExecution -> ElectricIndigo
-                            request.tool.isReadOnlyHint -> CyberCyan
+                            isCodeExecution -> MaterialTheme.colorScheme.primary
+                            request.tool.isReadOnlyHint -> MaterialTheme.colorScheme.primary
                             else -> CoralError
                         }
                     ),
@@ -2109,7 +2106,7 @@ private fun SkillMarkdownEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    BadgePill(text = "Name: ${parsedPreview.name}", color = CyberCyan)
+                    BadgePill(text = "Name: ${parsedPreview.name}", color = MaterialTheme.colorScheme.primary)
                     BadgePill(text = "~$estTokens tokens", color = EmeraldConnected)
                 }
                 Text(
