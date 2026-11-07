@@ -73,7 +73,7 @@ import com.example.data.local.McpApprovalMode
 import com.example.data.local.McpServerEntity
 import com.example.data.local.McpToolEntity
 import com.example.data.local.SkillEntity
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniUiState
 
 /**
@@ -215,7 +215,7 @@ fun OmniAutopilotScreen(
                             onSend = { triggerRun(agentState.commandInput) }
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SoftIndigo,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                             focusedContainerColor = MaterialTheme.colorScheme.background,
                             unfocusedContainerColor = MaterialTheme.colorScheme.background
@@ -248,7 +248,7 @@ fun OmniAutopilotScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(SoftIndigo.copy(alpha = 0.12f))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -256,7 +256,7 @@ fun OmniAutopilotScreen(
                             Text(
                                 text = "Confirm execution of ${livePreviewActions.size.coerceAtLeast(1)} action(s)?",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = SoftIndigo,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.weight(1f)
                             )
                             TextButton(
@@ -268,7 +268,7 @@ fun OmniAutopilotScreen(
                                     }
                                 }
                             ) {
-                                Text("Confirm", style = MaterialTheme.typography.labelSmall, color = SoftIndigo)
+                                Text("Confirm", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -421,7 +421,7 @@ fun OmniAutopilotScreen(
                                     else -> "Idle · Ready"
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (agentState.isExecuting) SoftIndigo else MaterialTheme.colorScheme.onSurface,
+                                color = if (agentState.isExecuting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -454,7 +454,7 @@ fun OmniAutopilotScreen(
                         Text(
                             text = "Undo last",
                             style = MaterialTheme.typography.labelSmall,
-                            color = SoftIndigo,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .clickable(onClick = onUndoLastCommand)
                                 .padding(4.dp)
@@ -498,7 +498,7 @@ fun OmniAutopilotScreen(
                                 Icon(
                                     imageVector = LucideIcons.Terminal,
                                     contentDescription = null,
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
@@ -517,14 +517,14 @@ fun OmniAutopilotScreen(
                                 Icon(
                                     imageVector = LucideIcons.Check,
                                     contentDescription = "Completed",
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 if (idx == 0 && agentState.lastUndoSnapshot != null) {
                                     Text(
                                         text = "Undo",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = SoftIndigo,
+                                        color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
                                             .clickable(onClick = onUndoLastCommand)
@@ -599,7 +599,7 @@ fun OmniAutopilotScreen(
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = null,
-                                        tint = SoftIndigo,
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Text(
@@ -905,13 +905,13 @@ fun OmniAgentFloatingHud(
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 1.5.dp,
-                        color = SoftIndigo
+                        color = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Icon(
                         imageVector = LucideIcons.Check,
                         contentDescription = "Executed",
-                        tint = SoftIndigo,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -929,7 +929,7 @@ fun OmniAgentFloatingHud(
                     Text(
                         text = "Undo",
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable(onClick = onUndoLastCommand)
@@ -1031,13 +1031,13 @@ private fun ActionPreviewBadge(
 
     Surface(
         shape = CircleShape,
-        color = SoftIndigo.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, SoftIndigo.copy(alpha = 0.4f))
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
     ) {
         Text(
             text = "$index. $label",
             style = MaterialTheme.typography.labelSmall,
-            color = SoftIndigo,
+            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
         )
     }
@@ -1081,7 +1081,7 @@ private fun AgentExecutionRecordCard(
             Text(
                 text = "Re-run",
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                color = SoftIndigo,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clip(CircleShape)
                     .clickable(onClick = onRerun)
