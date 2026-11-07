@@ -2,9 +2,35 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Minimal Premium Monochrome + Soft Indigo (#6C7CFF) Design System
+// ============================================================================
+// Runway design tokens.
+// - DARK theme: the original near-black design (#0B0D10 family) with the
+//   Soft Indigo (#6C7CFF) accent — kept complete and unchanged.
+// - LIGHT theme: Concept A "Home-first workspace" — warm cream background,
+//   white cards, sage accent, deep forest ink text.
+// Screens must read colours from MaterialTheme.colorScheme (which switches
+// between these two palettes); the accent constants below are the DARK
+// palette values and exist for the theme definition itself plus a few
+// fixed data/syntax palettes.
+// ============================================================================
+
+// Dark accent (Soft Indigo)
 val SoftIndigo = Color(0xFF6C7CFF)
 val SoftIndigoDim = Color(0x1F6C7CFF)
+
+// Concept A (light) tokens
+val Sage = Color(0xFF5F7D5A)
+val SageTint = Color(0xFFEDF2E8)
+val SageSelectedBorder = Color(0xFFB9C8B2)
+val ForestInk = Color(0xFF23281F)
+val DeepForest = Color(0xFF39412F)
+val MutedOliveText = Color(0xFF7A7E6E)
+val FaintOliveText = Color(0xFF9A9D8B)
+val CreamBackground = Color(0xFFF6F4ED)
+val CreamOnDark = Color(0xFFF4F3EA)
+val CardBorderLight = Color(0xFFE7E3D6)
+val CardBorderLightSoft = Color(0xFFEAE6D9)
+val LightElevatedWarm = Color(0xFFEFEBDD)
 
 // Dark Palette (Default)
 val DarkBackground = Color(0xFF0B0D10)
@@ -16,14 +42,14 @@ val TextPrimary = Color(0xFFF3F4F6)
 val TextSecondary = Color(0xFF8E95A2)
 val TextMuted = Color(0xFF5E6572)
 
-// Light Palette
-val LightBackground = Color(0xFFF8F9FB)
+// Light Palette (Concept A)
+val LightBackground = CreamBackground
 val LightSurface = Color(0xFFFFFFFF)
-val LightElevatedSurface = Color(0xFFF1F3F7)
-val LightDivider = Color(0x14000000) // 1px subtle border: black at 8% opacity
+val LightElevatedSurface = LightElevatedWarm
+val LightDivider = CardBorderLight // 1px warm hairline border
 
-val TextPrimaryLight = Color(0xFF111318)
-val TextSecondaryLight = Color(0xFF68707E)
+val TextPrimaryLight = ForestInk
+val TextSecondaryLight = DeepForest
 
 // Status Dot Colors (Minimal)
 val StatusGreenDot = Color(0xFF34D399)
