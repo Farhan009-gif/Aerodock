@@ -519,7 +519,7 @@ private fun PersistentMediaGridCard(
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .clickable(onClick = onClick)
             .testTag("persistent_gallery_grid_card_${item.id}")
@@ -657,7 +657,7 @@ private fun PersistentMediaDetailedMetadataCard(
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
