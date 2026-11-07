@@ -120,9 +120,12 @@ import com.example.ui.components.MinimalChip
 import com.example.ui.components.MinimalSheet
 import com.example.ui.components.RunwayChatHistoryDrawerContent
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
+import com.example.ui.theme.CreamOnDark
+import com.example.ui.theme.DeepForest
+import com.example.ui.theme.runwayIsDarkTheme
+
 import com.example.ui.theme.MonospaceFontFamily
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniUiState
 import kotlinx.coroutines.launch
 
@@ -985,6 +988,7 @@ private fun MinimalChatCanvas(
     onOpenHtmlPreview: (htmlDocument: String, title: String) -> Unit = { _, _ -> }
 ) {
     val listState = rememberLazyListState()
+    val isDarkTheme = runwayIsDarkTheme()
 
     val threadItems = remember(messages) {
         val result = mutableListOf<ThreadDisplayItem>()
@@ -1067,8 +1071,8 @@ private fun MinimalChatCanvas(
                 Surface(
                     onClick = onOpenModelPicker,
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    color = if (isDarkTheme) MaterialTheme.colorScheme.surface else DeepForest,
+                    border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else DeepForest),
                     modifier = Modifier
                         .heightIn(min = 38.dp)
                         .widthIn(max = 210.dp)
@@ -1082,19 +1086,19 @@ private fun MinimalChatCanvas(
                         Text(
                             text = activeModelName.substringAfterLast("/"),
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else CreamOnDark,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         if (isActiveModelCombo) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = SoftIndigo.copy(alpha = 0.16f)
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                             ) {
                                 Text(
                                     text = "COMBO",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = SoftIndigo,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                 )
                             }
@@ -1102,7 +1106,7 @@ private fun MinimalChatCanvas(
                         Icon(
                             imageVector = LucideIcons.ChevronDown,
                             contentDescription = "Select model",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isDarkTheme) MaterialTheme.colorScheme.onSurfaceVariant else CreamOnDark.copy(alpha = 0.75f),
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -1164,12 +1168,12 @@ private fun MinimalChatCanvas(
                 Text(
                     text = "Comparing ${uiState.compareTargets.size} models",
                     style = MaterialTheme.typography.bodySmall,
-                    color = SoftIndigo
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "Configure",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                    color = SoftIndigo,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable(onClick = onOpenCompareTargetPicker)
                 )
             }
@@ -1208,7 +1212,7 @@ private fun MinimalChatCanvas(
 
         if (spendingEvaluation != null && (spendingEvaluation.isWarning || spendingEvaluation.isBlocked)) {
             val isBlocked = spendingEvaluation.isBlocked
-            val bannerColor = if (isBlocked) CoralError else SoftIndigo
+            val bannerColor = if (isBlocked) CoralError else MaterialTheme.colorScheme.primary
             MinimalCard(
                 borderColor = bannerColor.copy(alpha = 0.5f),
                 contentPadding = PaddingValues(12.dp),
@@ -1250,7 +1254,7 @@ private fun MinimalChatCanvas(
                                 Text(
                                     text = "Override once",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = SoftIndigo,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable(onClick = onOverrideSpendingLimitOnce)
                                         .padding(horizontal = 4.dp, vertical = 2.dp)
@@ -1260,7 +1264,7 @@ private fun MinimalChatCanvas(
                             Text(
                                 text = "Settings",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = SoftIndigo,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .clickable(onClick = onOpenProviderSettings)
                                     .padding(horizontal = 4.dp, vertical = 2.dp)
@@ -1277,7 +1281,7 @@ private fun MinimalChatCanvas(
         val cheaperSuggestion = activeConvId?.let { uiState.cheaperModelSuggestionByChatId[it] }
         if (activeConvId != null && cheaperSuggestion != null) {
             MinimalCard(
-                borderColor = SoftIndigo.copy(alpha = 0.5f),
+                borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                 contentPadding = PaddingValues(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1385,7 +1389,7 @@ private fun MinimalChatCanvas(
                         Text(
                             text = if (showErrorDetails) "Hide Details" else "Details",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = SoftIndigo,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .clickable { showErrorDetails = !showErrorDetails }
                                 .padding(vertical = 2.dp)
@@ -1396,7 +1400,7 @@ private fun MinimalChatCanvas(
                                 Text(
                                     text = "Approve",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = SoftIndigo,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable { onApproveCleartextHostFromError(err.unapprovedHost) }
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1409,7 +1413,7 @@ private fun MinimalChatCanvas(
                                 Text(
                                     text = "Open Providers",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                                    color = SoftIndigo,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable(onClick = onOpenProviderSettings)
                                         .padding(horizontal = 4.dp, vertical = 2.dp)
@@ -1585,7 +1589,7 @@ private fun MinimalChatCanvas(
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
                 shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentHeight()
@@ -1600,12 +1604,12 @@ private fun MinimalChatCanvas(
                     CircularProgressIndicator(
                         modifier = Modifier.size(12.dp),
                         strokeWidth = 2.dp,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = uiState.activeToolLoopStatus,
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
-                        color = CyberCyan,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1683,7 +1687,7 @@ private fun MinimalChatCanvas(
                 Text(
                     text = com.example.data.provider.SmartContextTrimmer.COMPOSER_NOTICE_TEXT,
                     style = MaterialTheme.typography.labelSmall,
-                    color = SoftIndigo
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -1693,7 +1697,7 @@ private fun MinimalChatCanvas(
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, SoftIndigo.copy(alpha = 0.45f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 2.dp)
@@ -1870,7 +1874,7 @@ private fun AssistantResponderHeader(
         Icon(
             imageVector = LucideIcons.Sparkles,
             contentDescription = "AI Responder",
-            tint = SoftIndigo,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(14.dp)
         )
         Text(
@@ -1896,12 +1900,12 @@ private fun AssistantResponderHeader(
         }
         Surface(
             shape = RoundedCornerShape(4.dp),
-            color = SoftIndigo.copy(alpha = 0.14f)
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
         ) {
             Text(
                 text = identity.providerDisplayName,
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                color = SoftIndigo,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
@@ -1911,7 +1915,7 @@ private fun AssistantResponderHeader(
         if (message.isStreaming) {
             Surface(
                 shape = RoundedCornerShape(4.dp),
-                color = CyberCyan.copy(alpha = 0.14f)
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1921,12 +1925,12 @@ private fun AssistantResponderHeader(
                     CircularProgressIndicator(
                         modifier = Modifier.size(9.dp),
                         strokeWidth = 1.5.dp,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = "Responding…",
                         style = MaterialTheme.typography.labelSmall,
-                        color = CyberCyan,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         softWrap = false
                     )
@@ -1966,6 +1970,7 @@ private fun MinimalChatMessageItem(
 ) {
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
+    val isDarkTheme = runwayIsDarkTheme()
     val resolvedSources = remember(toolLogs, liveInfoSources) {
         val fromLogs = com.example.data.mcp.LiveInfoToolsService.extractSourcesFromToolLogs(toolLogs)
         (liveInfoSources + fromLogs).distinctBy { it.link }
@@ -1992,11 +1997,12 @@ private fun MinimalChatMessageItem(
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         if (isUser) {
-            // Soft rounded bubble ONLY for user messages
+            // User bubble: deep-forest filled in the Concept A light design,
+            // soft outlined card in the dark design.
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                shape = RoundedCornerShape(20.dp),
+                color = if (isDarkTheme) MaterialTheme.colorScheme.surface else DeepForest,
+                border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else DeepForest),
                 modifier = Modifier
                     .widthIn(max = 310.dp)
                     .clickable(onClick = onEditUserMessage)
@@ -2025,7 +2031,7 @@ private fun MinimalChatMessageItem(
                                             Icon(
                                                 imageVector = LucideIcons.Code,
                                                 contentDescription = "Document",
-                                                tint = SoftIndigo,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(13.dp)
                                             )
                                             Text(
@@ -2056,7 +2062,7 @@ private fun MinimalChatMessageItem(
                                             Icon(
                                                 imageVector = LucideIcons.Video,
                                                 contentDescription = "Video",
-                                                tint = SoftIndigo,
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         } else {
@@ -2077,15 +2083,28 @@ private fun MinimalChatMessageItem(
                         Text(
                             text = message.content,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else CreamOnDark
                         )
                     }
                 }
             }
         } else {
-            // Plain text on the background for AI responses (no bubble)
+            // AI responses: full-width white card in the Concept A light design;
+            // plain text on the background in the dark design (unchanged).
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (isDarkTheme) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
+                                .padding(14.dp)
+                        }
+                    ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Top header showing which AI model and provider is responding to the request
@@ -2144,8 +2163,8 @@ private fun MinimalChatMessageItem(
                 if (message.isStreaming && !activeToolLoopStatus.isNullOrBlank()) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = CyberCyan.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.35f)),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                         modifier = Modifier
                             .padding(top = 6.dp)
                             .testTag("message_active_tool_turn_badge")
@@ -2158,12 +2177,12 @@ private fun MinimalChatMessageItem(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(10.dp),
                                 strokeWidth = 1.5.dp,
-                                color = CyberCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Text(
                                 text = activeToolLoopStatus,
                                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
-                                color = CyberCyan,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -2192,7 +2211,7 @@ private fun MinimalChatMessageItem(
                                 Icon(
                                     imageVector = LucideIcons.Search,
                                     contentDescription = "Sources",
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Text(
@@ -2234,7 +2253,7 @@ private fun MinimalChatMessageItem(
                                     Text(
                                         text = src.link,
                                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
-                                        color = SoftIndigo,
+                                        color = MaterialTheme.colorScheme.primary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -2394,13 +2413,13 @@ private fun MinimalComparisonRow(
                             Icon(
                                 imageVector = LucideIcons.Sparkles,
                                 contentDescription = "AI Responder",
-                                tint = SoftIndigo,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = identity.modelDisplayName,
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = SoftIndigo,
+                                color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
@@ -2409,7 +2428,7 @@ private fun MinimalComparisonRow(
                         Text(
                             text = if (resp.isStreaming) "${identity.providerDisplayName} · Responding…" else "${identity.providerDisplayName} · ${identity.rawModelId.substringAfterLast("/")}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (resp.isStreaming) CyberCyan else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (resp.isStreaming) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2506,7 +2525,7 @@ private fun MinimalFloatingComposerBar(
                 Text(
                     text = "Editing message",
                     style = MaterialTheme.typography.bodySmall,
-                    color = SoftIndigo
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "Cancel",
@@ -2542,7 +2561,7 @@ private fun MinimalFloatingComposerBar(
                                 Icon(
                                     imageVector = LucideIcons.Code,
                                     contentDescription = "Document",
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
@@ -2577,7 +2596,7 @@ private fun MinimalFloatingComposerBar(
                                 Icon(
                                     imageVector = LucideIcons.Video,
                                     contentDescription = "Video",
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .size(20.dp)
                                         .align(Alignment.Center)
@@ -2676,7 +2695,7 @@ private fun MinimalFloatingComposerBar(
                         Text(
                             text = if (isVoiceListening) "Listening…" else "Message…",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (isVoiceListening) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isVoiceListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     BasicTextField(
@@ -2685,7 +2704,7 @@ private fun MinimalFloatingComposerBar(
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
-                        cursorBrush = SolidColor(SoftIndigo),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         maxLines = 5,
                         keyboardOptions = KeyboardOptions(
                             imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default
@@ -2736,7 +2755,7 @@ private fun MinimalFloatingComposerBar(
                     },
                     enabled = isStreaming || canSend,
                     shape = CircleShape,
-                    color = if (isStreaming || canSend) SoftIndigo else MaterialTheme.colorScheme.surfaceVariant,
+                    color = if (isStreaming || canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier
                         .size(38.dp)
                         .testTag("chat_send_button")
@@ -2770,7 +2789,7 @@ private fun MinimalToolRow(
         color = MaterialTheme.colorScheme.background,
         border = BorderStroke(
             width = 1.dp,
-            color = if (isActive) SoftIndigo.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
+            color = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -2787,14 +2806,14 @@ private fun MinimalToolRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isActive) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isActive) SoftIndigo else MaterialTheme.colorScheme.onSurface
+                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = subtitle,
@@ -2884,7 +2903,7 @@ private fun MinimalConversationDrawerContent(
                 Surface(
                     onClick = { onSelectConversation(conv.id) },
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isSelected) SoftIndigo.copy(alpha = 0.14f) else Color.Transparent,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -2898,7 +2917,7 @@ private fun MinimalConversationDrawerContent(
                             Text(
                                 text = conv.title,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (isSelected) SoftIndigo else MaterialTheme.colorScheme.onSurface,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -2958,7 +2977,7 @@ fun ChatReplyVideoCard(
         ) {
             Surface(
                 shape = CircleShape,
-                color = SoftIndigo.copy(alpha = 0.85f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                 modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -2986,7 +3005,7 @@ fun ChatReplyVideoCard(
                     Icon(
                         imageVector = LucideIcons.Video,
                         contentDescription = null,
-                        tint = SoftIndigo,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(12.dp)
                     )
                     Text(
@@ -3063,7 +3082,7 @@ fun ChatFullScreenVideoDialog(
                         Icon(
                             imageVector = LucideIcons.Video,
                             contentDescription = null,
-                            tint = SoftIndigo,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
