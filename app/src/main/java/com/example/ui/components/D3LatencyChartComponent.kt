@@ -63,17 +63,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.provider.LatencyBenchmarkSample
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
-import com.example.ui.theme.ElectricViolet
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
-import com.example.ui.theme.ObsidianCanvas
-import com.example.ui.theme.SlateBorder
-import com.example.ui.theme.SlateElevated
-import com.example.ui.theme.SlateSurface
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -88,11 +79,11 @@ enum class D3ChartDisplayMode {
 
 private val ChartSeriesPalette = listOf(
     EmeraldConnected,
-    CyberCyan,
+    Color(0xFF6C7CFF),
     AmberWarning,
-    ElectricIndigo,
+    Color(0xFF6C7CFF),
     CoralError,
-    ElectricViolet
+    Color(0xFF6C7CFF)
 )
 
 private data class ProviderLatencySummary(
@@ -173,7 +164,7 @@ fun D3LatencyChartWebView(
                     Icon(
                         imageVector = Icons.Default.Speed,
                         contentDescription = null,
-                        tint = CyberCyan,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
@@ -218,8 +209,8 @@ fun D3LatencyChartWebView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(ObsidianCanvas)
-                    .border(1.dp, SlateBorder.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.background)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -255,7 +246,7 @@ fun D3LatencyChartWebView(
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp
                         ),
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -269,7 +260,7 @@ fun D3LatencyChartWebView(
                         Text(
                             text = "No latency telemetry recorded yet. Tap 'Run Probe' to benchmark.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 } else if (displayMode == D3ChartDisplayMode.TIME_SERIES) {
@@ -291,8 +282,8 @@ fun D3LatencyChartWebView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(SlateSurface)
-                                .border(1.dp, CyberCyan.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
                                 .clickable { onSelectProviderModel(sel.providerId, sel.modelId) }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -303,14 +294,14 @@ fun D3LatencyChartWebView(
                                     text = "${sel.providerName} • ${sel.modelId}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = "Sampled at ${timeFormat.format(Date(sel.timestampMs))} • Tap to activate model",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Text(
@@ -319,7 +310,7 @@ fun D3LatencyChartWebView(
                                     fontFamily = JetBrainsMonoFontFamily,
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = CyberCyan
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -335,11 +326,11 @@ fun D3LatencyChartWebView(
                             val seriesColor = ChartSeriesPalette[idx % ChartSeriesPalette.size]
                             val isHidden = hiddenProviders[provName] == true
                             Surface(
-                                color = if (isHidden) SlateSurface.copy(alpha = 0.4f) else SlateElevated,
+                                color = if (isHidden) MaterialTheme.colorScheme.surface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant,
                                 shape = RoundedCornerShape(8.dp),
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isHidden) SlateBorder.copy(alpha = 0.4f) else seriesColor.copy(alpha = 0.7f)
+                                    if (isHidden) MaterialTheme.colorScheme.outline.copy(alpha = 0.4f) else seriesColor.copy(alpha = 0.7f)
                                 ),
                                 modifier = Modifier.clickable {
                                     hiddenProviders[provName] = !isHidden
@@ -354,12 +345,12 @@ fun D3LatencyChartWebView(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(if (isHidden) TextSecondary.copy(alpha = 0.4f) else seriesColor)
+                                            .background(if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else seriesColor)
                                     )
                                     Text(
                                         text = provName,
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                        color = if (isHidden) TextSecondary.copy(alpha = 0.5f) else TextPrimary
+                                        color = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -406,8 +397,10 @@ private fun NativeLatencyTimeSeriesCanvas(
     onSelectSample: (LatencyBenchmarkSample) -> Unit
 ) {
     val textMeasurer = rememberTextMeasurer()
+    val chartGridColor = MaterialTheme.colorScheme.outline
+    val chartPointCoreColor = MaterialTheme.colorScheme.background
     val axisTextStyle = TextStyle(
-        color = TextSecondary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontSize = 9.sp,
         fontFamily = JetBrainsMonoFontFamily
     )
@@ -467,7 +460,7 @@ private fun NativeLatencyTimeSeriesCanvas(
             val msValue = (maxLatency * frac).roundToLong()
 
             drawLine(
-                color = SlateBorder.copy(alpha = 0.55f),
+                color = chartGridColor.copy(alpha = 0.55f),
                 start = Offset(leftPad, y),
                 end = Offset(leftPad + plotW, y),
                 strokeWidth = 1.dp.toPx(),
@@ -553,7 +546,7 @@ private fun NativeLatencyTimeSeriesCanvas(
                     )
                 }
                 drawCircle(
-                    color = ObsidianCanvas,
+                    color = chartPointCoreColor,
                     radius = 4.5.dp.toPx(),
                     center = pt
                 )
@@ -572,6 +565,7 @@ private fun NativeLatencyBarRankingView(
     summaries: List<ProviderLatencySummary>,
     onSelectProviderModel: (providerId: String, modelId: String) -> Unit
 ) {
+    val chartTrackColor = MaterialTheme.colorScheme.background
     val maxMs = remember(summaries) {
         max(100L, summaries.maxOfOrNull { it.latestMs } ?: 500L)
     }
@@ -585,8 +579,8 @@ private fun NativeLatencyBarRankingView(
         summaries.forEachIndexed { index, item ->
             val barColor = when (index) {
                 0 -> EmeraldConnected
-                1 -> CyberCyan
-                else -> ElectricIndigo
+                1 -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.primary
             }
             val fraction = (item.latestMs.toFloat() / (maxMs * 1.15f)).coerceIn(0.08f, 1f)
 
@@ -594,7 +588,7 @@ private fun NativeLatencyBarRankingView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(SlateSurface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .clickable { onSelectProviderModel(item.providerId, item.modelId) }
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -608,7 +602,7 @@ private fun NativeLatencyBarRankingView(
                         text = "${if (index == 0) "🏆 " else "#${index + 1} "}${item.providerName} (${item.modelId})",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -629,7 +623,7 @@ private fun NativeLatencyBarRankingView(
                         .height(10.dp)
                 ) {
                     drawRoundRect(
-                        color = ObsidianCanvas,
+                        color = chartTrackColor,
                         size = size,
                         cornerRadius = CornerRadius(5.dp.toPx(), 5.dp.toPx())
                     )
