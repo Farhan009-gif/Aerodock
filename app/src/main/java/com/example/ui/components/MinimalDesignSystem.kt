@@ -49,13 +49,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.theme.StatusGrayDot
 import com.example.ui.theme.StatusGreenDot
 
 /**
  * Consistent 1.5px thin-line Lucide-style vector icon set.
- * Active icons use SoftIndigo (#6C7CFF), inactive ones use neutral gray.
+ * Active icons use the theme primary (Soft Indigo in dark, Sage in the
+ * Concept A light theme), inactive ones use neutral gray.
  */
 object LucideIcons {
 
@@ -792,7 +793,7 @@ fun MinimalButton(
 ) {
     val bgColor = when {
         !enabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        filled -> SoftIndigo
+        filled -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.surface
     }
     val contentColor = when {
@@ -851,10 +852,10 @@ fun MinimalChip(
     trailingIcon: ImageVector? = null,
     testTag: String? = null
 ) {
-    val bg = if (selected) SoftIndigo.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface
-    val border = if (selected) SoftIndigo.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
-    val textColor = if (selected) SoftIndigo else MaterialTheme.colorScheme.onSurface
-    val iconTint = if (selected) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface
+    val border = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
+    val textColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    val iconTint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     val finalModifier = if (!testTag.isNullOrBlank()) {
         modifier.heightIn(min = 36.dp).testTag(testTag)
     } else {
@@ -920,7 +921,7 @@ fun MinimalToggle(
         enabled = enabled,
         colors = SwitchDefaults.colors(
             checkedThumbColor = Color.White,
-            checkedTrackColor = SoftIndigo,
+            checkedTrackColor = MaterialTheme.colorScheme.primary,
             checkedBorderColor = Color.Transparent,
             uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
             uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -1004,7 +1005,7 @@ fun MinimalSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         modifier = modifier
     ) {
         DialogWindowFocusGuard(onRegisterCleaner = { innerSheetCleanerState.value = it })
@@ -1073,7 +1074,7 @@ fun MinimalToast(
                 Icon(
                     imageVector = LucideIcons.Check,
                     contentDescription = "Done",
-                    tint = SoftIndigo,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
@@ -1088,7 +1089,7 @@ fun MinimalToast(
                     Text(
                         text = "Undo",
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clickable(onClick = onUndo)
                             .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1131,7 +1132,7 @@ fun MinimalSegmentedControl(
                     .weight(1f)
                     .heightIn(min = 36.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(if (selected) SoftIndigo.copy(alpha = 0.16f) else Color.Transparent)
+                    .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
@@ -1140,7 +1141,7 @@ fun MinimalSegmentedControl(
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
                     ),
-                    color = if (selected) SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1174,7 +1175,8 @@ fun RunwayLogoIcon(
     modifier: Modifier = Modifier,
     size: Dp = 36.dp
 ) {
-    val runwayVector = androidx.compose.runtime.remember {
+    val logoAccent = MaterialTheme.colorScheme.primary
+    val runwayVector = androidx.compose.runtime.remember(logoAccent) {
         ImageVector.Builder(
             name = "RunwayLogo512",
             defaultWidth = 512.dp,
@@ -1199,7 +1201,7 @@ fun RunwayLogoIcon(
             }
             path(
                 fill = null,
-                stroke = SolidColor(SoftIndigo),
+                stroke = SolidColor(logoAccent),
                 strokeLineWidth = 28f,
                 strokeLineCap = StrokeCap.Round,
                 strokeLineJoin = StrokeJoin.Round
