@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import com.example.data.local.ClonedRepoEntity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -238,7 +239,7 @@ fun MinimalSettingsAndThemeScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (isLightMode) "Light surfaces active" else "Near-black #0B0D10 active",
+                                    text = if (isLightMode) "Concept A light active" else "Concept A dark active",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1319,7 +1320,16 @@ private fun ConnectServiceRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                MinimalStatusDot(isConnected = isConnected)
+                // Tinted icon chip with the connection status dot (Concept A row language)
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MinimalStatusDot(isConnected = isConnected)
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = name,
@@ -1354,7 +1364,7 @@ private fun ConnectServiceRow(
                     Text(
                         text = if (isConnected) "Disconnect" else "Connect",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = if (isConnected) MaterialTheme.colorScheme.onSurface else androidx.compose.ui.graphics.Color.White
+                        color = if (isConnected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimary
                     )
                 }
             }
