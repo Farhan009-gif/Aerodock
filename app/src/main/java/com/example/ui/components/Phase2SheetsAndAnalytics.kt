@@ -89,8 +89,7 @@ import com.example.data.local.ProviderPresetType
 import com.example.data.local.UsageRecordEntity
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.CyberCyan
-import com.example.ui.theme.ElectricIndigo
+
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.viewmodel.CompareTargetModel
 import java.util.Locale
@@ -144,7 +143,7 @@ fun CompareTargetsBottomSheet(
                     Text(
                         text = "Selected: ${selectedTargets.size} of 3 • Prompts run side-by-side concurrently",
                         style = MaterialTheme.typography.bodySmall,
-                        color = CyberCyan
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
                 Button(
@@ -166,14 +165,14 @@ fun CompareTargetsBottomSheet(
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
                         shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, CyberCyan)
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            BadgePill(text = "#${idx + 1} ${target.providerBadge}", color = CyberCyan)
+                            BadgePill(text = "#${idx + 1} ${target.providerBadge}", color = MaterialTheme.colorScheme.primary)
                             Text(
                                 text = target.displayName,
                                 style = MaterialTheme.typography.labelLarge
@@ -216,7 +215,7 @@ fun CompareTargetsBottomSheet(
                             ) {
                                 BadgePill(
                                     text = provider.presetEnum().badgeShort,
-                                    color = if (provider.presetEnum() == ProviderPresetType.OMNIROUTE) CyberCyan else ElectricIndigo
+                                    color = if (provider.presetEnum() == ProviderPresetType.OMNIROUTE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
                                 )
                                 Text(
                                     text = provider.displayName,
@@ -237,7 +236,7 @@ fun CompareTargetsBottomSheet(
                                 ),
                                 border = BorderStroke(
                                     width = 1.dp,
-                                    color = if (isSelected) CyberCyan else MaterialTheme.colorScheme.outline
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -479,7 +478,7 @@ fun PromptLibraryBottomSheet(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    BadgePill(text = tpl.category.uppercase(), color = CyberCyan)
+                                    BadgePill(text = tpl.category.uppercase(), color = MaterialTheme.colorScheme.primary)
                                     Text(
                                         text = tpl.title,
                                         style = MaterialTheme.typography.titleSmall,
@@ -851,7 +850,7 @@ fun UsageAnalyticsScreen(
                         }
                         BadgePill(
                             text = "${providerSpendBreakdown.count { it.requestsCount > 0 }}/${providerSpendBreakdown.size} used",
-                            color = SoftIndigo
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -917,6 +916,7 @@ fun UsageAnalyticsScreen(
                     }
 
                     val gridColor = MaterialTheme.colorScheme.outline
+                    val accentColor = MaterialTheme.colorScheme.primary
                     Canvas(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -969,15 +969,15 @@ fun UsageAnalyticsScreen(
                                 path = fillPath,
                                 brush = Brush.verticalGradient(
                                     colors = listOf(
-                                        SoftIndigo.copy(alpha = 0.22f),
-                                        SoftIndigo.copy(alpha = 0.0f)
+                                        accentColor.copy(alpha = 0.22f),
+                                        accentColor.copy(alpha = 0.0f)
                                     )
                                 )
                             )
 
                             drawPath(
                                 path = linePath,
-                                color = SoftIndigo,
+                                color = accentColor,
                                 style = androidx.compose.ui.graphics.drawscope.Stroke(
                                     width = 2.dp.toPx(),
                                     cap = androidx.compose.ui.graphics.StrokeCap.Round
@@ -986,7 +986,7 @@ fun UsageAnalyticsScreen(
 
                             coords.forEach { pt ->
                                 drawCircle(
-                                    color = SoftIndigo,
+                                    color = accentColor,
                                     radius = 3.dp.toPx(),
                                     center = pt
                                 )
@@ -1005,6 +1005,7 @@ private fun ProviderSpendRowCard(
     spendCurrency: String,
     usdToInrRate: Double
 ) {
+    val accentColor = MaterialTheme.colorScheme.primary
     val primaryCostText = remember(item.costUsd, spendCurrency, usdToInrRate) {
         formatUsageCurrency(item.costUsd, spendCurrency, usdToInrRate)
     }
@@ -1021,7 +1022,7 @@ private fun ProviderSpendRowCard(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
         border = BorderStroke(
             1.dp,
-            if (item.requestsCount > 0) SoftIndigo.copy(alpha = 0.4f)
+            if (item.requestsCount > 0) accentColor.copy(alpha = 0.4f)
             else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
         ),
         modifier = Modifier
@@ -1049,12 +1050,12 @@ private fun ProviderSpendRowCard(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = SoftIndigo.copy(alpha = 0.16f)
+                            color = accentColor.copy(alpha = 0.16f)
                         ) {
                             Text(
                                 text = item.badgeShort,
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = SoftIndigo,
+                                color = accentColor,
                                 maxLines = 1,
                                 softWrap = false,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1107,7 +1108,7 @@ private fun ProviderSpendRowCard(
                     ) {}
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = SoftIndigo,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .fillMaxWidth(item.shareOfTotalCost.coerceIn(0.03f, 1f))
                             .height(5.dp)
