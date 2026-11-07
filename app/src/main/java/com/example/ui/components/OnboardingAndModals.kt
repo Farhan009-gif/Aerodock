@@ -583,7 +583,7 @@ fun ModelPickerBottomSheet(
                     Surface(
                         onClick = { selectedProviderId = prov.id },
                         shape = RoundedCornerShape(50),
-                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                         modifier = Modifier
                             .heightIn(min = 36.dp)
                             .testTag("picker_provider_tab_${prov.id}")
@@ -597,7 +597,7 @@ fun ModelPickerBottomSheet(
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
                                 ),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1
                             )
                         }
@@ -676,7 +676,7 @@ fun ModelPickerBottomSheet(
                             },
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                MaterialTheme.colorScheme.primaryContainer
                             } else {
                                 MaterialTheme.colorScheme.background
                             },
