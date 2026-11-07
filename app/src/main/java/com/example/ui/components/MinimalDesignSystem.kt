@@ -55,8 +55,8 @@ import com.example.ui.theme.StatusGreenDot
 
 /**
  * Consistent 1.5px thin-line Lucide-style vector icon set.
- * Active icons use the theme primary (Soft Indigo in dark, Sage in the
- * Concept A light theme), inactive ones use neutral gray.
+ * Active icons use the theme primary (lifted Sage in Concept A Dark,
+ * Sage in the light theme), inactive ones use neutral gray.
  */
 object LucideIcons {
 
@@ -761,16 +761,16 @@ fun MinimalCard(
 ) {
     val cardModifier = if (onClick != null) {
         modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(containerColor)
-            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(contentPadding)
     } else {
         modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(containerColor)
-            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
             .padding(contentPadding)
     }
 
@@ -798,7 +798,7 @@ fun MinimalButton(
     }
     val contentColor = when {
         !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        filled -> Color.White
+        filled -> MaterialTheme.colorScheme.onPrimary
         else -> MaterialTheme.colorScheme.onSurface
     }
     val borderStroke = if (filled) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
@@ -852,10 +852,11 @@ fun MinimalChip(
     trailingIcon: ImageVector? = null,
     testTag: String? = null
 ) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface
-    val border = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline
-    val textColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    val iconTint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    // Concept A: a selected chip is a FILLED accent pill in both modes.
+    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val border = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val textColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val iconTint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val finalModifier = if (!testTag.isNullOrBlank()) {
         modifier.heightIn(min = 36.dp).testTag(testTag)
     } else {
@@ -1132,7 +1133,7 @@ fun MinimalSegmentedControl(
                     .weight(1f)
                     .heightIn(min = 36.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent)
+                    .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
@@ -1141,7 +1142,7 @@ fun MinimalSegmentedControl(
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
                     ),
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
