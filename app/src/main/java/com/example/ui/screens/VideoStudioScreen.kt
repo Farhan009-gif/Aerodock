@@ -84,7 +84,7 @@ import com.example.ui.components.MinimalButton
 import com.example.ui.components.MinimalCard
 import com.example.ui.components.MinimalChip
 import com.example.ui.theme.CoralError
-import com.example.ui.theme.SoftIndigo
+
 import com.example.ui.viewmodel.OmniUiState
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -331,7 +331,7 @@ fun VideoStudioScreen(
                         minLines = 3,
                         maxLines = 5,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SoftIndigo,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                             focusedContainerColor = MaterialTheme.colorScheme.background,
                             unfocusedContainerColor = MaterialTheme.colorScheme.background
@@ -535,7 +535,7 @@ fun VideoStudioScreen(
                                     Icon(
                                         imageVector = if (job.status == "COMPLETED") LucideIcons.Play else LucideIcons.Clock,
                                         contentDescription = job.status,
-                                        tint = if (job.status == "COMPLETED") SoftIndigo else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = if (job.status == "COMPLETED") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -551,7 +551,7 @@ fun VideoStudioScreen(
                                 if (job.status in listOf("QUEUED", "PROCESSING")) {
                                     LinearProgressIndicator(
                                         progress = { (job.progressPercent / 100f).coerceIn(0.05f, 1f) },
-                                        color = SoftIndigo,
+                                        color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(3.dp)
@@ -561,7 +561,7 @@ fun VideoStudioScreen(
                                     Text(
                                         text = job.modelId.substringAfterLast("/"),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = SoftIndigo,
+                                        color = MaterialTheme.colorScheme.primary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -922,10 +922,10 @@ private fun VideoModelPickerSheet(
                     Surface(
                         onClick = { onSelect(mod.providerInstanceId, mod.modelId) },
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) SoftIndigo.copy(alpha = 0.12f) else MaterialTheme.colorScheme.background,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.background,
                         border = BorderStroke(
                             1.dp,
-                            if (isSelected) SoftIndigo else MaterialTheme.colorScheme.outline
+                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -951,12 +951,12 @@ private fun VideoModelPickerSheet(
                                     if (mod.isCombo || comboDef != null) {
                                         Surface(
                                             shape = RoundedCornerShape(4.dp),
-                                            color = SoftIndigo.copy(alpha = 0.16f)
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                                         ) {
                                             Text(
                                                 text = if (comboDef != null) "COMBO · ${comboDef.strategy}" else "COMBO",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = SoftIndigo,
+                                                color = MaterialTheme.colorScheme.primary,
                                                 maxLines = 1,
                                                 softWrap = false,
                                                 overflow = TextOverflow.Ellipsis,
@@ -981,7 +981,7 @@ private fun VideoModelPickerSheet(
                                 Icon(
                                     imageVector = LucideIcons.Check,
                                     contentDescription = "Selected",
-                                    tint = SoftIndigo,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
