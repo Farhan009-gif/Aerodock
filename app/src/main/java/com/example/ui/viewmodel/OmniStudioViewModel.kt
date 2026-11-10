@@ -3796,9 +3796,15 @@ class OmniStudioViewModel(
                             turnToolCalls.add(event.call)
                         }
                         is ChatStreamEvent.Usage -> {
-                            attemptPromptTokens += event.promptTokens
-                            attemptCompletionTokens += event.completionTokens
-                            attemptCachedInputTokens += event.cachedInputTokens
+                            // Providers report usage as a CUMULATIVE snapshot for the
+                            // request, and many gateways attach it to every streamed
+                            // chunk. Summing the snapshots counts the same tokens once
+                            // per chunk (the runaway "Chat total" bug) — keep only the
+                            // largest snapshot of this attempt; the attempt's final
+                            // snapshot is folded into the chat totals below.
+                            attemptPromptTokens = maxOf(attemptPromptTokens, event.promptTokens)
+                            attemptCompletionTokens = maxOf(attemptCompletionTokens, event.completionTokens)
+                            attemptCachedInputTokens = maxOf(attemptCachedInputTokens, event.cachedInputTokens)
                         }
                         is ChatStreamEvent.Error -> {
                             streamError = event.error
