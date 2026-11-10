@@ -486,6 +486,19 @@ object ErrorNormalizer {
         }
 
         return when {
+            lowerBody.contains("rate limit") || lowerBody.contains("rate_limit") ||
+                lowerBody.contains("too many requests") -> {
+                // Rate-limit wording beats the status code: some providers (e.g.
+                // LiteRouter) answer a cooldown with HTTP 403, which is not an
+                // auth failure.
+                NormalizedAiError(
+                    category = ErrorCategory.RATE_LIMIT,
+                    title = "Rate Limited ($statusCode)",
+                    message = "The provider asked for a pause between requests.",
+                    suggestedFix = "Wait a few seconds and retry.",
+                    details = detailLine
+                )
+            }
             statusCode == 401 || statusCode == 403 || lowerBody.contains("invalid_api_key") || lowerBody.contains("incorrect api key") -> {
                 NormalizedAiError(
                     category = ErrorCategory.INVALID_KEY,

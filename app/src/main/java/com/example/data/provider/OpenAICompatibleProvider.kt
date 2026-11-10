@@ -9,6 +9,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -17,6 +20,33 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
+
+/**
+ * LiteRouter throttles clients that fire requests back-to-back (agent tool
+ * turns, retries, model fetches). This gate reserves request-start slots at
+ * least 7 seconds apart for any provider whose name or base URL mentions
+ * LiteRouter, so concurrent callers queue up instead of bursting.
+ */
+object LiteRouterRequestGate {
+    private const val MIN_GAP_MS = 7_000L
+    private val mutex = Mutex()
+    private var nextSlotMs = 0L
+
+    private fun appliesTo(provider: ProviderInstanceEntity): Boolean =
+        provider.baseUrl.contains("literouter", ignoreCase = true) ||
+            provider.displayName.contains("literouter", ignoreCase = true)
+
+    suspend fun awaitTurn(provider: ProviderInstanceEntity) {
+        if (!appliesTo(provider)) return
+        val waitMs = mutex.withLock {
+            val now = System.currentTimeMillis()
+            val start = maxOf(now, nextSlotMs)
+            nextSlotMs = start + MIN_GAP_MS
+            start - now
+        }
+        if (waitMs > 0) delay(waitMs)
+    }
+}
 
 /**
  * Generic OpenAI-Compatible Adapter reused by:
@@ -55,6 +85,7 @@ class OpenAICompatibleProvider(
     ): Result<List<ModelDescriptorEntity>> = withContext(Dispatchers.IO) {
         runCatching {
             ensureLocalOmniRouteListening(provider.baseUrl)
+            LiteRouterRequestGate.awaitTurn(provider)
             val candidateUrls = EndpointUrlNormalizer.buildModelsCandidateUrls(provider.baseUrl)
             var lastException: Throwable? = null
 
@@ -337,6 +368,7 @@ class OpenAICompatibleProvider(
 
     override fun streamChat(request: ChatCompletionRequest): Flow<ChatStreamEvent> = flow {
         ensureLocalOmniRouteListening(request.provider.baseUrl)
+        LiteRouterRequestGate.awaitTurn(request.provider)
         val candidateUrls = EndpointUrlNormalizer.buildChatCompletionCandidateUrls(request.provider.baseUrl)
         val isOmniRouteGateway = request.provider.presetEnum() == ProviderPresetType.OMNIROUTE ||
             request.provider.baseUrl.contains("20128") ||
@@ -917,6 +949,7 @@ class OpenAICompatibleProvider(
     ): Result<ImageGenerationOutput> = withContext(Dispatchers.IO) {
         try {
             ensureLocalOmniRouteListening(request.provider.baseUrl)
+            LiteRouterRequestGate.awaitTurn(request.provider)
             val base = request.provider.baseUrl.trim().trimEnd('/')
             val endpoint = if (base.endsWith("/images/generations")) {
                 base
@@ -1064,6 +1097,7 @@ class OpenAICompatibleProvider(
     ): Result<VideoSubmissionResult> = withContext(Dispatchers.IO) {
         try {
             ensureLocalOmniRouteListening(request.provider.baseUrl)
+            LiteRouterRequestGate.awaitTurn(request.provider)
             val candidateUrls = EndpointUrlNormalizer.buildVideoGenerationCandidateUrls(request.provider.baseUrl)
             val enrichedPrompt = ModelCapabilityRegistry.enrichVideoPromptWithMotion(
                 prompt = request.prompt,

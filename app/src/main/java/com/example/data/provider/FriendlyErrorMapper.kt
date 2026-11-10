@@ -36,6 +36,20 @@ object FriendlyErrorMapper {
                 )
             }
 
+            // Rate-limit wording beats the status code: some providers (e.g.
+            // LiteRouter) answer a cooldown with HTTP 403, which is not an
+            // auth failure.
+            lower.contains("rate limit") ||
+                lower.contains("rate_limit") ||
+                lower.contains("too many requests") -> {
+                FriendlyError(
+                    title = "Rate Limit Reached",
+                    cause = "The provider asked for a pause between requests.",
+                    nextStep = "Wait a few seconds and retry.",
+                    rawDetails = trimmed
+                )
+            }
+
             // 401 / 403 API key or auth issues
             code == 401 ||
                 code == 403 ||

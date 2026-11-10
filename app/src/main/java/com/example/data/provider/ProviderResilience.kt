@@ -498,6 +498,18 @@ object ProviderErrorMapper {
                     correctedUrlHint = "Your OmniRoute combo routed to 'cfp/*' (Cloudflare Playground), which requires Playwright + Chromium on the server. Tap 'Switch to Working Model' below or disable Cloudflare Playground in OmniRoute."
                 )
             }
+            lower.contains("rate limit") || lower.contains("rate_limit") ||
+                lower.contains("too many requests") -> {
+                // Rate-limit wording beats the status code: some providers (e.g.
+                // LiteRouter) answer a cooldown with HTTP 403, which is not an
+                // auth failure and must stay retryable.
+                val retryMs = parseRetryAfterMs(headers, redactedBody)
+                ProviderError.RateLimited(
+                    message = cleanMsg.ifBlank { "$providerName rate limit reached (HTTP $statusCode)." },
+                    retryAfterMs = retryMs,
+                    httpStatus = statusCode
+                )
+            }
             statusCode == 401 || statusCode == 403 ||
                 lower.contains("invalid_api_key") || lower.contains("incorrect api key") ||
                 lower.contains("unauthorized") -> {
@@ -617,6 +629,8 @@ object ProviderErrorMapper {
             else -> null
         }
         return when {
+            norm.category == ErrorCategory.RATE_LIMIT || lower.contains("rate limit") ->
+                ProviderError.RateLimited(message = norm.details.ifBlank { norm.message }, httpStatus = inferredStatus ?: 429)
             norm.category == ErrorCategory.INVALID_KEY || lower.contains("401") || lower.contains("403") ->
                 ProviderError.Auth(message = norm.details.ifBlank { norm.message }, httpStatus = inferredStatus ?: 401)
             lower.contains("405") || lower.contains("404") || lower.contains("method not allowed") ||
