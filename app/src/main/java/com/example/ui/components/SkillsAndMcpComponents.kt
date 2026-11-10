@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -2013,7 +2014,7 @@ fun HtmlCssJsPreviewPanelSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .fillMaxHeight(0.96f)
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2064,7 +2065,10 @@ fun HtmlCssJsPreviewPanelSheet(
 
             AnimatedVisibility(visible = showCodeEditorAndTemplates) {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     HtmlCssJsTemplateSelector(
@@ -2120,7 +2124,7 @@ fun HtmlCssJsPreviewPanelSheet(
                 title = currentTitle.ifBlank { "Sandboxed HTML / CSS / JS Preview Panel" },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(380.dp)
+                    .weight(1f)
                     .testTag("html_preview_sheet_webview_card")
             )
         }

@@ -140,6 +140,10 @@ object WebViewPreviewerSecurity {
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
             setSupportZoom(false)
+            // Fit pages wider than the preview (boards, tables, fixed-width layouts)
+            // to the available width instead of clipping them at the edge.
+            useWideViewPort = true
+            loadWithOverviewMode = true
         }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
