@@ -467,6 +467,16 @@ fun ChatWorkspaceScreen(
                 testTag = "tools_sheet_custom_combos"
             )
             MinimalToolRow(
+                icon = LucideIcons.Plus,
+                title = "+ Combo",
+                subtitle = "Create a new multi-model chat combo",
+                onClick = {
+                    showToolsSheet = false
+                    showChatComboBuilderDialog = true
+                },
+                testTag = "tools_sheet_new_combo"
+            )
+            MinimalToolRow(
                 icon = LucideIcons.Sparkles,
                 title = "Enhance prompt",
                 subtitle = "Refine your current message draft for clarity",
@@ -1065,7 +1075,7 @@ private fun MinimalChatCanvas(
                 Spacer(modifier = Modifier.size(44.dp))
             }
 
-            // Center tappable model pill + quick "+ Combo" button
+            // Center tappable model pill ("+ Combo" moved into the Tools sheet)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1120,12 +1130,6 @@ private fun MinimalChatCanvas(
                     }
                 }
 
-                MinimalChip(
-                    label = "+ Combo",
-                    selected = false,
-                    onClick = onOpenNewComboDialog,
-                    testTag = "chat_top_bar_new_combo_button"
-                )
             }
 
             // Right single overflow icon -> opens "Tools" bottom sheet
