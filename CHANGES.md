@@ -1,109 +1,134 @@
-# Runway Groups — Phase 1 (Firebase) — change summary
+# Runway Subagents — v1 (NOT pushed, NOT committed)
 
-Adds an opt-in **Groups** feature to Runway: Google sign-in, group rooms with
-invite codes, a real-time discussion thread per group, and an admin-only usage
-page. Everything lives behind a guarded doorway (`GroupsFirebase`): if
-Firebase cannot start, Groups shows a plain "Groups unavailable" card and the
-rest of Runway is byte-for-byte unaffected. User API keys and all existing
-Runway data never leave the phone — Firestore only ever sees the fields in
-`GroupsModels.kt`.
+Base: `origin/main` @ `7d06a9f` (Admin dashboard restyle, on top of Groups `eb0effe`).
+These changes are uncommitted working-tree changes in this staging clone only.
+(This file replaces the Groups CHANGES.md in this staging clone; the Groups version
+still exists untouched on origin/main.)
 
-Backend: Firebase project **runway-c7ed3** (Spark, Firestore in production
-mode, asia-south1, Google sign-in enabled — created and verified separately).
+## What the feature does
 
-## Files added
+Your chat agent gets a new built-in tool called **`spawn_subagent`**. When you ask the
+main model to delegate work, it can start a **subagent**: a fresh, separate AI conversation
+with its own context that works on one self-contained task and reports back only its final
+answer. The main chat never sees the subagent's back-and-forth — just the result, like a
+tool result.
 
-| File | What it is |
-|---|---|
-| `app/google-services.json` | Copied verbatim from the verified local copy for project runway-c7ed3 / package `com.aistudio.omniaistudio.rxkqpz`. Not a secret (standard to commit); security comes from `firestore.rules`. |
-| `app/src/main/java/com/example/groups/GroupsModels.kt` | `GroupRoom`, `GroupMessage`, `GroupStats` data classes. |
-| `app/src/main/java/com/example/groups/GroupsFirebase.kt` | `GroupsFirebase` gate (lazy availability check + nullable Auth/Firestore accessors) and an internal `Task.awaitCompletion()` so no extra coroutines-play-services dependency is needed. |
-| `app/src/main/java/com/example/groups/GroupsAuth.kt` | `GroupsAuthRepository`: auth-state Flow, current-user snapshot, Google sign-in via Jetpack Credential Manager (`GetGoogleIdOption` with `R.string.default_web_client_id` → Firebase `GoogleAuthProvider` credential), sign-out. |
-| `app/src/main/java/com/example/groups/GroupsRepository.kt` | Firestore: user upsert (bumps `totalUsers` only for a new doc), create group (6-char invite code from an unambiguous alphabet), join by code (`arrayUnion`), groups Flow, messages Flow, send message (batch: message + `lastMessageAt`/`messageCount`), stats Flow, admin-check Flow (`config/admin` `uids`). |
-| `app/src/main/java/com/example/groups/GroupsViewModel.kt` | No-arg ViewModel wiring the flows together; busy/status state; sign-in/upsert, create/join (with success callbacks for navigation), open/close group, send. Cancelled Google sheets are swallowed silently. |
-| `app/src/main/java/com/example/groups/GroupsRoot.kt` | `GroupsRoot` — self-contained destination with its own back stack (List → Chat → Admin) and BackHandler (internal pops first, then exits to Home). Also contains the group list / sign-in screen, shared `GroupsHeader`, and time-label helpers. |
-| `app/src/main/java/com/example/groups/GroupChatScreen.kt` | Discussion thread: bubbles (own = accent, right-aligned), sender names, clock labels, invite-code copy button in the header, slim composer. |
-| `app/src/main/java/com/example/groups/AdminScreen.kt` | Admin page: `stats/global` counters (users / groups / messages), the admin's groups with member + message counts, and a note that exact quota lives in the Firebase console. Only reachable when the uid is an admin (the entry card doesn't exist otherwise). |
-| `firestore.rules` | Security rules (see below). **Not deployed by this change — must be pasted into the console.** |
+- The subagent starts **blank**: it gets a short system prompt plus the task brief, never
+  your chat history. The brief has to contain everything it needs.
+- If the model starts several subagents in one go, they **run at the same time**
+  (in parallel) and their answers come back in order.
+- The subagent can use tools too (see safety rules below), and it can run on a **different
+  model** on the same provider if the main model asks for one (e.g. main chat on the big
+  model, subagents on a smaller/faster one).
+- In the chat, a spawn looks like any other tool call: it appears in the existing tool-call
+  log UI under the name **Subagent / spawn_subagent**, with its runtime and result.
+
+The tool is only offered when the chat's tools are on (same switch as MCP tools), the model
+supports function calling, and it's a normal chat (not Compare mode) — same conditions as
+the existing built-in tools.
+
+## How to use it
+
+Just ask in a normal Runway chat, for example:
+
+> "Use two subagents in parallel: one summarises the pros of Firebase, the other the pros
+> of Supabase. Then compare their answers and give me a verdict."
+
+Or:
+
+> "Spawn a subagent with the role 'strict code reviewer' to check this function for bugs,
+> then fix what it finds." *(paste the function into your message — the subagent can't see
+> your chat, so the main model includes what matters in the brief.)*
+
+The model decides the brief, the optional role, and the optional model itself — those are
+the tool's three inputs: `task` (required), `role` (optional), `model` (optional, defaults
+to the chat's current provider + model).
 
 ## Files changed
 
-| File | Change |
-|---|---|
-| `gradle/libs.versions.toml` | `googleServices` 4.5.0 → **4.4.2** and `firebaseBom` 34.17.0 → **33.5.1** (the versions pinned for this feature; both entries already existed in the catalog, as did `credentials` 1.5.0 and `googleid` 1.1.1, which match the spec unchanged). |
-| `build.gradle.kts` (root) | One line: `alias(libs.plugins.google.services) apply false`. |
-| `app/build.gradle.kts` | Applies the google-services plugin; adds Firebase BoM platform + `firebase-auth` + `firebase-firestore` + `androidx-credentials` + `credentials-play-services-auth` + `googleid`, all via the existing catalog. |
-| `app/src/main/java/com/example/MainActivity.kt` | Groups hookup only: one state flag `groupsVisible`; one render branch (`GroupsRoot`) between Home/Connectors and the tab content; `!groupsVisible` added to three existing conditions (root BackHandler, section header, tab-swipe gestures) so Groups owns its own chrome and back behaviour; one `onOpenGroups` callback passed to Home. No other behaviour touched. |
-| `app/src/main/java/com/example/ui/screens/HomeScreen.kt` | One new parameter `onOpenGroups` and one new "Groups" row in *Studios & tools*, a pixel-for-pixel sibling of the existing "More" row (same surface, icon-chip and chevron; `LucideIcons.MessageSquare`, subtitle "Discuss & build together"). |
+- **NEW `app/src/main/java/com/example/data/agent/SubagentTool.kt`** (112 lines) — the
+  tool's name/description/input schema, its synthetic "server" and "tool" records (same
+  pattern as the built-in code runner), argument parsing, the subagent's system prompt,
+  and the result-truncation helper. No logic that touches the network or the database.
+- **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`**
+  (+265 / −1 lines) — everything else, all inside the existing `executeModelStream`:
+  - 3 coroutine imports (`async`, `withTimeoutOrNull`, `CancellationException`).
+  - The `spawn_subagent` tool is added to the tool list next to the built-in `run_code`
+    tool, so it reaches the model through the exact same path as every other tool.
+  - A new `runSubagent(...)` runner (nested next to the existing provider resolver) that
+    runs the subagent headlessly through the same `repository.streamChat` + repository
+    tool executors the main loop uses. The main loop itself was **not** refactored.
+  - Before the normal sequential tool loop, all `spawn_subagent` calls of a turn are run
+    **concurrently** (`async`), and the loop then hands out their results in call order.
+  - Each spawn writes one tool-call log row (like every other tool), so it shows in the
+    existing tool-call UI.
 
-## Where the UI hooks in
+No new dependencies. No new screens. No database changes.
 
-Home → **Groups** row → `GroupsRoot` (full-screen, replaces tab content like
-the Connectors screen does). Inside: group list (sign-in card when signed
-out) → tap a group → discussion thread; **Admin** card appears in the list
-only for admins → admin page. Back from a thread returns to the list; back
-from the list returns Home. Styled entirely with the existing Concept-A
-language (`MinimalCard`, `MinimalButton`, `MinimalSheet`, `MinimalSectionHeader`,
-theme colours) — no new colours, no gradients.
+## Caps and safety rules
 
-## Design decisions (and why)
+- **Turn cap:** a subagent gets at most **8 model turns**, then it is stopped and its last
+  message (with a note) is returned.
+- **Timeout:** a subagent run is cut off after **5 minutes**.
+- **Result cap:** results longer than **6,000 characters** are truncated with a note.
+- **Depth cap 1 (hard rule):** a subagent never receives the `spawn_subagent` tool, so
+  subagents cannot spawn subagents. There is no setting that changes this.
+- **No approval dialogs, ever:** a subagent only inherits tools that would run in the main
+  chat *without asking you first*. The check is the exact same `canAutoRun` logic the main
+  loop uses (per-tool Always/Ask/Never policy + server approval mode + read-only check),
+  evaluated at spawn time. Consequences:
+  - `run_code` is **never** given to a subagent (it always asks for confirmation).
+  - Write/delete MCP tools are **never** given to a subagent (they always ask).
+  - Read-only MCP tools are inherited only if your current settings would auto-run them.
+  - Live Info tools (`web_search`, `news_headlines`) are inherited when they're enabled —
+    they never ask. A subagent's searches count toward the same per-message search limit.
+  - If a tool isn't in the subagent's list, it can't run it — it just gets an error text.
+- **Fail-soft:** if a subagent errors, times out, or gets a bad brief, the main chat gets an
+  "Error: …" tool result and **carries on**. A broken subagent can never break your chat.
+  Pressing Stop cancels running subagents too.
+- **Keys stay on the device:** the subagent uses the same provider and API key as your
+  chat (resolved the same way, including the OmniRoute fallback). Nothing new is stored,
+  nothing leaves the phone except the requests to your own chosen provider — same as a
+  normal chat.
+- The subagent is told in its system prompt that approval-needing tools are unavailable
+  and that it cannot ask questions — it has to work with what it has and say so if it can't.
 
-- **Client-side sort of the group list.** `whereArrayContains(memberUids) +
-  orderBy(lastMessageAt)` would demand a composite Firestore index; group
-  counts are tiny, so the list is sorted in memory instead.
-- **No `kotlinx-coroutines-play-services`.** A 15-line `awaitCompletion()`
-  helper covers every Task call; one less dependency to resolve.
-- **stats/global is only observed when the user is an admin** — the rules
-  deny reads to everyone else, and this avoids a guaranteed permission error
-  (and wasted read) for every non-admin on every launch.
-- **Stat increments are best-effort** (`runCatching`): a failed counter write
-  never blocks creating a group, joining, or sending a message.
-- **Sending a message is one batch** (message doc + group's
-  `lastMessageAt`/`messageCount`), so the list ordering can never drift from
-  the thread.
-- **Fail-soft everywhere.** All repository calls check the gate first; auth
-  and Firestore handles are nullable; sign-out is wrapped. The biometric
-  lock, providers, chats etc. are untouched.
-- **Admin model:** `config/admin` doc with a `uids` array, observed live;
-  missing doc = no admins. Writable by nobody from clients (console only).
+## Deliberately skipped in v1
 
-## Manual steps still needed at runtime
+- **No saved transcripts.** A subagent's conversation is gone when it finishes; only its
+  final answer (and the tool-call log rows, like any tool) remain. No database changes.
+- **No subagent dashboard or new UI.** Spawns show as normal tool calls; that's all.
+- **No provider failover inside a subagent.** The main loop can fail over to a backup
+  provider mid-turn; a subagent just reports the error and the main model decides what to
+  do. Keeps the runner small.
+- **Subagent token usage is not added to the chat's token/cost totals.** The requests still
+  cost whatever your provider charges — the in-app counters just don't include them yet.
+- **No settings screen / toggles** for caps — 8 turns and 5 minutes are constants in
+  `SubagentTool.kt` if you ever want to change them.
+- **No unit test added.** The pure helpers (argument parsing, truncation) are tiny, and the
+  Android `org.json` stub makes them awkward to test in plain JVM unit tests; the runner
+  itself needs the full app. CI + a phone test are the proof for v1 (see below).
+- If one of your own MCP servers ever has a tool literally named `spawn_subagent`, the
+  built-in wins and shadows it (same behaviour as the existing `run_code` / `web_search`
+  built-in names).
 
-1. **Paste `firestore.rules`** into Firebase console (project runway-c7ed3)
-   → Firestore Database → Rules → Publish. **Until this is done, production
-   mode denies every Firestore call** and Groups will only show errors.
-2. **Make Farhan an admin:** sign in once inside the app (Home → Groups →
-   Sign in with Google), copy the value shown as **"Your ID"** on the Groups
-   screen, then in the console create document `config/admin` with a field
-   `uids` of type *array* containing that UID string. The Admin card appears
-   on the next launch (it is actually live — the doc is observed).
-3. Nothing else: the Android app is already registered in the project with
-   the CI signing SHA-1 (`86:02:…:C3:08`), Google sign-in is enabled, and
-   `google-services.json` is in place.
+## What CI must prove (nothing compiled locally — no Android SDK here)
 
-## Risks / unknowns
+This code was written and reviewed by reading, **not compiled**. The GitHub Actions build
+is the first real check. Things to watch:
 
-- **First CI build is the compile verdict** (no local Android SDK). Imports
-  and APIs were audited by hand against the pinned versions (Firebase BoM
-  33.5.1, google-services plugin 4.4.2, credentials 1.5.0, googleid 1.1.1),
-  but a red build on first push would not be surprising; fix forward from
-  the compiler output.
-- **Version pins changed from what the catalog carried** (BoM 34.17.0 →
-  33.5.1, plugin 4.5.0 → 4.4.2) per spec. All five pinned artifacts were
-  verified resolvable on Google's Maven repo while staging (HTTP 200:
-  google-services 4.4.2, firebase-bom 33.5.1, credentials 1.5.0,
-  credentials-play-services-auth 1.5.0, googleid 1.1.1); BoM 33.5.1 maps
-  firebase-auth 23.1.0 and firebase-firestore 25.1.1.
-- **Credential Manager needs Google Play services** on the device and the
-  registered SHA-1 to match the installed build's signature. CI builds use
-  the project's `debugConfig` keystore, whose SHA-1 is the one registered.
-  A differently-signed build (e.g. a local debug key) will fail sign-in
-  with a "no credentials" style error — expected, not a bug.
-- **Rules are pragmatic, not perfect:** any signed-in user could inflate
-  `stats/global` by calling the API directly (counters are informational),
-  and `senderName` on messages is cosmetic/unverified. Both are commented
-  in `firestore.rules` and accepted for Phase 1.
-- **APK size grows** (Firebase Auth + Firestore + Play services auth).
-  Multidex is native at minSdk 24, so no config change is needed.
-- Real-time presence, shared project files, and AI-in-group are **Phase 2/3**
-  and intentionally not in this change.
+1. **It compiles.** Main risks, in order:
+   - The new nested `runSubagent` function in `OmniStudioViewModel.kt` (~210 lines) —
+     it captures a lot of the surrounding function's state (`resolveProviderRuntime`,
+     `enabledToolTriples`, `assistantMsgId`, UI state). Reviewed line-by-line against the
+     surrounding code and the approval-policy source, but only the compiler can confirm.
+   - `SubagentTool.kt`'s `org.json` parsing (standard Android API, same as used elsewhere
+     in the ViewModel).
+2. **On-phone smoke test** (only you can do this):
+   - In a chat with tools on and a function-calling model, send the Firebase/Supabase
+     prompt above → you should see the status line "Running 2 subagent(s)…", then the
+     comparison answer, and two **Subagent / spawn_subagent** entries in the tool log.
+   - Ask the model to spawn a subagent that runs code → the subagent must report it can't
+     (no confirmation sheet should ever appear for a subagent).
+   - Kill the network mid-run → the chat should continue with an "Error: subagent failed"
+     result instead of dying.

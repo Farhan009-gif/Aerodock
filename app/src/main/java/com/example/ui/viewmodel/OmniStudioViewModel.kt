@@ -55,9 +55,11 @@ import com.example.data.provider.VideoGenerationRequest
 import com.example.data.repository.OmniRepository
 import com.example.data.security.TinkSecretVault
 import com.example.data.security.VaultSecurityStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -71,6 +73,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 enum class WorkspaceTab {
@@ -3625,7 +3628,14 @@ class OmniStudioViewModel(
                         isReadOnlyHint = synthTool.isReadOnlyHint
                     )
                 )
-                mcpTriples + runCodeTriple
+                val subagentServer = com.example.data.agent.SubagentTool.buildSubagentServerEntity()
+                val subagentToolEntity = com.example.data.agent.SubagentTool.buildSubagentToolEntity()
+                val spawnSubagentTriple = Triple(
+                    subagentServer,
+                    subagentToolEntity,
+                    com.example.data.agent.SubagentTool.buildSubagentToolDefinition()
+                )
+                mcpTriples + runCodeTriple + spawnSubagentTriple
             } else {
                 emptyList()
             }
@@ -3733,6 +3743,222 @@ class OmniStudioViewModel(
         var reportedCompletionTokens = 0
         var reportedCachedInputTokens = 0
         var streamError: NormalizedAiError? = null
+
+        // Headless runner for the built-in spawn_subagent tool: a fresh conversation (system
+        // prompt + brief only, never the parent history) driven through repository.streamChat
+        // until the subagent's final answer, the turn cap, or the timeout. Returns the final
+        // answer (or an "Error: ..." string) as the tool result — it never throws, so a failed
+        // subagent can never break the parent turn. No UI state is touched and no approval
+        // dialog can ever fire: the subagent only inherits tools the check below proves would
+        // auto-run in this loop without asking the user.
+        suspend fun runSubagent(call: ModelToolCallRequest): String {
+            val subStartMs = System.currentTimeMillis()
+            val subRequest = com.example.data.agent.SubagentTool.parseRequest(call.argumentsJson)
+            if (subRequest.task.isBlank()) {
+                return "Error: spawn_subagent needs a non-blank 'task' brief."
+            }
+            val timedResult = try {
+                withTimeoutOrNull(com.example.data.agent.SubagentTool.TIMEOUT_MS) {
+                    val subModelId = subRequest.model ?: currentModelId
+                    val (subProvider, subApiKey, subDescriptor) =
+                        resolveProviderRuntime(currentProvider, subModelId)
+
+                    // Tool inheritance filter. spawn_subagent itself is dropped (depth cap 1:
+                    // subagents cannot spawn subagents) and run_code is dropped (the parent
+                    // loop always asks for confirmation before running code). Live Info tools
+                    // never ask. An MCP tool is kept only when the exact canAutoRun check used
+                    // by the parent tool loop below passes for it right now.
+                    val subToolTriples = enabledToolTriples.filter { triple ->
+                        val name = triple.third.toolName
+                        when {
+                            name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
+                            name == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_TOOL_NAME -> false
+                            com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(name) -> true
+                            else -> {
+                                val srv = triple.first
+                                val toolEnt = triple.second
+                                val convServerKey = "${conv.id}:${srv.id}"
+                                val gate = com.example.data.mcp.ConnectorApprovalPolicy.evaluateToolExecutionGate(
+                                    tool = toolEnt,
+                                    server = srv,
+                                    connectorDefaultPolicies = _uiState.value.connectorDefaultChoices,
+                                    perToolPolicies = _uiState.value.connectorToolChoices,
+                                    confirmedWriteAlwaysToolIds = _uiState.value.confirmedWriteAlwaysTools,
+                                    isConversationReadOnlyApproved = convServerKey in conversationApprovedReadOnlyServers
+                                )
+                                val isWriteDeleteTool =
+                                    com.example.data.mcp.ConnectorApprovalPolicy.isWriteOrDeleteTool(toolEnt) ||
+                                        !toolEnt.isReadOnlyHint
+                                !isWriteDeleteTool && (
+                                    gate == com.example.data.mcp.ToolExecutionGate.AUTO_RUN || (
+                                        toolEnt.isReadOnlyHint && (
+                                            srv.approvalModeEnum() == McpApprovalMode.ALWAYS_ALLOW_READ_ONLY ||
+                                                (srv.approvalModeEnum() == McpApprovalMode.ASK_ONCE_PER_CONVERSATION &&
+                                                    convServerKey in conversationApprovedReadOnlyServers)
+                                            )
+                                        )
+                                    )
+                            }
+                        }
+                    }
+                    val subToolDefinitions: List<McpToolDefinition> =
+                        if (subDescriptor.supportsFunctionCalling) {
+                            com.example.data.provider.PromptCacheManager.sortToolsDeterministically(
+                                subToolTriples.map { it.third }
+                            )
+                        } else {
+                            emptyList()
+                        }
+                    val subToolLookup = subToolTriples.associateBy { it.third.toolName }
+                    val subSystemPrompt = com.example.data.agent.SubagentTool.buildSystemPrompt(subRequest.role)
+                    val subMessages = mutableListOf(
+                        ChatMessagePayload(role = "user", content = subRequest.task)
+                    )
+                    var lastSubText = ""
+                    var subTurn = 0
+                    var finalAnswer: String? = null
+                    while (finalAnswer == null && subTurn < com.example.data.agent.SubagentTool.MAX_TURNS) {
+                        subTurn++
+                        val turnText = StringBuilder()
+                        val turnCalls = mutableListOf<ModelToolCallRequest>()
+                        var turnError: NormalizedAiError? = null
+                        val completionRequest = ChatCompletionRequest(
+                            provider = subProvider,
+                            apiKey = subApiKey,
+                            modelId = subModelId,
+                            messages = subMessages.toList(),
+                            systemPrompt = subSystemPrompt,
+                            temperature = conv.temperature,
+                            maxTokens = conv.maxTokens,
+                            topP = conv.topP,
+                            supportsTemperature = subDescriptor.supportsTemperature,
+                            supportsTopP = subDescriptor.supportsTopP,
+                            supportsSystemPrompt = subDescriptor.supportsSystemPrompt,
+                            tools = subToolDefinitions
+                        )
+                        repository.streamChat(completionRequest).collect { event ->
+                            when (event) {
+                                is ChatStreamEvent.Delta -> turnText.append(event.textChunk)
+                                is ChatStreamEvent.ToolCall -> turnCalls.add(event.call)
+                                is ChatStreamEvent.Error -> turnError = event.error
+                                else -> Unit
+                            }
+                        }
+                        val errNow = turnError
+                        if (errNow != null) {
+                            finalAnswer = "Error: subagent failed — ${errNow.title}: ${errNow.message}"
+                        } else {
+                            if (turnText.isNotBlank()) {
+                                lastSubText = turnText.toString()
+                            }
+                            if (turnCalls.isEmpty() || subToolDefinitions.isEmpty()) {
+                                finalAnswer = turnText.toString()
+                                    .ifBlank { "(Subagent finished with no answer.)" }
+                            } else {
+                                subMessages.add(
+                                    ChatMessagePayload(
+                                        role = "assistant",
+                                        content = turnText.toString(),
+                                        toolCalls = turnCalls.toList()
+                                    )
+                                )
+                                for (subCall in turnCalls) {
+                                    // Only tools from the filtered list can run; anything
+                                    // else (hallucinated names included) gets an error result
+                                    // instead of an approval dialog or an MCP call.
+                                    val subResult: String = when {
+                                        com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(subCall.toolName) -> {
+                                            val isToolEnabled = when (subCall.toolName) {
+                                                com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME ->
+                                                    _uiState.value.liveInfoWebSearchEnabled
+                                                com.example.data.mcp.LiveInfoToolsService.NEWS_HEADLINES_TOOL_NAME ->
+                                                    _uiState.value.liveInfoNewsHeadlinesEnabled
+                                                else -> false
+                                            }
+                                            if (!isToolEnabled) {
+                                                "Error: Tool '${subCall.toolName}' is disabled in Settings > Live info."
+                                            } else {
+                                                repository.executeLiveInfoToolAndLog(
+                                                    conversationId = conv.id,
+                                                    messageId = assistantMsgId,
+                                                    toolName = subCall.toolName,
+                                                    argumentsJson = subCall.argumentsJson,
+                                                    maxSearchesPerMessage = _uiState.value.liveInfoMaxSearchesPerMessage,
+                                                    configuredFeeds = _uiState.value.liveInfoRssFeeds
+                                                ).second.modelResponseText
+                                            }
+                                        }
+                                        else -> {
+                                            val matchedTriple = subToolLookup[subCall.toolName]
+                                            if (matchedTriple == null) {
+                                                "Error: Tool '${subCall.toolName}' is not available to subagents. Subagents only get tools that run without user approval."
+                                            } else {
+                                                val srv = matchedTriple.first
+                                                val unapprovedHost = extractHttpHost(srv.url)?.takeIf {
+                                                    it !in _uiState.value.approvedCleartextHosts
+                                                }
+                                                if (unapprovedHost != null) {
+                                                    "Blocked: Cleartext HTTP host '$unapprovedHost' for MCP server '${srv.name}' is not approved."
+                                                } else {
+                                                    val logEntry = repository.executeMcpToolAndLog(
+                                                        conversationId = conv.id,
+                                                        messageId = assistantMsgId,
+                                                        server = srv,
+                                                        tool = matchedTriple.second,
+                                                        argumentsJson = subCall.argumentsJson
+                                                    )
+                                                    val statusLabel = if (logEntry.isSuccess) "SUCCESS" else "ERROR"
+                                                    "[MCP Tool Result from ${srv.name}/${matchedTriple.second.toolName} ($statusLabel)]\n${logEntry.resultText}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                    subMessages.add(
+                                        ChatMessagePayload(
+                                            role = "tool",
+                                            content = subResult,
+                                            toolCallId = subCall.id,
+                                            toolName = subCall.toolName
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    finalAnswer ?: if (lastSubText.isNotBlank()) {
+                        "[Note: subagent stopped at the ${com.example.data.agent.SubagentTool.MAX_TURNS}-turn limit. Its last message:]\n$lastSubText"
+                    } else {
+                        "Error: subagent used all ${com.example.data.agent.SubagentTool.MAX_TURNS} turns without producing a final answer."
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "Error: subagent failed — ${e.message ?: e.javaClass.simpleName}"
+            }
+            val finalResult = com.example.data.agent.SubagentTool.truncateResult(
+                timedResult ?: "Error: subagent timed out after 5 minutes and was stopped."
+            )
+            // One log row per spawn, like every other tool call, so the run shows up in the
+            // chat's existing tool-call UI (and the subagent's own tool calls are logged by
+            // the repository executors under this same message).
+            dao.insertToolCallLog(
+                ToolCallLogEntity(
+                    id = "tcl_${UUID.randomUUID().toString().take(10)}",
+                    conversationId = conv.id,
+                    messageId = assistantMsgId,
+                    serverId = com.example.data.agent.SubagentTool.SUBAGENT_SERVER_ID,
+                    serverName = com.example.data.agent.SubagentTool.SUBAGENT_SERVER_NAME,
+                    toolName = com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME,
+                    argumentsJson = call.argumentsJson,
+                    resultText = finalResult,
+                    isSuccess = !finalResult.startsWith("Error:"),
+                    isDestructiveOrWrite = false,
+                    durationMs = (System.currentTimeMillis() - subStartMs).coerceAtLeast(1L)
+                )
+            )
+            return finalResult
+        }
 
         while (iteration < maxIterations) {
             if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
@@ -3990,7 +4216,45 @@ class OmniStudioViewModel(
                 )
             )
 
+            // spawn_subagent calls run concurrently (the sequential loop below would make
+            // parallel delegation pointless); results are keyed by call id and handed out in
+            // call order by the loop. Only honoured when the tool was actually offered.
+            val spawnCalls = turnToolCalls.filter {
+                it.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME &&
+                    toolLookupByName.containsKey(com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME)
+            }
+            val spawnResultsByCallId: Map<String, String> = if (spawnCalls.isEmpty()) {
+                emptyMap()
+            } else {
+                _uiState.update {
+                    it.copy(activeToolLoopStatus = "$turnCounter • Running ${spawnCalls.size} subagent(s)…")
+                }
+                coroutineScope {
+                    val deferredResults = spawnCalls.map { spawnCall ->
+                        spawnCall.id to async { runSubagent(spawnCall) }
+                    }
+                    val results = LinkedHashMap<String, String>(deferredResults.size)
+                    for ((callId, deferred) in deferredResults) {
+                        results[callId] = deferred.await()
+                    }
+                    results
+                }
+            }
+
             for (toolCall in turnToolCalls) {
+                // Built-in Subagent delegation: result was computed concurrently above
+                if (spawnResultsByCallId.containsKey(toolCall.id)) {
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(
+                            role = "tool",
+                            content = spawnResultsByCallId[toolCall.id] ?: "Error: subagent did not run.",
+                            toolCallId = toolCall.id,
+                            toolName = toolCall.toolName
+                        )
+                    )
+                    continue
+                }
+
                 val isRunCodeCall = toolCall.toolName == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_TOOL_NAME
                 if (isRunCodeCall) {
                     val synthServer = com.example.data.mcp.JsSandboxExecutor.buildSyntheticServerEntity()
