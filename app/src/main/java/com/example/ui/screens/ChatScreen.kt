@@ -213,6 +213,8 @@ fun ChatWorkspaceScreen(
     onOverrideSpendingLimitOnce: () -> Unit = {},
     onSetContextTrimmingEnabled: (conversationId: String, enabled: Boolean) -> Unit = { _, _ -> },
     onCancelBackgroundSubagents: (String) -> Unit = {},
+    onQueueMessage: () -> Unit = {},
+    onRemoveQueuedMessage: (String) -> Unit = {},
     onSetWorkMode: (WorkMode) -> Unit = {},
     onGenerateMediaInChat: (
         modality: String,
@@ -826,6 +828,8 @@ fun ChatWorkspaceScreen(
                         onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
                         onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
                         onCancelBackgroundSubagents = onCancelBackgroundSubagents,
+                        onQueueMessage = onQueueMessage,
+                        onRemoveQueuedMessage = onRemoveQueuedMessage,
                         onOpenWorkModeSheet = { showWorkModeSheet = true },
                         onRunCodeBlock = onRunCodeBlock,
                         onOpenHtmlPreview = onOpenHtmlPreview
@@ -924,6 +928,8 @@ fun ChatWorkspaceScreen(
                     onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
                     onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
                     onCancelBackgroundSubagents = onCancelBackgroundSubagents,
+                    onQueueMessage = onQueueMessage,
+                    onRemoveQueuedMessage = onRemoveQueuedMessage,
                     onOpenWorkModeSheet = { showWorkModeSheet = true },
                     onRunCodeBlock = onRunCodeBlock,
                     onOpenHtmlPreview = onOpenHtmlPreview
@@ -1047,6 +1053,8 @@ private fun MinimalChatCanvas(
     onOverrideSpendingLimitOnce: () -> Unit = {},
     onSetContextTrimmingEnabled: (conversationId: String, enabled: Boolean) -> Unit = { _, _ -> },
     onCancelBackgroundSubagents: (String) -> Unit = {},
+    onQueueMessage: () -> Unit = {},
+    onRemoveQueuedMessage: (String) -> Unit = {},
     onOpenWorkModeSheet: () -> Unit = {},
     onRunCodeBlock: (language: String, code: String, messageId: String?) -> Unit = { _, _, _ -> },
     onOpenHtmlPreview: (htmlDocument: String, title: String) -> Unit = { _, _ -> }
@@ -1866,12 +1874,80 @@ private fun MinimalChatCanvas(
             }
         }
 
+        // Messages queued while a reply is generating: each sends itself through the
+        // normal send path when a turn ends. This conversation's pills only.
+        val queuedForConversation = uiState.queuedMessages.filter {
+            it.conversationId == activeConversation?.id
+        }
+        if (activeConversation != null && queuedForConversation.isNotEmpty()) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+                    .testTag("chat_queued_messages_row")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Queued",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    queuedForConversation.forEach { queued ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.testTag("queued_message_pill_${queued.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = queued.text,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 150.dp)
+                                )
+                                Icon(
+                                    imageVector = LucideIcons.X,
+                                    contentDescription = "Remove queued message",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clickable { onRemoveQueuedMessage(queued.id) }
+                                        .testTag("remove_queued_message_${queued.id}")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Floating Minimal Input Bar
         MinimalFloatingComposerBar(
             draft = uiState.draftMessage,
             isStreaming = uiState.isStreaming,
             isVoiceListening = uiState.isVoiceListening,
-            enterToSend = uiState.enterToSendEnabled,
+            // shortcut: main composer always gets paragraph Enter (the user asked for a
+            // newline key, not send-on-Enter); re-wire uiState.enterToSendEnabled here
+            // if the Settings toggle should drive this composer again.
+            enterToSend = false,
             editingMessageId = uiState.editingMessageId,
             attachments = currentAttachments,
             onDraftChange = onDraftChange,
@@ -1887,7 +1963,9 @@ private fun MinimalChatCanvas(
             },
             onCancelEdit = onCancelEditMessage,
             onSend = onSendMessage,
-            onStop = onStopGeneration
+            onStop = onStopGeneration,
+            onQueue = onQueueMessage,
+            queuedCount = queuedForConversation.size
         )
     }
 }
@@ -2645,7 +2723,9 @@ private fun MinimalFloatingComposerBar(
     onRemoveAttachment: (Int) -> Unit,
     onCancelEdit: () -> Unit,
     onSend: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onQueue: (() -> Unit)? = null,
+    queuedCount: Int = 0
 ) {
     val composerFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val composerKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -2849,17 +2929,22 @@ private fun MinimalFloatingComposerBar(
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         maxLines = 5,
                         keyboardOptions = KeyboardOptions(
-                            imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default
+                            imeAction = if (enterToSend) ImeAction.Send else ImeAction.None
                         ),
-                        keyboardActions = KeyboardActions(
-                            onSend = {
-                                if (draft.isNotBlank() || attachments.isNotEmpty()) {
-                                    composerFocusManager.clearFocus(force = true)
-                                    composerKeyboard?.hide()
-                                    onSend()
+                        keyboardActions = if (enterToSend) {
+                            KeyboardActions(
+                                onSend = {
+                                    if (draft.isNotBlank() || attachments.isNotEmpty()) {
+                                        composerFocusManager.clearFocus(force = true)
+                                        composerKeyboard?.hide()
+                                        onSend()
+                                    }
                                 }
-                            }
-                        ),
+                            )
+                        } else {
+                            // No send action: Enter inserts a newline (paragraph key).
+                            KeyboardActions.Default
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -2881,6 +2966,27 @@ private fun MinimalFloatingComposerBar(
                         tint = if (isVoiceListening) CoralError else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
+                }
+
+                // Queue-send button: only while streaming (when the accent button is
+                // Stop), only for plain text, and only below the per-chat queue cap.
+                val canQueue = onQueue != null && isStreaming && draft.isNotBlank() &&
+                    attachments.isEmpty() &&
+                    queuedCount < com.example.ui.viewmodel.MAX_QUEUED_MESSAGES_PER_CONVERSATION
+                if (canQueue) {
+                    IconButton(
+                        onClick = { onQueue?.invoke() },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .testTag("composer_queue_button")
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.ArrowUp,
+                            contentDescription = "Queue message to send when the reply finishes",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 // Accent send / stop button on the right

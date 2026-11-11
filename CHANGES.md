@@ -1,167 +1,175 @@
-# Runway — Round 5 (NOT pushed, NOT committed)
+# Runway — Round 6 (NOT pushed, NOT committed)
 
-Base: `origin/main` @ `a80b8e8` (Round 4: work mode — Auto / Agent only /
-Model only). Rounds 1–4 are live on main. This round adds the thing Farhan
-asked for after his X → Y fact-check test on the phone:
+Base: `origin/main` @ `c2ea05e` (Round 5: spawn_subagent_chain — background
+step pipelines). Rounds 1–5 are live on main. This round fixes two composer
+problems Farhan hit on the phone while testing:
 
-**The problem:** a background subagent's result is just a message in the chat.
-Nothing acts on it. So a two-step plan — subagent X gathers claims, subagent Y
-fact-checks them — stalls after X unless the main model orchestrates foreground
-spawns itself (and the free models often refuse, narrate instead of calling,
-or pick background and stop). Farhan chose the app-run fix: a **chain tool**
-that runs the steps itself, in order, feeding each result into the next step.
+1. **While the model is working, he can't send anything.** He typed "hii"
+   during a reply and it just sat in the box — the send button is replaced by
+   Stop for the whole turn.
+2. **The keyboard's Enter key sends instead of making a new paragraph.** He
+   circled the keyboard's send key and asked for "a enter option in keyboard
+   instead of a different paragraph one" — then corrected the direction
+   himself: he wants the **paragraph (newline) key**, not send-on-Enter.
 
 These changes are uncommitted working-tree changes in this staging clone only.
 
-## What changed — `spawn_subagent_chain`
+## Feature A — Send while generating (the message queue)
 
-**A new built-in tool, `spawn_subagent_chain`**, registered exactly like
-`spawn_subagent` (same synthetic "Subagent" server, same gating: tools on,
-function-calling model, not Compare). Work mode treats it like the spawn tool:
-offered in **Auto** and **Agent only**, absent in **Model only**.
+**What changed:** while a reply is generating, a second button appears in the
+composer — an up-arrow next to Stop (testTag `composer_queue_button`). Type a
+message, tap it, and the message is **queued**: the composer clears, and a
+pill with your text appears in a slim "Queued" row above the composer. When
+the current turn ends, the queued message **sends itself** through the normal
+send path, exactly as if you had typed and sent it then.
 
-**Its one input is `steps`** — an array of 1–4 step objects, each with a
-required `task` and an optional `role`. The tool's description teaches the
-model: use it when a later step needs an earlier step's output; write every
-step's task to stand on its own except for referring to "the previous step's
-result"; 2–4 steps.
+**How it works:**
 
-**Chains always run in the background.** There is no `background` option — the
-call returns immediately with *"Background subagent chain started (job …, N
-steps). Each step's result will be posted into this conversation as it
-finishes. Do not wait for it; continue the conversation."* The user keeps
-chatting while the pipeline runs.
+- The queue lives in the ViewModel's UI state as a list of `QueuedMessage`
+  (id, conversationId, text) — in-memory only, per conversation. Tapping the
+  queue button runs `queueMessage()`, which appends the trimmed draft for the
+  open conversation and clears the composer.
+- The pills row sits directly above the composer, **below** the
+  background-subagents row (same Surface styling family), and shows only the
+  open conversation's queue. Each pill is the queued text on one line
+  (truncated) with an ✕ that removes just that entry. No row when the queue
+  is empty.
+- **Draining:** every turn end shares one signal — the UI state's `isStreaming`
+  flag flipping true → false (a reply finishing, erroring, a compare run
+  ending, an in-chat image/video finishing, or **Stop**). A small collector in
+  the ViewModel watches that edge and calls `drainQueuedMessage()`, which pops
+  the open conversation's **first** entry and runs it through the untouched
+  `sendMessage()` — same validation, same slash-commands, same everything. One
+  entry per turn end: sending starts a new turn, and the remaining entries
+  wait for that turn's end. So **Stop + a queued message = steering**: stop a
+  reply going the wrong way and your queued correction fires immediately.
+  Anything you had already typed for the *next* message while the drained one
+  sends is preserved — the drain restores your in-progress draft afterwards.
+- **Targeting choice (and why):** sends in Runway are hard-bound to the open
+  conversation — `sendMessage()` reads the global draft and
+  `activeConversationId`, and there is exactly one stream at a time. So a
+  queue entry only drains while **its** conversation is the open one; entries
+  for other conversations simply wait (their pills are there when you go back
+  to that chat). Retargeting sends at arbitrary conversations would have meant
+  rewriting the send path; this way the normal path is reused untouched.
+- **Guards:** a queue entry never drains into a deleted conversation — the
+  drain checks the conversation still exists and drops that conversation's
+  queue silently if it is gone. Draining is also held while you are editing a
+  message (an edit is never hijacked by a queued send). If `sendMessage()`
+  declines a drained entry because another turn started first, the entry is
+  put back at the front of the queue, not lost.
+- **Cap: 5 queued messages per conversation.** At the cap the queue button
+  hides, and `queueMessage()` refuses further entries.
 
-**Validation happens before anything starts:** fewer than 1 or more than 4
-steps, or any step with a blank task, returns an error tool result explaining
-the limit (*"spawn_subagent_chain needs 1–4 steps, each with a non-blank
-'task' brief. Nothing was started."*) and no job is created. A chain also
-counts as **one** job toward the existing 3-background-jobs cap; if 3 jobs are
-already running, the call returns the same limit error a background spawn
-returns.
+**Honest limits (same rule as background jobs):** the queue is **in-memory
+only**. Kill the app (swipe away, phone restart) and queued messages are gone
+— they were never written anywhere. And a drained message is a *text* send:
+if you attach files after queueing, the drained send goes through the normal
+path with whatever is in the composer at that moment.
 
-## How a chain runs
+## Feature B — Paragraph Enter key in the main composer
 
-- **One snapshot, taken once.** At chain start the app builds the usual
-  subagent run plan (provider + key + model, inherited tool list, chat
-  settings, conversation) exactly as a single spawn does. Steps never re-read
-  live state, so switching chats or models mid-chain can't disturb it.
-- **Steps run sequentially through the same execution core** a normal spawn
-  uses — no second loop. Each step's plan is a copy of the snapshot carrying
-  that step's brief: step 1 gets its task as written; step 2 onwards gets its
-  task plus a divider and the previous step's result under a **"Result of the
-  previous step:"** heading. The previous result is the same text that was
-  posted to the chat, already capped at 6,000 characters by the existing
-  truncation.
-- **Each step keeps its own caps and rules:** 8 turns, 5 minutes, the 429
-  retry, the text-tool-call parser, and the same inherited tools as a normal
-  spawn. Steps can **never** receive `spawn_subagent` or
-  `spawn_subagent_chain` — the depth-cap filter now excludes both names.
-- **Each step posts its own message** into the origin conversation, through
-  the same insertion path background results use:
-  *"Subagent result — Step 2 of 3 · \<step task\>:"* followed by the answer.
-  Each step also writes its own tool-call log row (server "Subagent", tool
-  name `spawn_subagent_chain`), like a normal spawn.
-- **Stop on failure:** if a step's result is an error, it posts as
-  *"Subagent failed — Step k of N · …"* and the chain **stops** — later steps
-  never run, so nothing builds on a failed input. (A step that hits the
-  8-turn cap returns its last message, as a normal spawn does; that is not
-  an error and the chain continues.)
-- **One job in the registry**, labelled **"Chain: \<first step's task\>"**.
-  The composer row counts it once, like any background job. **Cancel works
-  as before:** tapping the row's Cancel stops the running step and later
-  steps never start; results already posted stay in the chat.
+**What changed:** in the **main chat composer only**, the text field no longer
+declares an IME Send action. Its keyboard options now use `ImeAction.None`
+when the composer's `enterToSend` flag is off, and the `onSend` keyboard
+handler is only wired when that flag is on — so the on-screen keyboard shows
+its **return/paragraph key** and pressing Enter starts a new line in the
+multiline field. The on-screen arrow button remains the way to send (and the
+queue button from Feature A is how you send while a reply is generating).
 
-**How to use it** — just ask, for example:
+**How, exactly:** `MinimalChatCanvas` now passes `enterToSend = false` to the
+composer bar, and inside the bar the off-branch uses `ImeAction.None` (it was
+`ImeAction.Default` before) with `KeyboardActions.Default` instead of an
+`onSend` handler. One honest consequence, left visible in a code comment: the
+Settings **"Enter to send" toggle no longer drives the main composer** — the
+stored setting, its vault flow and the Settings switches are untouched, but
+the main composer always uses paragraph Enter now, per Farhan's corrected
+request. Re-wiring the toggle is a two-line change if it is ever wanted back.
 
-> "Use a subagent chain: step 1 collect today's top world-affairs claims
-> with sources; step 2 fact-check the claims from step 1 and flag anything
-> wrong."
-
-The model writes both briefs up front in one `spawn_subagent_chain` call;
-the app carries step 1's result into step 2's brief by itself. No second
-message from you is needed.
+**What it does NOT affect:** the separate legacy `ChatScreen` composer (still
+passes `enterToSend = true`, untouched), the edit-message flow's fields, the
+compare composer, and every Settings/other text field in the app — all
+untouched, Enter behaviour there is exactly as before.
 
 ## Files changed
 
-- **EDITED `app/src/main/java/com/example/data/agent/SubagentTool.kt`** —
-  the chain tool's identity: `SPAWN_SUBAGENT_CHAIN_TOOL_NAME`,
-  `MAX_CHAIN_STEPS = 4`, description + input schema, entity/definition
-  builders mirroring the spawn ones, `SubagentChainStep`, and
-  `parseChainSteps` (malformed input parses to an empty list; the caller
-  rejects it with the limit error).
 - **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`** —
-  everything else:
-  - the chain triple registered beside the spawn triple in tool assembly;
-  - the round-4 work-mode filter now treats the chain like the spawn tool
-    (kept in Agent only, removed in Model only);
-  - the subagent inheritance (depth-cap) filter now drops
-    `spawn_subagent_chain` as well as `spawn_subagent`;
-  - `SubagentRunPlan` gained a `logToolName` field (default
-    `spawn_subagent`) so each chain step logs its row under the chain tool's
-    name;
-  - two helpers extracted from `startBackgroundSubagent` —
-    `registerBackgroundSubagentJob` and `postBackgroundResultMessage` —
-    now shared by single spawns and chains (single-spawn behaviour
-    unchanged);
-  - new `startBackgroundChain`: validate → background-cap check → one
-    plan snapshot → one registered job → sequential step loop
-    (copy plan per step, staple previous result, post per step,
-    stop on failure/cancel);
-  - the tool-call pre-pass routes chain calls to `startBackgroundChain`
-    and hands the loop the immediate "started" result, like background
-    spawns.
+  `QueuedMessage` + `MAX_QUEUED_MESSAGES_PER_CONVERSATION = 5`; the
+  `queuedMessages` UI-state field; the `isStreaming` true→false collector in
+  `init`; `queueMessage()`, `removeQueuedMessage()` and the private
+  `drainQueuedMessage()` (A).
+- **EDITED `app/src/main/java/com/example/ui/screens/ChatScreen.kt`** —
+  `onQueueMessage` / `onRemoveQueuedMessage` plumbed ChatWorkspaceScreen →
+  both MinimalChatCanvas call sites → canvas; the "Queued" pills row above the
+  composer; the composer gains the queue button and `onQueue`/`queuedCount`
+  params; `enterToSend = false` at the main-canvas composer call; the
+  composer's off-branch now uses `ImeAction.None` with no `onSend` handler
+  (A + B).
+- **EDITED `app/src/main/java/com/example/MainActivity.kt`** — two lines wiring
+  `onQueueMessage = viewModel::queueMessage` and
+  `onRemoveQueuedMessage = viewModel::removeQueuedMessage` (A).
 
-No new dependencies. No new screens. No database changes (step results are
-ordinary message rows; step logs are ordinary tool-call log rows).
+No new dependencies. No new screens. No database changes, nothing persisted.
 
 ## Deliberately skipped this round
 
-- **No foreground chains.** A 4-step chain could block a turn for ~20
-  minutes. If an in-turn sequence is needed today, the model can still
-  orchestrate foreground `spawn_subagent` calls itself.
-- **No conditional steps** ("run step 3 only if step 2 says X"), **no
-  parallel branches**, **no editing a running chain** — a chain is a fixed
-  list of briefs, executed in order.
-- **No per-step model choice** — every step uses the chat's current model,
-  like a background spawn without a `model` argument.
-- The Agent-only dispatcher instruction still names `spawn_subagent`; the
-  chain tool is offered alongside it in that mode and its own description
-  explains when to use it.
+- **Attachments in the queue** — v1 is text only. With files attached, the
+  queue button never appears and today's behaviour is unchanged.
+- **A persisted queue** — nothing is written to disk; an app kill loses the
+  queue (see the honest limit above).
+- **Per-conversation send retargeting** — the drain only fires for the open
+  conversation, because that is what the existing send path targets.
+- **Removing the now-inert "Enter to send" Settings toggle** — left in place
+  (stored value, vault flow, switches) rather than rip out settings plumbing
+  in a composer round; the main composer ignores it now.
+- **Enter behaviour everywhere else** — edit-message, compare and Settings
+  fields keep their current behaviour (Feature B is main-composer only).
 
 ## What CI must prove (nothing compiled locally — no Android SDK here)
 
-Written and reviewed by reading, **not compiled**. The full diff was read
-hunk by hunk; brace balance matches HEAD in both files; greps confirm the
-chain name is handled at every point the spawn name is (assembly, mode
-filter, inheritance filter, pre-pass). Compile risks, in order:
+Written and reviewed by reading, **not compiled**. Brace/paren balance of all
+three edited files matches HEAD exactly; the diff was read hunk by hunk.
+Watch, in order:
 
-1. **`startBackgroundChain`** — the largest new block: `basePlan.copy(...)`
-   on the local `SubagentRunPlan` data class, the `steps.size !in 1..maxSteps`
-   check, and the fully-qualified `org.json.JSONObject` for per-step log
-   arguments (the file already uses that fully-qualified form elsewhere).
-2. **The helper extraction** — `startBackgroundSubagent` now calls
-   `registerBackgroundSubagentJob` / `postBackgroundResultMessage`; the moved
-   code is verbatim, but only the compiler confirms nothing was dropped.
-3. **`SubagentRunPlan.logToolName`** — a defaulted field added at the end of
-   the data class; the one construction site (in `buildSubagentPlan`) uses
-   named arguments, so it should be unaffected.
+1. **OmniStudioViewModel.kt** — the drain collector in `init` and
+   `drainQueuedMessage()` (its requeue-on-decline branch reads the draft back
+   after calling `sendMessage()`; the logic is reviewed but only the compiler
+   and a phone can prove the flow).
+2. **ChatScreen.kt** — the queue button's `canQueue` condition and the pills
+   row (new Surface/Row block in the canvas Column), the conditional
+   `keyboardActions` expression, and the new defaulted params on
+   `ChatWorkspaceScreen` / `MinimalChatCanvas` / `MinimalFloatingComposerBar`.
+3. **MainActivity.kt** — the two wiring lines (lowest risk).
 
-## On-phone smoke test (only Farhan can do this)
+**On-phone smoke test** (only Farhan can do this):
 
-1. **The X → Y chain:** in a fresh chat (Auto or Agent only), send:
-   *"Use a subagent chain: step 1 collect today's top world-affairs claims
-   with sources; step 2 fact-check the claims from step 1 and flag anything
-   wrong."* Pass = ONE chain starts (one background row entry), **"Subagent
-   result — Step 1 of 2 · …"** posts with the claims, then **"Subagent
-   result — Step 2 of 2 · …"** posts referencing those same claims — with
-   no further message from you.
-2. **Cancel mid-chain:** start the same chain, tap **Cancel** on the
-   background row after step 1 posts. Pass = step 2 never posts; step 1's
-   result stays in the chat.
-3. **Model only:** switch the work-mode chip to Model only and ask for the
-   same chain. Pass = no chain starts — the chain tool is not offered (the
-   model works itself or says it can't).
-4. **Too many steps:** ask for a chain of 5 steps. Pass = an error result
-   saying the limit is 4 steps, and nothing starts (no background row, no
-   posted results).
+1. Start a long reply, type a message, tap the **queue button** → a pill
+   appears above the composer; when the turn ends, the message sends itself
+   with no further tap.
+2. Queue **two** messages during one turn → they send one per turn, in the
+   order you queued them.
+3. Queue one, then tap **Stop** → the queued message fires immediately after
+   the stop (steering).
+4. Queue one, tap its pill's **✕** → it never sends.
+5. Open the keyboard in the composer → the **return/paragraph key** is shown,
+   Enter starts a new line mid-message, and the on-screen arrow still sends.
+   In Settings, other text fields behave as before.
+
+## Also in this push: round-5 build fix
+
+Build #90 (the round-5 chains push) failed to compile, so chains never reached
+a phone. The cause: round 5 had split one helper out of the background-subagent
+code — `postBackgroundResultMessage`, the piece that posts a finished
+background run's result into the chat. The code it contains saves the message
+to the database, and database saves are *suspend* operations in Kotlin: they
+may only run inside a coroutine. The extracted helper was declared as a plain
+function, so the compiler rejected those two calls ("Suspension functions can
+only be called within coroutine body").
+
+The fix is one word: the helper is now a `suspend fun`. Both places that call
+it — a finished background subagent and each step of a finished chain — already
+run inside coroutines, so nothing else had to change: the result message is
+still saved exactly once per completion, in the same order as before (message
+first, then the job's status update). **No behaviour changes** — background
+subagents, chains and this round's queue/Enter work exactly as described
+above; the code now simply compiles.

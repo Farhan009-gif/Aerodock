@@ -162,6 +162,17 @@ data class BackgroundSubagentJob(
     val status: BackgroundSubagentStatus = BackgroundSubagentStatus.RUNNING
 )
 
+/** Max messages that can wait in one conversation's send queue. */
+const val MAX_QUEUED_MESSAGES_PER_CONVERSATION = 5
+
+/** A message typed while a reply was generating; it is sent through the normal
+ *  send path when the current turn ends. In-memory only: lost if the app dies. */
+data class QueuedMessage(
+    val id: String,
+    val conversationId: String,
+    val text: String
+)
+
 /** Who does tool work in chat: AUTO = the model decides (it may work itself and/or
  *  delegate), AGENT_ONLY = all tool work is delegated to subagents, MODEL_ONLY = the
  *  model works itself and subagents are never offered. Persisted app-wide. */
@@ -260,6 +271,7 @@ data class OmniUiState(
     val pendingToolApproval: PendingToolApprovalRequest? = null,
     val activeToolLoopStatus: String? = null,
     val backgroundSubagentJobs: List<BackgroundSubagentJob> = emptyList(),
+    val queuedMessages: List<QueuedMessage> = emptyList(),
     val omniRouteTerminalLogs: List<String> = listOf(
         "OmniRoute Embedded Terminal v2.5 (Android Localhost Daemon)",
         "Type 'omniroute start', 'omniroute status', 'omniroute combos', 'omniroute video <prompt>', or 'curl http://localhost:20128/health'."
@@ -463,6 +475,15 @@ class OmniStudioViewModel(
         viewModelScope.launch {
             voiceManager.isListening.collect { listening ->
                 _uiState.update { it.copy(isVoiceListening = listening) }
+            }
+        }
+        // isStreaming true -> false is the one signal every turn end shares
+        // (finished, errored or stopped): hand the turn to the send queue.
+        viewModelScope.launch {
+            var wasStreaming = false
+            _uiState.collect { state ->
+                if (wasStreaming && !state.isStreaming) drainQueuedMessage()
+                wasStreaming = state.isStreaming
             }
         }
         viewModelScope.launch {
@@ -3197,6 +3218,67 @@ class OmniStudioViewModel(
         }
     }
 
+    /** Queue the current draft to be sent when the running turn ends (text only, no attachments). */
+    fun queueMessage() {
+        val state = _uiState.value
+        val convId = state.activeConversationId ?: return
+        val text = state.draftMessage.trim()
+        if (text.isEmpty() || state.editingMessageId != null) return
+        if (state.attachedMediaList.isNotEmpty() || !state.attachedImageUri.isNullOrBlank()) return
+        if (state.queuedMessages.count { it.conversationId == convId } >= MAX_QUEUED_MESSAGES_PER_CONVERSATION) return
+        _uiState.update {
+            it.copy(
+                queuedMessages = it.queuedMessages +
+                    QueuedMessage(UUID.randomUUID().toString(), convId, text),
+                draftMessage = ""
+            )
+        }
+    }
+
+    fun removeQueuedMessage(id: String) {
+        _uiState.update { it.copy(queuedMessages = it.queuedMessages.filterNot { q -> q.id == id }) }
+    }
+
+    // Sends the open conversation's first queued message through the untouched
+    // sendMessage() path. Runs on every turn end; one entry per turn end, so the
+    // rest of the queue waits for the turns those sends start.
+    private fun drainQueuedMessage() {
+        val state = _uiState.value
+        if (state.isStreaming || state.editingMessageId != null) return
+        val convId = state.activeConversationId ?: return
+        val next = state.queuedMessages.firstOrNull { it.conversationId == convId } ?: return
+        viewModelScope.launch {
+            if (dao.getConversationById(convId) == null) {
+                // Conversation is gone: its queue goes with it, silently.
+                _uiState.update { s ->
+                    s.copy(queuedMessages = s.queuedMessages.filterNot { it.conversationId == convId })
+                }
+                return@launch
+            }
+            val fresh = _uiState.value
+            if (fresh.isStreaming || fresh.editingMessageId != null || fresh.activeConversationId != convId) {
+                return@launch
+            }
+            if (fresh.queuedMessages.firstOrNull { it.conversationId == convId }?.id != next.id) return@launch
+            _uiState.update { s ->
+                s.copy(queuedMessages = s.queuedMessages.filterNot { it.id == next.id })
+            }
+            val savedDraft = fresh.draftMessage
+            _uiState.update { it.copy(draftMessage = next.text) }
+            sendMessage()
+            if (_uiState.value.draftMessage == next.text) {
+                // sendMessage() declined it (another turn started first): put it back.
+                _uiState.update { s ->
+                    s.copy(queuedMessages = listOf(next) + s.queuedMessages, draftMessage = savedDraft)
+                }
+            } else if (savedDraft.isNotEmpty() && _uiState.value.draftMessage.isEmpty()) {
+                // sendMessage() captured and cleared the draft synchronously; give the
+                // user back anything they had already typed for the next message.
+                _uiState.update { it.copy(draftMessage = savedDraft) }
+            }
+        }
+    }
+
     fun sendMessage() {
         voiceManager.stopSpeaking()
         if (voiceManager.isListening.value) {
@@ -4152,7 +4234,7 @@ class OmniStudioViewModel(
 
         // Posts a finished background run's outcome as a new assistant message in the
         // origin conversation, through the same DAO path normal assistant messages use.
-        fun postBackgroundResultMessage(plan: SubagentRunPlan, content: String) {
+        suspend fun postBackgroundResultMessage(plan: SubagentRunPlan, content: String) {
             val resultMessage = MessageEntity(
                 id = UUID.randomUUID().toString(),
                 conversationId = plan.conversationId,
