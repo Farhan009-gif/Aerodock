@@ -128,6 +128,7 @@ import com.example.ui.theme.runwayIsDarkTheme
 import com.example.ui.theme.MonospaceFontFamily
 
 import com.example.ui.viewmodel.OmniUiState
+import com.example.ui.viewmodel.WorkMode
 import kotlinx.coroutines.launch
 
 private sealed class ThreadDisplayItem {
@@ -212,6 +213,7 @@ fun ChatWorkspaceScreen(
     onOverrideSpendingLimitOnce: () -> Unit = {},
     onSetContextTrimmingEnabled: (conversationId: String, enabled: Boolean) -> Unit = { _, _ -> },
     onCancelBackgroundSubagents: (String) -> Unit = {},
+    onSetWorkMode: (WorkMode) -> Unit = {},
     onGenerateMediaInChat: (
         modality: String,
         prompt: String,
@@ -268,6 +270,7 @@ fun ChatWorkspaceScreen(
     }
 
     var showToolsSheet by rememberSaveable { mutableStateOf(false) }
+    var showWorkModeSheet by rememberSaveable { mutableStateOf(false) }
     var showAttachSheet by rememberSaveable { mutableStateOf(false) }
     var showHtmlCodeInputSheet by rememberSaveable { mutableStateOf(false) }
     var showChatMediaGenerateSheet by rememberSaveable { mutableStateOf(false) }
@@ -578,6 +581,49 @@ fun ChatWorkspaceScreen(
         }
     }
 
+    // Work Mode Bottom Sheet (who does tool work: model, subagents, or auto)
+    if (showWorkModeSheet) {
+        MinimalSheet(
+            onDismiss = { showWorkModeSheet = false },
+            title = "Work mode",
+            modifier = Modifier.testTag("chat_work_mode_bottom_sheet")
+        ) {
+            MinimalToolRow(
+                icon = LucideIcons.Sparkles,
+                title = "Auto",
+                subtitle = "Model decides — it may do the work itself, delegate, or both",
+                isActive = uiState.workMode == WorkMode.AUTO,
+                onClick = {
+                    showWorkModeSheet = false
+                    onSetWorkMode(WorkMode.AUTO)
+                },
+                testTag = "work_mode_auto"
+            )
+            MinimalToolRow(
+                icon = LucideIcons.Bot,
+                title = "Agent only",
+                subtitle = "All tool work goes to subagents — the model only delegates and relays",
+                isActive = uiState.workMode == WorkMode.AGENT_ONLY,
+                onClick = {
+                    showWorkModeSheet = false
+                    onSetWorkMode(WorkMode.AGENT_ONLY)
+                },
+                testTag = "work_mode_agent_only"
+            )
+            MinimalToolRow(
+                icon = LucideIcons.Zap,
+                title = "Model only",
+                subtitle = "No subagents — the model does all the work itself",
+                isActive = uiState.workMode == WorkMode.MODEL_ONLY,
+                onClick = {
+                    showWorkModeSheet = false
+                    onSetWorkMode(WorkMode.MODEL_ONLY)
+                },
+                testTag = "work_mode_model_only"
+            )
+        }
+    }
+
     // "+" Attachment & Enhance Options Bottom Sheet
     if (showAttachSheet) {
         MinimalSheet(
@@ -780,6 +826,7 @@ fun ChatWorkspaceScreen(
                         onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
                         onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
                         onCancelBackgroundSubagents = onCancelBackgroundSubagents,
+                        onOpenWorkModeSheet = { showWorkModeSheet = true },
                         onRunCodeBlock = onRunCodeBlock,
                         onOpenHtmlPreview = onOpenHtmlPreview
                     )
@@ -877,6 +924,7 @@ fun ChatWorkspaceScreen(
                     onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
                     onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
                     onCancelBackgroundSubagents = onCancelBackgroundSubagents,
+                    onOpenWorkModeSheet = { showWorkModeSheet = true },
                     onRunCodeBlock = onRunCodeBlock,
                     onOpenHtmlPreview = onOpenHtmlPreview
                 )
@@ -999,6 +1047,7 @@ private fun MinimalChatCanvas(
     onOverrideSpendingLimitOnce: () -> Unit = {},
     onSetContextTrimmingEnabled: (conversationId: String, enabled: Boolean) -> Unit = { _, _ -> },
     onCancelBackgroundSubagents: (String) -> Unit = {},
+    onOpenWorkModeSheet: () -> Unit = {},
     onRunCodeBlock: (language: String, code: String, messageId: String?) -> Unit = { _, _, _ -> },
     onOpenHtmlPreview: (htmlDocument: String, title: String) -> Unit = { _, _ -> }
 ) {
@@ -1152,20 +1201,51 @@ private fun MinimalChatCanvas(
             }
         }
 
-        // 3. Quiet Status Line under the top bar: "2 skills · 0 tools ready"
-        Box(
-            contentAlignment = Alignment.Center,
+        // 3. Quiet Status Line under the top bar: "2 skills · 0 tools ready" + work-mode chip
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpenSkillsAndToolsSheet)
-                .padding(bottom = 8.dp)
-                .testTag("quiet_skills_tools_status_line")
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "$activeSkillsCount skills · $enabledMcpToolsCount tools ready",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = onOpenSkillsAndToolsSheet)
+                    .testTag("quiet_skills_tools_status_line")
             )
+            Spacer(modifier = Modifier.width(8.dp))
+            Surface(
+                onClick = onOpenWorkModeSheet,
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                modifier = Modifier.testTag("work_mode_chip")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = when (uiState.workMode) {
+                            WorkMode.AGENT_ONLY -> "Agent only"
+                            WorkMode.MODEL_ONLY -> "Model only"
+                            WorkMode.AUTO -> "Auto"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = LucideIcons.ChevronDown,
+                        contentDescription = "Work mode",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
         }
 
         // Compare Mode subtle bar when Compare Mode is active

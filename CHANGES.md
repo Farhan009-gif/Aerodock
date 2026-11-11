@@ -1,146 +1,126 @@
-# Runway — Round 3 (NOT pushed, NOT committed)
+# Runway — Round 4 (NOT pushed, NOT committed)
 
-Base: `origin/main` @ `46b8f87` (Subagents round 2: background subagents +
-unlimited web search). Rounds 1–2 are live on main. This round fixes the two
-failure modes Farhan's on-phone subagent tests exposed:
+Base: `origin/main` @ `7b7369d` (Round 3: text tool-call parser + subagent 429
+retry). Rounds 1–3 are live on main. This round adds the control Farhan asked
+for after testing round 3 on his phone:
 
-1. **Free models print their tool calls as text** instead of returning proper
-   structured calls, so nothing executes.
-2. **Subagent runs die instantly on a provider 429** ("Too Many Requests") —
-   the free routes rate-limit often and the runner had no retry.
+**The problem:** in Auto behaviour, asked to research something, the main model
+did the research *itself* (4 Live Info searches) **and** started a background
+subagent for the same research — two overlapping answers, paid for twice. He
+asked to be able to say: only the agent, only the model, or both when wanted.
 
 These changes are uncommitted working-tree changes in this staging clone only.
 
-## Fix 1 — Text-format tool calls now execute (main chat AND subagents)
+## What changed — Work mode: Auto / Agent only / Model only
 
-**What changed:** when a model's reply finishes, Runway now scans the reply
-text for `<tool_call>...</tool_call>` blocks and recovers them as real tool
-calls. Both Qwen dialects the free LiteRouter routes slip into are understood:
+**A new app-wide setting with three values:**
 
-- **JSON:** `<tool_call> {"name": "search_code", "arguments": {"query": "..."}} </tool_call>`
-  (`arguments` may be an object or a JSON string — both are normalised.)
-- **XML:** `<tool_call> <function=web_search> <parameter=query> some text </parameter> </function> </tool_call>`
-  (parameter values stay strings, except clean `true`/`false` become booleans
-  and clean integers/decimals become numbers.)
+- **Auto** (default) — exactly today's behaviour. The model is offered every
+  tool including `spawn_subagent`, and decides itself: work, delegate, or both.
+- **Agent only** — the main model is offered **only** `spawn_subagent`: no MCP
+  tools, no Live Info, no `run_code`, so it physically cannot do tool work
+  itself. A short dispatcher instruction is also appended to that turn's system
+  prompt ("You are a dispatcher, not the worker… delegate with spawn_subagent,
+  background=true unless the result is needed inside this reply, then relay or
+  summarise… Answer directly only when no tools are needed."). One task, one
+  worker, one answer — no more duplicate research.
+- **Model only** — `spawn_subagent` is simply not offered. The model does
+  everything itself with the normal tools; subagents can never start.
 
-**Where it lives and why:** both the main chat loop and the subagent core
-assemble their (content, toolCalls) pair in `OmniStudioViewModel` from
-`repository.streamChat` events — the repository is a pass-through and cannot
-rewrite text the UI has already streamed. So the parser is **one small pure
-function** — new file `TextToolCallParser.kt` (no Android dependencies) —
-called from exactly those two assembly points, never copied twice:
+**Where it is stored:** the same pattern as the Live Info toggles — a DataStore
+string key (`runway_work_mode`) in `TinkSecretVault` with a `workModeFlow` and
+`setWorkMode`, collected into a new `workMode` field on `OmniUiState`, and set
+through `OmniStudioViewModel.setWorkMode` (which also shows a confirmation
+toast). No database change, no per-conversation column — it is one app-level
+switch, and it survives leaving the chat and restarting the app.
 
-- **Main chat:** on each successful model response, before the attempt's text
-  is committed as final (a 6-line addition to `FailoverStreamSession`,
-  `replaceCurrentAttemptText`, keeps the on-screen message in sync).
-- **Subagent core:** on each subagent turn, before the "no calls = final
-  answer" decision — this is what turns the XML block that used to *become*
-  the subagent's answer back into a real search.
+**How it is enforced:** in `executeModelStream`, at the exact point where the
+turn's tool list is assembled. The full list is computed as today
+(`allToolTriples`), then filtered by mode into the offered list — and because
+`toolDefinitions`, the tool lookup, the round-3 text-call parser's offered
+names, and the spawn pre-pass all derive from that one offered list, the mode
+holds on every path (a text-printed `spawn_subagent` call in Model only mode
+is not recovered either; it stays text).
 
-**How recovered calls rejoin the normal path:** they are appended after any
-structured calls the same response carried (both kinds are handled — decision:
-extract text blocks even when structured calls exist) and then flow through
-the completely unchanged execution machinery. Main-chat approvals still apply
-(a recovered `run_code` still asks first); the subagent inheritance filter and
-its execution-time tool lookup still apply (a recovered call to a tool the
-subagent doesn't have gets the usual error result, not a run).
+**The one subtlety, handled:** subagents inherit their tools from the *full*
+list (`allToolTriples`), not from the mode-filtered offer list — the existing
+inheritance filter (no `spawn_subagent`, no `run_code`, approval-gated tools
+dropped) is unchanged and now reads the full set. Without this, Agent only
+would starve its own subagents: the subagent is the one who needs the real
+tools. In Model only this changes nothing observable — no spawn can occur, so
+the inheritance list is never used.
 
-**Guardrails:**
+**Edge cases:** Compare mode still sends no tools at all in every work mode.
+If tools are globally off for a conversation (`mcpToolsEnabled` false) in
+Agent only mode, the model simply has no tools — nothing is force-spawned; the
+dispatcher instruction still applies to whatever it answers. Background jobs
+(round 2) and the text-call parser (round 3) are otherwise untouched.
 
-- A block is honoured **only if its name matches a tool offered for that
-  request**. Unknown names, malformed JSON/XML and unclosed blocks are left in
-  the reply as plain text — never executed, never crash.
-- At most **8** recovered calls per response.
-- Honoured blocks are **removed from the visible reply**; the prose around
-  them stays.
-- **Streaming caveat:** while a reply is still streaming, the raw
-  `<tool_call>` markup can briefly show; it is cleaned the moment the turn
-  finalises. No mid-stream scrubbing was built.
+## The UI — one chip, no new screens
 
-## Fix 2 — Subagent runs retry on 429 instead of dying
-
-**What changed:** inside the subagent runner only, if the model request fails
-with a rate-limit error, the **same request is retried in place**: wait ~10 s,
-retry; wait ~20 s, retry once more (3 attempts total), then give up with the
-usual error result.
-
-- **Classification reused, not reinvented:** the stream's error already carries
-  the category assigned by the existing `ErrorNormalizer` (the build-#82 work:
-  HTTP 429 *or* rate-limit wording in the body → `ErrorCategory.RATE_LIMIT`).
-  The retry checks exactly that category; every other error fails immediately,
-  as today.
-- Only the model-request step retries — tool executions never do.
-- The run's **5-minute timeout still bounds everything**; the waits eat into
-  it, and if it fires, the timeout result wins. **Stop / background Cancel
-  interrupt a pending wait immediately** (the delay is a coroutine delay in
-  the run's own scope, not a sleep).
-- Nothing new shows in the UI — the spawn simply takes longer while it heals.
-- **Main chat is deliberately out of scope** (it already has its own
-  context-overflow retry, and the user is watching there and can resend).
+- The chat header's quiet status line ("N skills · M tools ready", under the
+  model pill) is now a centred row with a small chip beside the text showing
+  the current mode: **Auto**, **Agent only** or **Model only**, with a ▾.
+  (The status text keeps its old tap behaviour — it still opens the skills &
+  tools sheet.)
+- Tapping the chip opens a "Work mode" bottom sheet — the existing
+  `MinimalSheet` + `MinimalToolRow` pattern, same as the Tools sheet — with
+  the three modes, a one-line description each, and the current one
+  highlighted. Tapping a row sets and persists the mode and closes the sheet.
 
 ## Files changed
 
-- **NEW `app/src/main/java/com/example/data/provider/TextToolCallParser.kt`** —
-  the pure text tool-call parser (both dialects, offered-name validation,
-  8-call cap) — Fix 1.
+- **EDITED `app/src/main/java/com/example/data/security/TinkSecretVault.kt`** —
+  `runway_work_mode` DataStore key, `workModeFlow`, `setWorkMode` (mirrors the
+  Live Info settings exactly).
 - **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`** —
-  main loop: extraction on the successful attempt before its text is committed,
-  recovered calls appended to the turn's calls; subagent core: the model
-  request wrapped in the 429 retry loop, and extraction producing the turn's
-  effective text/calls — Fixes 1 + 2.
-- **EDITED `app/src/main/java/com/example/data/provider/FailoverResolver.kt`** —
-  `FailoverStreamSession.replaceCurrentAttemptText`, so the visible streaming
-  message can be swapped for the cleaned text at finalisation — Fix 1.
-- **NEW `app/src/test/java/com/example/TextToolCallParserTest.kt`** — JVM unit
-  tests (Robolectric runner, like the existing tests, so `org.json` behaves as
-  on-device): JSON dialect, JSON-string arguments, XML dialect with string /
-  integer / decimal / boolean parameters, unknown tool name left as text,
-  malformed and unclosed blocks left as text, multiple calls in one response
-  with prose preserved, no-tools-offered no-op, and the 8-call cap.
+  the `WorkMode` enum + the AGENT_ONLY dispatcher instruction constant, the
+  `workMode` UiState field, the vault-flow collector, `setWorkMode`, and the
+  enforcement in `executeModelStream` (system-prompt append + offered-list
+  filter + the inheritance source switch to `allToolTriples`).
+- **EDITED `app/src/main/java/com/example/ui/screens/ChatScreen.kt`** — the
+  header chip beside the status line, the "Work mode" `MinimalSheet` with
+  three rows, and the `onSetWorkMode` / `onOpenWorkModeSheet` plumbing
+  (screen → both chat canvas call sites).
+- **EDITED `app/src/main/java/com/example/MainActivity.kt`** — one line wiring
+  `onSetWorkMode = viewModel::setWorkMode`.
 
 No new dependencies. No new screens. No database changes.
 
 ## Deliberately skipped this round
 
-- **No mid-stream scrubbing** of `<tool_call>` markup (see the streaming
-  caveat above) — cleaning happens at turn finalisation.
-- **No 429 retry in the main chat loop** — subagent runner only, per above.
-- **Autopilot engine untouched** — it consumes a provider adapter directly,
-  not `repository.streamChat`; the parser is reusable there later if wanted.
-- The parser does not try other text formats (e.g. `<function_calls>` with
-  `<invoke>` blocks) — only the two Qwen dialects actually observed on the
-  phone.
+- **No per-conversation mode** — one app-wide switch, like the Live Info
+  toggles. Per-chat modes would need a conversation column and a migration.
+- **Autopilot is untouched** — the mode governs the chat agent only; the
+  Autopilot command centre assembles its tools separately and does not read
+  `workMode`.
+- **No change to subagent caps or background behaviour** — rounds 1–3 stand.
 
 ## What CI must prove (nothing compiled locally — no Android SDK here)
 
-CI runs `gradle assembleDebug` only — it proves the main code compiles; the
-new unit tests are compiled/run only by `testDebugUnitTest` (e.g. Android
-Studio), which CI does not run. Written and reviewed by reading, **not
-compiled**. Compile risks, in order:
+Written and reviewed by reading, **not compiled**. Watch, in order:
 
-1. **The ViewModel subagent hunks** — the collect wrapped in the retry loop
-   (the per-attempt reset of the text/calls/error accumulators) and the
-   effective-text/effective-calls swap in the turn's else-branch.
-2. **The main-loop hunk** — extraction references `activeModelDescriptor`,
-   `toolDefinitions`, `turnText`, `turnToolCalls`, `initialAssistantMsg` and
-   `failoverSession`, all in scope at the success branch, but only the
-   compiler can confirm.
-3. **`TextToolCallParser.kt`** — plain Kotlin + `org.json`; lowest risk.
+1. **The ViewModel enforcement hunk** — the `when` filter over `WorkMode`, the
+   `stableSystemPrefix` rename (all four `effectiveSystemPrompt` uses must
+   still resolve), and `buildSubagentPlan` reading `allToolTriples`.
+2. **The ChatScreen chip** — the status-line Box became a Row; check the
+   `when (uiState.workMode)` label and that `Box` is still used elsewhere in
+   the file (it is) so no import goes stale.
+3. **The plumbing** — `ChatWorkspaceScreen` is called from exactly one place
+   (MainActivity) and both `MinimalChatCanvas` call sites received the new
+   callback; both new params have defaults, so nothing else can break.
 
-## On-phone smoke test
+## On-phone smoke test (only Farhan can do this)
 
-1. **Subagent headlines (the original failure):** fresh chat, tools on,
-   qwen3-coder:free → *"Use a subagent to search the web for today's top news
-   headlines and summarise them in 3 lines."* If the route emits text-format
-   calls, they should now **execute**: real headlines in the answer, and the
-   subagent's own Live Info entries in the tool log — no raw `<tool_call>`
-   text as the "answer".
-2. **429 self-heal:** run subagents on a free route a few times; a run that
-   hits a 429 should now pause (~10–30 s) and recover instead of instantly
-   returning "Error: subagent failed — Too Many Requests (429)…".
-3. **Regression:** an ordinary structured-call chat (the Firebase/Supabase
-   parallel prompt, a normal GitHub search) behaves exactly as before.
-4. **Fake block stays text:** ask the model something that makes it print an
-   example `<tool_call>` block naming a tool that doesn't exist (e.g.
-   `delete_everything`) — the block must stay visible as plain text and
-   nothing may run.
+1. **Agent only:** set the chip to "Agent only", then ask the Jensen
+   Huang-style research prompt ("research the latest information about X, up
+   to today's date"). Pass = the main model makes **no Live Info calls of its
+   own** — the only tool activity is the spawn; exactly **one** answer comes
+   back (the subagent's, relayed or posted as a background result).
+2. **Model only:** set "Model only", ask "use a subagent to research X".
+   Pass = no spawn occurs and no Subagent log row appears; the model does the
+   work itself with its own tools, or says it cannot delegate in this mode.
+3. **Auto:** set "Auto" and repeat the research prompt — the old behaviour
+   (model may search itself *and* delegate) is possible again, unchanged.
+4. **Persistence:** set any mode, leave the chat (open another chat / restart
+   the app), come back — the chip still shows the mode you picked.

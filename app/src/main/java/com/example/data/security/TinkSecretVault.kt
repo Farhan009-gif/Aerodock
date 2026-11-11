@@ -131,6 +131,7 @@ class TinkSecretVault(private val context: Context) {
         private val KEY_LIVE_INFO_NEWS_HEADLINES_ENABLED = booleanPreferencesKey("runway_live_info_news_headlines_enabled")
         private val KEY_LIVE_INFO_MAX_SEARCHES_PER_MESSAGE = intPreferencesKey("runway_live_info_max_searches_per_message")
         private val KEY_LIVE_INFO_RSS_FEEDS_JSON = stringPreferencesKey("runway_live_info_rss_feeds_json")
+        private val KEY_WORK_MODE = stringPreferencesKey("runway_work_mode")
 
         private fun apiKeyPreferenceKey(providerInstanceId: String) =
             stringPreferencesKey("$ENC_KEY_PREFIX$providerInstanceId")
@@ -224,6 +225,10 @@ class TinkSecretVault(private val context: Context) {
         prefs[KEY_LIVE_INFO_RSS_FEEDS_JSON] ?: ""
     }
 
+    val workModeFlow: Flow<String> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_WORK_MODE] ?: "AUTO"
+    }
+
     val runwayMigrationVerifiedFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
         prefs[KEY_RUNWAY_MIGRATION_VERIFIED] ?: false
     }
@@ -284,6 +289,12 @@ class TinkSecretVault(private val context: Context) {
     suspend fun setLiveInfoRssFeedsJson(json: String) {
         context.omniDataStore.edit { prefs ->
             prefs[KEY_LIVE_INFO_RSS_FEEDS_JSON] = json
+        }
+    }
+
+    suspend fun setWorkMode(mode: String) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_WORK_MODE] = mode
         }
     }
 

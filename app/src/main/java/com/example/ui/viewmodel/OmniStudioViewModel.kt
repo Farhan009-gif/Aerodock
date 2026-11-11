@@ -162,6 +162,18 @@ data class BackgroundSubagentJob(
     val status: BackgroundSubagentStatus = BackgroundSubagentStatus.RUNNING
 )
 
+/** Who does tool work in chat: AUTO = the model decides (it may work itself and/or
+ *  delegate), AGENT_ONLY = all tool work is delegated to subagents, MODEL_ONLY = the
+ *  model works itself and subagents are never offered. Persisted app-wide. */
+enum class WorkMode { AUTO, AGENT_ONLY, MODEL_ONLY }
+
+private const val AGENT_ONLY_DISPATCHER_INSTRUCTION =
+    "Work mode is AGENT ONLY. You are a dispatcher, not the worker: for any task, " +
+        "research or tool work, delegate it with spawn_subagent (background=true unless " +
+        "the user needs the result inside this reply), then relay or summarise the " +
+        "subagent's result. Do not do the work yourself. Answer directly only when no " +
+        "tools are needed."
+
 data class OmniUiState(
     val currentTab: WorkspaceTab = WorkspaceTab.CHAT,
     val onboardingCompleted: Boolean = true,
@@ -317,6 +329,8 @@ data class OmniUiState(
     val liveInfoMaxSearchesPerMessage: Int = com.example.data.mcp.LiveInfoToolsService.DEFAULT_MAX_SEARCHES_PER_MESSAGE,
     val liveInfoRssFeeds: List<com.example.data.mcp.RssFeedConfig> = com.example.data.mcp.LiveInfoToolsService.DEFAULT_RSS_FEEDS,
     val liveInfoSourcesByMessageId: Map<String, List<com.example.data.mcp.LiveInfoSource>> = emptyMap(),
+    // 9b. Work mode (AUTO / AGENT_ONLY / MODEL_ONLY), persisted in the vault
+    val workMode: WorkMode = WorkMode.AUTO,
     // 10. Automatic Provider Failover
     val providerFailoverEnabled: Boolean = false,
     val providerFailoverChain: List<com.example.data.provider.FailoverChainEntry> = emptyList(),
@@ -502,6 +516,16 @@ class OmniStudioViewModel(
                         liveInfoNewsHeadlinesEnabled = newsEnabled,
                         liveInfoMaxSearchesPerMessage = maxSearches,
                         liveInfoRssFeeds = feedsList
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            repository.secretVault.workModeFlow.collect { modeName ->
+                _uiState.update { state ->
+                    state.copy(
+                        workMode = runCatching { WorkMode.valueOf(modeName) }
+                            .getOrDefault(WorkMode.AUTO)
                     )
                 }
             }
@@ -3589,10 +3613,17 @@ class OmniStudioViewModel(
             )
         )
         val deterministicSkillsBlock = com.example.data.provider.PromptCacheManager.formatDeterministicSkillsBlock(activeSkills)
-        val effectiveSystemPrompt = com.example.data.provider.PromptCacheManager.buildStableSystemPrefix(
+        val stableSystemPrefix = com.example.data.provider.PromptCacheManager.buildStableSystemPrefix(
             baseSystemPrompt = conv.systemPrompt,
             skillsBlock = deterministicSkillsBlock
         )
+        // AGENT_ONLY work mode: append the dispatcher instruction for this turn (the
+        // tool filter below also leaves spawn_subagent as the only offered tool).
+        val effectiveSystemPrompt = if (_uiState.value.workMode == WorkMode.AGENT_ONLY) {
+            stableSystemPrefix + "\n\n" + AGENT_ONLY_DISPATCHER_INSTRUCTION
+        } else {
+            stableSystemPrefix
+        }
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
         // Reset per-message web search counter at the start of each turn
@@ -3664,7 +3695,23 @@ class OmniStudioViewModel(
                 emptyList()
             }
 
-        val enabledToolTriples = mcpAndSandboxTriples + liveInfoTriples
+        val allToolTriples = mcpAndSandboxTriples + liveInfoTriples
+        // Work mode decides what the MAIN model is offered this turn: AUTO = everything,
+        // MODEL_ONLY = everything except spawn_subagent, AGENT_ONLY = only spawn_subagent
+        // (it can delegate but cannot do tool work itself). toolDefinitions and
+        // toolLookupByName both derive from this filtered list, so the round-3 text-call
+        // parser and the spawn pre-pass honour the mode too. buildSubagentPlan below
+        // still inherits from allToolTriples — the full set — so a subagent keeps the
+        // real tools it needs in every mode.
+        val enabledToolTriples = when (_uiState.value.workMode) {
+            WorkMode.AGENT_ONLY -> allToolTriples.filter {
+                it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME
+            }
+            WorkMode.MODEL_ONLY -> allToolTriples.filterNot {
+                it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME
+            }
+            WorkMode.AUTO -> allToolTriples
+        }
         val toolDefinitions: List<McpToolDefinition> = com.example.data.provider.PromptCacheManager.sortToolsDeterministically(
             enabledToolTriples.map { it.third }
         )
@@ -3790,12 +3837,14 @@ class OmniStudioViewModel(
             val (subProvider, subApiKey, subDescriptor) =
                 resolveProviderRuntime(currentProvider, subModelId)
 
-            // Tool inheritance filter. spawn_subagent itself is dropped (depth cap 1:
+            // Tool inheritance filter, applied to allToolTriples (the full set, NOT the
+            // work-mode-filtered offer list — in AGENT_ONLY the subagent is the one who
+            // needs the real tools). spawn_subagent itself is dropped (depth cap 1:
             // subagents cannot spawn subagents) and run_code is dropped (the parent
             // loop always asks for confirmation before running code). Live Info tools
             // never ask. An MCP tool is kept only when the exact canAutoRun check used
             // by the parent tool loop below passes for it right now.
-            val subToolTriples = enabledToolTriples.filter { triple ->
+            val subToolTriples = allToolTriples.filter { triple ->
                         val name = triple.third.toolName
                         when {
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
@@ -6422,6 +6471,24 @@ class OmniStudioViewModel(
                 it.copy(
                     liveInfoNewsHeadlinesEnabled = enabled,
                     statusToast = if (enabled) "News headlines (RSS) enabled" else "News headlines disabled"
+                )
+            }
+        }
+    }
+
+    // --- Work Mode (who does tool work: model, subagents, or auto) ---
+
+    fun setWorkMode(mode: WorkMode) {
+        viewModelScope.launch {
+            repository.secretVault.setWorkMode(mode.name)
+            _uiState.update {
+                it.copy(
+                    workMode = mode,
+                    statusToast = when (mode) {
+                        WorkMode.AUTO -> "Work mode: Auto"
+                        WorkMode.AGENT_ONLY -> "Work mode: Agent only — tool work goes to subagents"
+                        WorkMode.MODEL_ONLY -> "Work mode: Model only — no subagents"
+                    }
                 )
             }
         }
