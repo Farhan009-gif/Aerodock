@@ -76,6 +76,7 @@ import com.example.data.local.ProviderPresetType
 import com.example.data.repository.OmniRepository
 import com.example.data.security.BiometricAuthHelper
 import com.example.data.security.TinkSecretVault
+import com.example.groups.GroupsRoot
 import com.example.ui.components.CleartextHostWarningDialog
 import com.example.ui.components.CompareTargetsBottomSheet
 import com.example.ui.components.ConversationSkillsAndToolsSheet
@@ -450,6 +451,8 @@ private fun OmniStudioRoot(
     // Concept A navigation: the app opens on the Home hub; sections are
     // entered from Home and return here via the back affordance / Back.
     var homeVisible by rememberSaveable { mutableStateOf(true) }
+    // Groups feature (Phase 1): full-screen overlay destination entered from Home.
+    var groupsVisible by rememberSaveable { mutableStateOf(false) }
 
     val rootFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val rootKeyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -504,7 +507,7 @@ private fun OmniStudioRoot(
         BackHandler {
             viewModel.closeConnectorsScreen()
         }
-    } else if (!homeVisible) {
+    } else if (!homeVisible && !groupsVisible) {
         BackHandler {
             viewModel.setCompareModeEnabled(false)
             homeVisible = true
@@ -832,7 +835,7 @@ private fun OmniStudioRoot(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                if (!homeVisible) {
+                if (!homeVisible && !groupsVisible) {
                     RunwaySectionHeader(
                         title = if (uiState.showConnectorsScreen) {
                             "Connectors"
@@ -860,7 +863,7 @@ private fun OmniStudioRoot(
                     modifier = Modifier
                         .weight(1f)
                         .tabSwipeGestures(
-                            enabled = !homeVisible && !uiState.showConnectorsScreen,
+                            enabled = !homeVisible && !groupsVisible && !uiState.showConnectorsScreen,
                             screenWidthPx = screenWidthPx,
                             canSwipeLeft = canSwipeLeft,
                             canSwipeRight = canSwipeRight,
@@ -890,11 +893,22 @@ private fun OmniStudioRoot(
                             onOpenAutopilot = { switchToBottomTab(RunwayBottomTab.AUTOPILOT) },
                             onOpenConnect = { switchToBottomTab(RunwayBottomTab.CONNECT) },
                             onOpenMore = { switchToBottomTab(RunwayBottomTab.MORE) },
+                            onOpenGroups = {
+                                groupsVisible = true
+                                homeVisible = false
+                            },
                             onOpenConversation = { conversation ->
                                 viewModel.selectConversation(conversation.id)
                                 switchToBottomTab(RunwayBottomTab.CHAT)
                             },
                             onSelectModel = viewModel::switchActiveConversationModel
+                        )
+                    } else if (groupsVisible) {
+                        GroupsRoot(
+                            onExit = {
+                                groupsVisible = false
+                                homeVisible = true
+                            }
                         )
                     } else if (uiState.showConnectorsScreen) {
                         ConnectorsScreen(

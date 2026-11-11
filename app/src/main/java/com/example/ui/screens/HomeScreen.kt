@@ -64,6 +64,7 @@ fun RunwayHomeScreen(
     onOpenAutopilot: () -> Unit,
     onOpenConnect: () -> Unit,
     onOpenMore: () -> Unit,
+    onOpenGroups: () -> Unit,
     onOpenConversation: (ConversationEntity) -> Unit,
     onSelectModel: (providerId: String, modelId: String) -> Unit,
     modifier: Modifier = Modifier
@@ -304,6 +305,54 @@ fun RunwayHomeScreen(
                         onClick = onOpenConnect,
                         modifier = Modifier.weight(1f)
                     )
+                }
+                Surface(
+                    onClick = onOpenGroups,
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_groups_row")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 15.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.MessageSquare,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Groups",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Discuss & build together",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = LucideIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
                 Surface(
                     onClick = onOpenMore,

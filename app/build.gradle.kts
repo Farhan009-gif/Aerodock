@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.secrets)
+    alias(libs.plugins.google.services)
 }
 
 val kspAwtSafeUncaughtHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
@@ -121,6 +122,14 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+
+    // Firebase (Groups: auth + Firestore) & Google sign-in via Credential Manager
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.googleid)
 
     // Networking
     implementation(libs.okhttp)

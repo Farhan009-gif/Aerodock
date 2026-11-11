@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1038601199045",
+    "project_id": "runway-c7ed3",
+    "storage_bucket": "runway-c7ed3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1038601199045:android:81cfbe5432b05597a77fac",
+        "android_client_info": {
+          "package_name": "com.aistudio.omniaistudio.rxkqpz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1038601199045-cr5qrl7aomi3c212kgupfru16bopu04q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.omniaistudio.rxkqpz",
+            "certificate_hash": "86024770703226c928def40410a6475a835fc308"
+          }
+        },
+        {
+          "client_id": "1038601199045-c82mdkicbu0lv1td64dhir85p292esi2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhWfGsbqWfPsoGKpQl4TWVvP-LJav3M28"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1038601199045-c82mdkicbu0lv1td64dhir85p292esi2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
