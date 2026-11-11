@@ -121,6 +121,12 @@ class FailoverStreamSession(
         currentAttemptBuilder.setLength(0)
     }
 
+    /** Replaces the current attempt's text (e.g. after recovering text-format tool calls from it). */
+    fun replaceCurrentAttemptText(newText: String) {
+        currentAttemptBuilder.setLength(0)
+        currentAttemptBuilder.append(newText)
+    }
+
     /**
      * Commits the current attempt's text once the model call finishes without error.
      */

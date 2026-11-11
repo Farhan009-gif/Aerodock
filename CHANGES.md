@@ -1,167 +1,146 @@
-# Runway Subagents — Round 2 (NOT pushed, NOT committed)
+# Runway — Round 3 (NOT pushed, NOT committed)
 
-Base: `origin/main` @ `70b529e` (Subagents v1, on Groups + Admin dashboard).
-Round 1 shipped `spawn_subagent` (foreground only) and is live on main. This round
-adds two things Farhan asked for after testing v1 on his phone: **unlimited web
-searches** and **background subagents** (chat with the main model while a subagent
-works). These changes are uncommitted working-tree changes in this staging clone only.
+Base: `origin/main` @ `46b8f87` (Subagents round 2: background subagents +
+unlimited web search). Rounds 1–2 are live on main. This round fixes the two
+failure modes Farhan's on-phone subagent tests exposed:
 
-## Change A — Web search limit removed (unlimited)
+1. **Free models print their tool calls as text** instead of returning proper
+   structured calls, so nothing executes.
+2. **Subagent runs die instantly on a provider 429** ("Too Many Requests") —
+   the free routes rate-limit often and the runner had no retry.
 
-**What changed:** the "Web search limit reached (N searches per message)" rejection
-is gone. The main chat and subagents can search as many times as a turn needs.
+These changes are uncommitted working-tree changes in this staging clone only.
 
-**Where the cap lived:** one place — `LiveInfoToolsService.executeWebSearch()`
-checked a per-message counter against a limit (default 3, settable 1–20 in Settings;
-Farhan had it at 5, which is the "5 searches per message" he hit). Both the main
-loop and subagents reach searches through that single function, so removing the
-check there removes it everywhere. The counter itself still counts (stats only,
-never rejects).
+## Fix 1 — Text-format tool calls now execute (main chat AND subagents)
 
-**Also tidied up:**
-- The now-pointless limit parameter was removed from `executeWebSearch`, from
-  `repository.executeLiveInfoToolAndLog`, and from both call sites in the ViewModel.
-- The **"Search limit per message" chips were removed from Settings > Live info** —
-  a control that does nothing would just be confusing. The stored setting, its
-  state field and its setter remain in the code but are now inert (kept to keep
-  this change small; they can be deleted in a later tidy-up).
-- The unit test that asserted the old blocking behaviour now asserts the opposite:
-  a 4th search in the same message runs fine.
+**What changed:** when a model's reply finishes, Runway now scans the reply
+text for `<tool_call>...</tool_call>` blocks and recovers them as real tool
+calls. Both Qwen dialects the free LiteRouter routes slip into are understood:
 
-**What did NOT change:** the ~3-second pause between two actual searches stays
-(it protects the free DuckDuckGo endpoint from hammering — it's a pacing delay,
-not a count cap), and the search cache stays. Accepted risk, as ordered: a
-subagent can now search a lot inside one run — but runs are still bounded by the
-8-turn cap and the 5-minute timeout.
+- **JSON:** `<tool_call> {"name": "search_code", "arguments": {"query": "..."}} </tool_call>`
+  (`arguments` may be an object or a JSON string — both are normalised.)
+- **XML:** `<tool_call> <function=web_search> <parameter=query> some text </parameter> </function> </tool_call>`
+  (parameter values stay strings, except clean `true`/`false` become booleans
+  and clean integers/decimals become numbers.)
 
-## Change B — Background subagents
+**Where it lives and why:** both the main chat loop and the subagent core
+assemble their (content, toolCalls) pair in `OmniStudioViewModel` from
+`repository.streamChat` events — the repository is a pass-through and cannot
+rewrite text the UI has already streamed. So the parser is **one small pure
+function** — new file `TextToolCallParser.kt` (no Android dependencies) —
+called from exactly those two assembly points, never copied twice:
 
-**What changed:** `spawn_subagent` gains a fourth, optional input: **`background`**
-(true/false, default false). Foreground behaviour is exactly round 1.
+- **Main chat:** on each successful model response, before the attempt's text
+  is committed as final (a 6-line addition to `FailoverStreamSession`,
+  `replaceCurrentAttemptText`, keeps the on-screen message in sync).
+- **Subagent core:** on each subagent turn, before the "no calls = final
+  answer" decision — this is what turns the XML block that used to *become*
+  the subagent's answer back into a real search.
 
-With `background=true`:
-- The tool call **returns immediately** — the parent reply finishes normally with
-  a tool result like "Background subagent started (job …). Its result will be
-  posted into this conversation when it finishes. Do not wait for it; continue
-  the conversation." You keep chatting with the main model.
-- When the subagent finishes, its answer appears in the **same conversation** as
-  a new assistant message: **"Subagent result — \<task\>:"** followed by the
-  answer (or **"Subagent failed — \<task\>:"** with the error). If you're looking
-  at that chat it pops in live; if you're elsewhere, it's there when you return.
-- **At most 3 background subagents can run at once** (app-wide). A 4th background
-  spawn gets an error result telling the model the limit is reached; foreground
-  spawns are unaffected.
-- While any background subagent for the open chat is running, a slim row sits
-  directly above the message box: **"◌ N subagent(s) working in background"**
-  with a **Cancel** button. Cancel stops those jobs and they post **nothing**
-  (no "cancelled" message — chosen so a cancelled job leaves no noise).
-- The spawn still writes its tool-call log row (server "Subagent"), and the
-  subagent's own tool calls log exactly like round 1. Same caps as foreground:
-  8 turns, 5 minutes, 6,000-character result.
+**How recovered calls rejoin the normal path:** they are appended after any
+structured calls the same response carried (both kinds are handled — decision:
+extract text blocks even when structured calls exist) and then flow through
+the completely unchanged execution machinery. Main-chat approvals still apply
+(a recovered `run_code` still asks first); the subagent inheritance filter and
+its execution-time tool lookup still apply (a recovered call to a tool the
+subagent doesn't have gets the usual error result, not a run).
 
-**How to use it** — just ask, for example:
+**Guardrails:**
 
-> "Start a background subagent to research the best free TTS APIs and keep
-> chatting with me meanwhile."
+- A block is honoured **only if its name matches a tool offered for that
+  request**. Unknown names, malformed JSON/XML and unclosed blocks are left in
+  the reply as plain text — never executed, never crash.
+- At most **8** recovered calls per response.
+- Honoured blocks are **removed from the visible reply**; the prose around
+  them stays.
+- **Streaming caveat:** while a reply is still streaming, the raw
+  `<tool_call>` markup can briefly show; it is cleaned the moment the turn
+  finalises. No mid-stream scrubbing was built.
 
-The model sets `background=true` itself; the tool's description tells it to do
-so for long tasks or when you may want to keep chatting.
+## Fix 2 — Subagent runs retry on 429 instead of dying
 
-**How it works (short version):** at spawn time the app snapshots everything the
-run needs (provider + key + model, the filtered tool list, chat settings, the
-conversation id) into a "plan", then launches the run on that snapshot in the
-background. That's why switching chats or models mid-run can't disturb it.
-Foreground and background share the same execution core — the round-1 runner was
-split into *build plan* (spawn time) + *execute plan* (any time), not duplicated.
+**What changed:** inside the subagent runner only, if the model request fails
+with a rate-limit error, the **same request is retried in place**: wait ~10 s,
+retry; wait ~20 s, retry once more (3 attempts total), then give up with the
+usual error result.
 
-**Honest limit:** background jobs live in the app process. **If the app is
-killed (swiped away / phone restart), running jobs die with it and no result is
-posted.** No foreground service or WorkManager in this round — that's the
-deliberate v1-of-background trade-off.
+- **Classification reused, not reinvented:** the stream's error already carries
+  the category assigned by the existing `ErrorNormalizer` (the build-#82 work:
+  HTTP 429 *or* rate-limit wording in the body → `ErrorCategory.RATE_LIMIT`).
+  The retry checks exactly that category; every other error fails immediately,
+  as today.
+- Only the model-request step retries — tool executions never do.
+- The run's **5-minute timeout still bounds everything**; the waits eat into
+  it, and if it fires, the timeout result wins. **Stop / background Cancel
+  interrupt a pending wait immediately** (the delay is a coroutine delay in
+  the run's own scope, not a sleep).
+- Nothing new shows in the UI — the spawn simply takes longer while it heals.
+- **Main chat is deliberately out of scope** (it already has its own
+  context-overflow retry, and the user is watching there and can resend).
 
 ## Files changed
 
-- **EDITED `app/src/main/java/com/example/data/mcp/LiveInfoToolsService.kt`** —
-  the search-count rejection block and the limit parameter deleted (Change A).
-- **EDITED `app/src/main/java/com/example/data/repository/OmniRepository.kt`** —
-  `executeLiveInfoToolAndLog` no longer takes/forwards a search limit (A).
-- **EDITED `app/src/main/java/com/example/ui/screens/SettingsAndPhasePreviewScreens.kt`** —
-  the dead "Search limit per message" chips row removed (A).
-- **EDITED `app/src/test/java/com/example/LiveInfoToolsTest.kt`** — the rate-limit
-  test updated: the 4th same-message search now succeeds (A).
-- **EDITED `app/src/main/java/com/example/data/agent/SubagentTool.kt`** — new
-  `background` input in the schema + one description line, `background` field in
-  the parsed request, `MAX_BACKGROUND_JOBS = 3`, and a `taskLabel()` helper for
-  the short task name used in the row and the posted result (B).
+- **NEW `app/src/main/java/com/example/data/provider/TextToolCallParser.kt`** —
+  the pure text tool-call parser (both dialects, offered-name validation,
+  8-call cap) — Fix 1.
 - **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`** —
-  the bulk of Change B: a `BackgroundSubagentJob` registry in UI state (id, task
-  label, conversation, status) + job handles; the round-1 runner split into
-  `buildSubagentPlan` (spawn-time snapshot) and `executeSubagentPlan` (shared
-  core), with `runSubagent` (foreground) and `startBackgroundSubagent`
-  (register → launch → post result message on completion) on top; the tool-call
-  pre-pass now routes background calls to start-and-return and foreground calls
-  to the round-1 concurrent block; a `cancelBackgroundSubagentsForConversation`
-  function for the row's Cancel button. (Also loses the two search-limit call
-  arguments, Change A.)
-- **EDITED `app/src/main/java/com/example/ui/screens/ChatScreen.kt`** — the
-  background-jobs row above the composer (only when this conversation has running
-  jobs) + the `onCancelBackgroundSubagents` callback plumbed through
-  `ChatWorkspaceScreen` → `MinimalChatCanvas` (B).
-- **EDITED `app/src/main/java/com/example/MainActivity.kt`** — one line wiring
-  that callback to the ViewModel (B).
+  main loop: extraction on the successful attempt before its text is committed,
+  recovered calls appended to the turn's calls; subagent core: the model
+  request wrapped in the 429 retry loop, and extraction producing the turn's
+  effective text/calls — Fixes 1 + 2.
+- **EDITED `app/src/main/java/com/example/data/provider/FailoverResolver.kt`** —
+  `FailoverStreamSession.replaceCurrentAttemptText`, so the visible streaming
+  message can be swapped for the cleaned text at finalisation — Fix 1.
+- **NEW `app/src/test/java/com/example/TextToolCallParserTest.kt`** — JVM unit
+  tests (Robolectric runner, like the existing tests, so `org.json` behaves as
+  on-device): JSON dialect, JSON-string arguments, XML dialect with string /
+  integer / decimal / boolean parameters, unknown tool name left as text,
+  malformed and unclosed blocks left as text, multiple calls in one response
+  with prose preserved, no-tools-offered no-op, and the 8-call cap.
 
-No new dependencies. No new screens. No database changes (the posted result is an
-ordinary message row).
-
-## Caps and safety (unchanged from round 1, still apply to background runs)
-
-- Depth cap 1: subagents never get `spawn_subagent` or `run_code`.
-- Subagents only inherit tools that would auto-run without asking you; no
-  approval sheet can ever appear from a subagent (background or foreground).
-- 8 turns / 5 minutes / 6,000 characters per run. Fail-soft: errors post as
-  "Subagent failed — …" (background) or return as an error tool result
-  (foreground); the main chat is never broken by a subagent.
-- The turn's Stop button behaves as before — it stops the current reply, not
-  background jobs. The row's Cancel is the background stop.
+No new dependencies. No new screens. No database changes.
 
 ## Deliberately skipped this round
 
-- **No survival across app kill** (see the honest limit above) — no foreground
-  service, no WorkManager, no persisted job queue.
-- **No job history screen** — finished jobs leave only their posted message;
-  the in-app job list keeps at most the 10 most recent finished entries.
-- **No per-job cancel** — the row's Cancel stops all background jobs of the
-  open conversation at once.
-- The inert search-limit setting plumbing (stored value, state field, setter)
-  was left in place rather than ripped out — behaviour is unlimited either way.
+- **No mid-stream scrubbing** of `<tool_call>` markup (see the streaming
+  caveat above) — cleaning happens at turn finalisation.
+- **No 429 retry in the main chat loop** — subagent runner only, per above.
+- **Autopilot engine untouched** — it consumes a provider adapter directly,
+  not `repository.streamChat`; the parser is reusable there later if wanted.
+- The parser does not try other text formats (e.g. `<function_calls>` with
+  `<invoke>` blocks) — only the two Qwen dialects actually observed on the
+  phone.
 
 ## What CI must prove (nothing compiled locally — no Android SDK here)
 
-Written and reviewed by reading, **not compiled**. Watch:
+CI runs `gradle assembleDebug` only — it proves the main code compiles; the
+new unit tests are compiled/run only by `testDebugUnitTest` (e.g. Android
+Studio), which CI does not run. Written and reviewed by reading, **not
+compiled**. Compile risks, in order:
 
-1. **It compiles.** Main risks, in order:
-   - The ViewModel runner split (`buildSubagentPlan` / `executeSubagentPlan`):
-     the execution body was re-pointed from live locals to the plan snapshot
-     field by field and re-read in full, but only the compiler can confirm every
-     reference landed.
-   - The local `SubagentRunPlan` data class inside `executeModelStream` and the
-     background launch's message insertion (`dao.upsertMessage` +
-     `syncMessageToRunwayTree`, mirroring how the turn's own assistant message
-     is inserted).
-   - The ChatScreen row: it reuses the tool-status banner's exact styling and
-     symbols; the Cancel tap uses the smart-cast conversation inside its
-     null-check block.
-2. **On-phone smoke test** (only Farhan can do this):
-   - Ask for a background research subagent → the reply should finish at once,
-     the "◌ 1 subagent(s) working in background" row should show above the
-     composer, you can send more messages, and the result should land in the
-     chat as "Subagent result — …" when done.
-   - Start one, tap **Cancel** → the row disappears and **no** result message
-     ever appears.
-   - Start background subagents in two different chats → each result lands in
-     its own chat; only 3 can run at once.
-   - Search test: ask for something needing 6+ web searches in one message →
-     no "limit reached" text anywhere (allow for the 3-second pacing between
-     searches).
-   - Foreground regression: the round-1 Firebase/Supabase parallel prompt
-     should behave exactly as before.
+1. **The ViewModel subagent hunks** — the collect wrapped in the retry loop
+   (the per-attempt reset of the text/calls/error accumulators) and the
+   effective-text/effective-calls swap in the turn's else-branch.
+2. **The main-loop hunk** — extraction references `activeModelDescriptor`,
+   `toolDefinitions`, `turnText`, `turnToolCalls`, `initialAssistantMsg` and
+   `failoverSession`, all in scope at the success branch, but only the
+   compiler can confirm.
+3. **`TextToolCallParser.kt`** — plain Kotlin + `org.json`; lowest risk.
+
+## On-phone smoke test
+
+1. **Subagent headlines (the original failure):** fresh chat, tools on,
+   qwen3-coder:free → *"Use a subagent to search the web for today's top news
+   headlines and summarise them in 3 lines."* If the route emits text-format
+   calls, they should now **execute**: real headlines in the answer, and the
+   subagent's own Live Info entries in the tool log — no raw `<tool_call>`
+   text as the "answer".
+2. **429 self-heal:** run subagents on a free route a few times; a run that
+   hits a 429 should now pause (~10–30 s) and recover instead of instantly
+   returning "Error: subagent failed — Too Many Requests (429)…".
+3. **Regression:** an ordinary structured-call chat (the Firebase/Supabase
+   parallel prompt, a normal GitHub search) behaves exactly as before.
+4. **Fake block stays text:** ask the model something that makes it print an
+   example `<tool_call>` block naming a tool that doesn't exist (e.g.
+   `delete_everything`) — the block must stay visible as plain text and
+   nothing may run.

@@ -3898,33 +3898,61 @@ class OmniStudioViewModel(
                             supportsSystemPrompt = subDescriptor.supportsSystemPrompt,
                             tools = subToolDefinitions
                         )
-                        repository.streamChat(completionRequest).collect { event ->
-                            when (event) {
-                                is ChatStreamEvent.Delta -> turnText.append(event.textChunk)
-                                is ChatStreamEvent.ToolCall -> turnCalls.add(event.call)
-                                is ChatStreamEvent.Error -> turnError = event.error
-                                else -> Unit
+                        // Free routes 429 often and a subagent has no user watching,
+                        // so a rate-limited model request retries in place (10s, then
+                        // 20s) instead of killing the run. The 5-minute timeout still
+                        // bounds the total, and cancellation interrupts the wait.
+                        var streamAttempt = 0
+                        while (true) {
+                            turnText.setLength(0)
+                            turnCalls.clear()
+                            turnError = null
+                            repository.streamChat(completionRequest).collect { event ->
+                                when (event) {
+                                    is ChatStreamEvent.Delta -> turnText.append(event.textChunk)
+                                    is ChatStreamEvent.ToolCall -> turnCalls.add(event.call)
+                                    is ChatStreamEvent.Error -> turnError = event.error
+                                    else -> Unit
+                                }
                             }
+                            val attemptError = turnError
+                            if (attemptError == null ||
+                                attemptError.category != com.example.data.provider.ErrorCategory.RATE_LIMIT ||
+                                streamAttempt >= 2
+                            ) {
+                                break
+                            }
+                            streamAttempt++
+                            kotlinx.coroutines.delay(if (streamAttempt == 1) 10_000L else 20_000L)
                         }
                         val errNow = turnError
                         if (errNow != null) {
                             finalAnswer = "Error: subagent failed — ${errNow.title}: ${errNow.message}"
                         } else {
-                            if (turnText.isNotBlank()) {
-                                lastSubText = turnText.toString()
+                            // Free routes sometimes print tool calls as <tool_call> text
+                            // instead of structured calls; recover any that name a tool
+                            // this subagent was offered, then treat them like real calls.
+                            val extracted = com.example.data.provider.TextToolCallParser.extract(
+                                turnText.toString(),
+                                subToolDefinitions.map { it.toolName }.toSet()
+                            )
+                            val effectiveText = extracted.cleanedContent
+                            val effectiveCalls = turnCalls + extracted.calls
+                            if (effectiveText.isNotBlank()) {
+                                lastSubText = effectiveText
                             }
-                            if (turnCalls.isEmpty() || subToolDefinitions.isEmpty()) {
-                                finalAnswer = turnText.toString()
+                            if (effectiveCalls.isEmpty() || subToolDefinitions.isEmpty()) {
+                                finalAnswer = effectiveText
                                     .ifBlank { "(Subagent finished with no answer.)" }
                             } else {
                                 subMessages.add(
                                     ChatMessagePayload(
                                         role = "assistant",
-                                        content = turnText.toString(),
-                                        toolCalls = turnCalls.toList()
+                                        content = effectiveText,
+                                        toolCalls = effectiveCalls
                                     )
                                 )
-                                for (subCall in turnCalls) {
+                                for (subCall in effectiveCalls) {
                                     // Only tools from the filtered list can run; anything
                                     // else (hallucinated names included) gets an error result
                                     // instead of an approval dialog or an MCP call.
@@ -4214,6 +4242,34 @@ class OmniStudioViewModel(
                     reportedPromptTokens += attemptPromptTokens
                     reportedCompletionTokens += attemptCompletionTokens
                     reportedCachedInputTokens += attemptCachedInputTokens
+                    // Free routes sometimes print tool calls as <tool_call> text
+                    // instead of structured calls; recover any that name an offered
+                    // tool before this attempt's text is committed as final.
+                    val offeredNames = if (activeModelDescriptor.supportsFunctionCalling) {
+                        toolDefinitions.map { it.toolName }.toSet()
+                    } else {
+                        emptySet()
+                    }
+                    if (offeredNames.isNotEmpty()) {
+                        val extracted = com.example.data.provider.TextToolCallParser.extract(
+                            turnText.toString(),
+                            offeredNames
+                        )
+                        if (extracted.calls.isNotEmpty()) {
+                            turnText.setLength(0)
+                            turnText.append(extracted.cleanedContent)
+                            turnToolCalls.addAll(extracted.calls)
+                            failoverSession.replaceCurrentAttemptText(extracted.cleanedContent)
+                            dao.upsertMessage(
+                                initialAssistantMsg.copy(
+                                    content = failoverSession.visibleText,
+                                    providerInstanceId = currentProvider.id,
+                                    modelId = currentModelId,
+                                    isStreaming = true
+                                )
+                            )
+                        }
+                    }
                     failoverSession.commitCurrentAttempt()
                     break
                 }
