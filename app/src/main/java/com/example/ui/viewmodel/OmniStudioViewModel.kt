@@ -152,6 +152,16 @@ data class PendingToolApprovalRequest(
     val decisionDeferred: CompletableDeferred<ToolApprovalDecision> = CompletableDeferred()
 )
 
+enum class BackgroundSubagentStatus { RUNNING, DONE, FAILED, CANCELLED }
+
+/** One background `spawn_subagent` job, tracked so the chat can show/cancel it while it runs. */
+data class BackgroundSubagentJob(
+    val id: String,
+    val taskLabel: String,
+    val conversationId: String,
+    val status: BackgroundSubagentStatus = BackgroundSubagentStatus.RUNNING
+)
+
 data class OmniUiState(
     val currentTab: WorkspaceTab = WorkspaceTab.CHAT,
     val onboardingCompleted: Boolean = true,
@@ -237,6 +247,7 @@ data class OmniUiState(
     val mcpDiscoverySummaries: Map<String, McpDiscoveryResult> = emptyMap(),
     val pendingToolApproval: PendingToolApprovalRequest? = null,
     val activeToolLoopStatus: String? = null,
+    val backgroundSubagentJobs: List<BackgroundSubagentJob> = emptyList(),
     val omniRouteTerminalLogs: List<String> = listOf(
         "OmniRoute Embedded Terminal v2.5 (Android Localhost Daemon)",
         "Type 'omniroute start', 'omniroute status', 'omniroute combos', 'omniroute video <prompt>', or 'curl http://localhost:20128/health'."
@@ -427,6 +438,8 @@ class OmniStudioViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var activeStreamJob: Job? = null
+    // Live handles for background subagent jobs, keyed by BackgroundSubagentJob.id
+    private val backgroundSubagentHandles = mutableMapOf<String, Job>()
     // Tracks servers approved once for the active conversation (McpApprovalMode.ASK_ONCE_PER_CONVERSATION)
     private val conversationApprovedReadOnlyServers = mutableSetOf<String>()
     // Tracks conversations where the user clicked "Always allow for this chat" for sandboxed run_code
@@ -3744,31 +3757,45 @@ class OmniStudioViewModel(
         var reportedCachedInputTokens = 0
         var streamError: NormalizedAiError? = null
 
-        // Headless runner for the built-in spawn_subagent tool: a fresh conversation (system
-        // prompt + brief only, never the parent history) driven through repository.streamChat
-        // until the subagent's final answer, the turn cap, or the timeout. Returns the final
-        // answer (or an "Error: ..." string) as the tool result — it never throws, so a failed
-        // subagent can never break the parent turn. No UI state is touched and no approval
-        // dialog can ever fire: the subagent only inherits tools the check below proves would
-        // auto-run in this loop without asking the user.
-        suspend fun runSubagent(call: ModelToolCallRequest): String {
-            val subStartMs = System.currentTimeMillis()
-            val subRequest = com.example.data.agent.SubagentTool.parseRequest(call.argumentsJson)
-            if (subRequest.task.isBlank()) {
-                return "Error: spawn_subagent needs a non-blank 'task' brief."
-            }
-            val timedResult = try {
-                withTimeoutOrNull(com.example.data.agent.SubagentTool.TIMEOUT_MS) {
-                    val subModelId = subRequest.model ?: currentModelId
-                    val (subProvider, subApiKey, subDescriptor) =
-                        resolveProviderRuntime(currentProvider, subModelId)
+        // Immutable snapshot of everything one subagent run needs, captured at spawn time.
+        // Foreground spawns use it immediately; background spawns carry it into a
+        // viewModelScope job, so a run never reads live UI state after the turn has ended.
+        data class SubagentRunPlan(
+            val argumentsJson: String,
+            val request: com.example.data.agent.SubagentTool.SubagentRequest,
+            val conversationId: String,
+            val assistantMessageId: String,
+            val provider: ProviderInstanceEntity,
+            val apiKey: String,
+            val descriptor: ModelDescriptorEntity,
+            val modelId: String,
+            val toolTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>>,
+            val temperature: Float,
+            val maxTokens: Int,
+            val topP: Float,
+            val webSearchEnabled: Boolean,
+            val newsHeadlinesEnabled: Boolean,
+            val rssFeeds: List<com.example.data.mcp.RssFeedConfig>,
+            val approvedCleartextHosts: Set<String>
+        )
 
-                    // Tool inheritance filter. spawn_subagent itself is dropped (depth cap 1:
-                    // subagents cannot spawn subagents) and run_code is dropped (the parent
-                    // loop always asks for confirmation before running code). Live Info tools
-                    // never ask. An MCP tool is kept only when the exact canAutoRun check used
-                    // by the parent tool loop below passes for it right now.
-                    val subToolTriples = enabledToolTriples.filter { triple ->
+        // Spawn-time plan builder: resolves the provider and computes the subagent's
+        // inherited tool list (the filter below). Reads live state, so it must be called
+        // at spawn time even for background spawns.
+        suspend fun buildSubagentPlan(
+            call: ModelToolCallRequest,
+            subRequest: com.example.data.agent.SubagentTool.SubagentRequest
+        ): SubagentRunPlan {
+            val subModelId = subRequest.model ?: currentModelId
+            val (subProvider, subApiKey, subDescriptor) =
+                resolveProviderRuntime(currentProvider, subModelId)
+
+            // Tool inheritance filter. spawn_subagent itself is dropped (depth cap 1:
+            // subagents cannot spawn subagents) and run_code is dropped (the parent
+            // loop always asks for confirmation before running code). Live Info tools
+            // never ask. An MCP tool is kept only when the exact canAutoRun check used
+            // by the parent tool loop below passes for it right now.
+            val subToolTriples = enabledToolTriples.filter { triple ->
                         val name = triple.third.toolName
                         when {
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
@@ -3801,15 +3828,50 @@ class OmniStudioViewModel(
                             }
                         }
                     }
+            return SubagentRunPlan(
+                argumentsJson = call.argumentsJson,
+                request = subRequest,
+                conversationId = conv.id,
+                assistantMessageId = assistantMsgId,
+                provider = subProvider,
+                apiKey = subApiKey,
+                descriptor = subDescriptor,
+                modelId = subModelId,
+                toolTriples = subToolTriples,
+                temperature = conv.temperature,
+                maxTokens = conv.maxTokens,
+                topP = conv.topP,
+                webSearchEnabled = _uiState.value.liveInfoWebSearchEnabled,
+                newsHeadlinesEnabled = _uiState.value.liveInfoNewsHeadlinesEnabled,
+                rssFeeds = _uiState.value.liveInfoRssFeeds,
+                approvedCleartextHosts = _uiState.value.approvedCleartextHosts
+            )
+        }
+
+        // Headless execution core shared by foreground and background spawns: a fresh
+        // conversation (system prompt + brief only, never the parent history) driven
+        // through repository.streamChat until the subagent's final answer, the turn cap,
+        // or the timeout. Returns the final answer (or an "Error: ..." string) — it never
+        // throws, so a failed subagent can never break the parent turn. No approval dialog
+        // can ever fire: the plan's tool list was filtered at spawn time (see above).
+        suspend fun executeSubagentPlan(plan: SubagentRunPlan): String {
+            val subStartMs = System.currentTimeMillis()
+            val subRequest = plan.request
+            val subProvider = plan.provider
+            val subApiKey = plan.apiKey
+            val subDescriptor = plan.descriptor
+            val subModelId = plan.modelId
+            val timedResult = try {
+                withTimeoutOrNull(com.example.data.agent.SubagentTool.TIMEOUT_MS) {
                     val subToolDefinitions: List<McpToolDefinition> =
                         if (subDescriptor.supportsFunctionCalling) {
                             com.example.data.provider.PromptCacheManager.sortToolsDeterministically(
-                                subToolTriples.map { it.third }
+                                plan.toolTriples.map { it.third }
                             )
                         } else {
                             emptyList()
                         }
-                    val subToolLookup = subToolTriples.associateBy { it.third.toolName }
+                    val subToolLookup = plan.toolTriples.associateBy { it.third.toolName }
                     val subSystemPrompt = com.example.data.agent.SubagentTool.buildSystemPrompt(subRequest.role)
                     val subMessages = mutableListOf(
                         ChatMessagePayload(role = "user", content = subRequest.task)
@@ -3828,9 +3890,9 @@ class OmniStudioViewModel(
                             modelId = subModelId,
                             messages = subMessages.toList(),
                             systemPrompt = subSystemPrompt,
-                            temperature = conv.temperature,
-                            maxTokens = conv.maxTokens,
-                            topP = conv.topP,
+                            temperature = plan.temperature,
+                            maxTokens = plan.maxTokens,
+                            topP = plan.topP,
                             supportsTemperature = subDescriptor.supportsTemperature,
                             supportsTopP = subDescriptor.supportsTopP,
                             supportsSystemPrompt = subDescriptor.supportsSystemPrompt,
@@ -3870,21 +3932,20 @@ class OmniStudioViewModel(
                                         com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(subCall.toolName) -> {
                                             val isToolEnabled = when (subCall.toolName) {
                                                 com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME ->
-                                                    _uiState.value.liveInfoWebSearchEnabled
+                                                    plan.webSearchEnabled
                                                 com.example.data.mcp.LiveInfoToolsService.NEWS_HEADLINES_TOOL_NAME ->
-                                                    _uiState.value.liveInfoNewsHeadlinesEnabled
+                                                    plan.newsHeadlinesEnabled
                                                 else -> false
                                             }
                                             if (!isToolEnabled) {
                                                 "Error: Tool '${subCall.toolName}' is disabled in Settings > Live info."
                                             } else {
                                                 repository.executeLiveInfoToolAndLog(
-                                                    conversationId = conv.id,
-                                                    messageId = assistantMsgId,
+                                                    conversationId = plan.conversationId,
+                                                    messageId = plan.assistantMessageId,
                                                     toolName = subCall.toolName,
                                                     argumentsJson = subCall.argumentsJson,
-                                                    maxSearchesPerMessage = _uiState.value.liveInfoMaxSearchesPerMessage,
-                                                    configuredFeeds = _uiState.value.liveInfoRssFeeds
+                                                    configuredFeeds = plan.rssFeeds
                                                 ).second.modelResponseText
                                             }
                                         }
@@ -3895,14 +3956,14 @@ class OmniStudioViewModel(
                                             } else {
                                                 val srv = matchedTriple.first
                                                 val unapprovedHost = extractHttpHost(srv.url)?.takeIf {
-                                                    it !in _uiState.value.approvedCleartextHosts
+                                                    it !in plan.approvedCleartextHosts
                                                 }
                                                 if (unapprovedHost != null) {
                                                     "Blocked: Cleartext HTTP host '$unapprovedHost' for MCP server '${srv.name}' is not approved."
                                                 } else {
                                                     val logEntry = repository.executeMcpToolAndLog(
-                                                        conversationId = conv.id,
-                                                        messageId = assistantMsgId,
+                                                        conversationId = plan.conversationId,
+                                                        messageId = plan.assistantMessageId,
                                                         server = srv,
                                                         tool = matchedTriple.second,
                                                         argumentsJson = subCall.argumentsJson
@@ -3945,12 +4006,12 @@ class OmniStudioViewModel(
             dao.insertToolCallLog(
                 ToolCallLogEntity(
                     id = "tcl_${UUID.randomUUID().toString().take(10)}",
-                    conversationId = conv.id,
-                    messageId = assistantMsgId,
+                    conversationId = plan.conversationId,
+                    messageId = plan.assistantMessageId,
                     serverId = com.example.data.agent.SubagentTool.SUBAGENT_SERVER_ID,
                     serverName = com.example.data.agent.SubagentTool.SUBAGENT_SERVER_NAME,
                     toolName = com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME,
-                    argumentsJson = call.argumentsJson,
+                    argumentsJson = plan.argumentsJson,
                     resultText = finalResult,
                     isSuccess = !finalResult.startsWith("Error:"),
                     isDestructiveOrWrite = false,
@@ -3958,6 +4019,110 @@ class OmniStudioViewModel(
                 )
             )
             return finalResult
+        }
+
+        // Foreground spawn (round 1 behaviour): build the plan and run it now, blocking
+        // this turn until the subagent finishes.
+        suspend fun runSubagent(call: ModelToolCallRequest): String {
+            val subRequest = com.example.data.agent.SubagentTool.parseRequest(call.argumentsJson)
+            if (subRequest.task.isBlank()) {
+                return "Error: spawn_subagent needs a non-blank 'task' brief."
+            }
+            return try {
+                executeSubagentPlan(buildSubagentPlan(call, subRequest))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "Error: subagent failed — ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+
+        // Background spawn: snapshot the plan, register the job, launch it in
+        // viewModelScope and return immediately. On completion the result is posted as a
+        // new assistant message in the origin conversation — unless the user cancelled
+        // the job meanwhile, in which case nothing is posted.
+        suspend fun startBackgroundSubagent(
+            call: ModelToolCallRequest,
+            subRequest: com.example.data.agent.SubagentTool.SubagentRequest
+        ): String {
+            if (subRequest.task.isBlank()) {
+                return "Error: spawn_subagent needs a non-blank 'task' brief."
+            }
+            val maxJobs = com.example.data.agent.SubagentTool.MAX_BACKGROUND_JOBS
+            val runningCount = _uiState.value.backgroundSubagentJobs.count {
+                it.status == BackgroundSubagentStatus.RUNNING
+            }
+            if (runningCount >= maxJobs) {
+                return "Error: background subagent limit reached — $maxJobs background subagents are already running. Wait for one to finish, or run this task in the foreground (background=false)."
+            }
+            val plan = try {
+                buildSubagentPlan(call, subRequest)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return "Error: subagent failed — ${e.message ?: e.javaClass.simpleName}"
+            }
+            val jobId = "subjob_${UUID.randomUUID().toString().take(10)}"
+            val label = com.example.data.agent.SubagentTool.taskLabel(subRequest.task)
+            _uiState.update { state ->
+                // shortcut: finished entries are pruned past the newest 10 — the posted
+                // result message in the conversation is the durable record of a job.
+                val running = state.backgroundSubagentJobs.filter {
+                    it.status == BackgroundSubagentStatus.RUNNING
+                }
+                val finished = state.backgroundSubagentJobs.filter {
+                    it.status != BackgroundSubagentStatus.RUNNING
+                }
+                state.copy(
+                    backgroundSubagentJobs = running + finished.takeLast(10) +
+                        BackgroundSubagentJob(
+                            id = jobId,
+                            taskLabel = label,
+                            conversationId = plan.conversationId
+                        )
+                )
+            }
+            val handle = viewModelScope.launch {
+                val result = try {
+                    executeSubagentPlan(plan)
+                } catch (e: CancellationException) {
+                    updateBackgroundSubagentStatus(jobId, BackgroundSubagentStatus.CANCELLED)
+                    backgroundSubagentHandles.remove(jobId)
+                    throw e
+                }
+                val stillRunning = _uiState.value.backgroundSubagentJobs.any {
+                    it.id == jobId && it.status == BackgroundSubagentStatus.RUNNING
+                }
+                if (stillRunning) {
+                    val failed = result.startsWith("Error:")
+                    val resultMessage = MessageEntity(
+                        id = UUID.randomUUID().toString(),
+                        conversationId = plan.conversationId,
+                        role = "ASSISTANT",
+                        content = if (failed) {
+                            "Subagent failed — $label:\n\n$result"
+                        } else {
+                            "Subagent result — $label:\n\n$result"
+                        },
+                        providerInstanceId = plan.provider.id,
+                        modelId = plan.modelId,
+                        createdAt = System.currentTimeMillis()
+                    )
+                    dao.upsertMessage(resultMessage)
+                    com.example.data.local.RunwayDataMigrationManager.syncMessageToRunwayTree(
+                        dao = dao,
+                        message = resultMessage,
+                        providerName = plan.provider.displayName
+                    )
+                    updateBackgroundSubagentStatus(
+                        jobId,
+                        if (failed) BackgroundSubagentStatus.FAILED else BackgroundSubagentStatus.DONE
+                    )
+                }
+                backgroundSubagentHandles.remove(jobId)
+            }
+            backgroundSubagentHandles[jobId] = handle
+            return "Background subagent started (job $jobId). Its result will be posted into this conversation when it finishes. Do not wait for it; continue the conversation."
         }
 
         while (iteration < maxIterations) {
@@ -4216,28 +4381,37 @@ class OmniStudioViewModel(
                 )
             )
 
-            // spawn_subagent calls run concurrently (the sequential loop below would make
-            // parallel delegation pointless); results are keyed by call id and handed out in
-            // call order by the loop. Only honoured when the tool was actually offered.
+            // spawn_subagent calls are resolved before the sequential loop below:
+            // background spawns start now and return immediately (their results are
+            // posted into the conversation later), foreground spawns run concurrently
+            // (the sequential loop would make parallel delegation pointless). Results
+            // are keyed by call id and handed out in call order by the loop. Only
+            // honoured when the tool was actually offered.
             val spawnCalls = turnToolCalls.filter {
                 it.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME &&
                     toolLookupByName.containsKey(com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME)
             }
-            val spawnResultsByCallId: Map<String, String> = if (spawnCalls.isEmpty()) {
-                emptyMap()
-            } else {
+            val spawnResultsByCallId = LinkedHashMap<String, String>()
+            val foregroundSpawnCalls = mutableListOf<ModelToolCallRequest>()
+            for (spawnCall in spawnCalls) {
+                val spawnRequest = com.example.data.agent.SubagentTool.parseRequest(spawnCall.argumentsJson)
+                if (spawnRequest.background) {
+                    spawnResultsByCallId[spawnCall.id] = startBackgroundSubagent(spawnCall, spawnRequest)
+                } else {
+                    foregroundSpawnCalls.add(spawnCall)
+                }
+            }
+            if (foregroundSpawnCalls.isNotEmpty()) {
                 _uiState.update {
-                    it.copy(activeToolLoopStatus = "$turnCounter • Running ${spawnCalls.size} subagent(s)…")
+                    it.copy(activeToolLoopStatus = "$turnCounter • Running ${foregroundSpawnCalls.size} subagent(s)…")
                 }
                 coroutineScope {
-                    val deferredResults = spawnCalls.map { spawnCall ->
+                    val deferredResults = foregroundSpawnCalls.map { spawnCall ->
                         spawnCall.id to async { runSubagent(spawnCall) }
                     }
-                    val results = LinkedHashMap<String, String>(deferredResults.size)
                     for ((callId, deferred) in deferredResults) {
-                        results[callId] = deferred.await()
+                        spawnResultsByCallId[callId] = deferred.await()
                     }
-                    results
                 }
             }
 
@@ -4369,7 +4543,6 @@ class OmniStudioViewModel(
                         messageId = assistantMsgId,
                         toolName = toolCall.toolName,
                         argumentsJson = toolCall.argumentsJson,
-                        maxSearchesPerMessage = _uiState.value.liveInfoMaxSearchesPerMessage,
                         configuredFeeds = _uiState.value.liveInfoRssFeeds
                     )
 
@@ -6196,6 +6369,36 @@ class OmniStudioViewModel(
                 )
             }
         }
+    }
+
+    private fun updateBackgroundSubagentStatus(jobId: String, status: BackgroundSubagentStatus) {
+        _uiState.update { state ->
+            state.copy(
+                backgroundSubagentJobs = state.backgroundSubagentJobs.map { job ->
+                    if (job.id == jobId) job.copy(status = status) else job
+                }
+            )
+        }
+    }
+
+    /**
+     * Cancels every running background subagent of one conversation (the chat row's Cancel
+     * button). Cancelled jobs post no result message.
+     */
+    fun cancelBackgroundSubagentsForConversation(conversationId: String) {
+        val runningIds = _uiState.value.backgroundSubagentJobs
+            .filter { it.conversationId == conversationId && it.status == BackgroundSubagentStatus.RUNNING }
+            .map { it.id }
+        if (runningIds.isEmpty()) return
+        val idSet = runningIds.toSet()
+        _uiState.update { state ->
+            state.copy(
+                backgroundSubagentJobs = state.backgroundSubagentJobs.map { job ->
+                    if (job.id in idSet) job.copy(status = BackgroundSubagentStatus.CANCELLED) else job
+                }
+            )
+        }
+        runningIds.forEach { jobId -> backgroundSubagentHandles.remove(jobId)?.cancel() }
     }
 
     fun setLiveInfoMaxSearchesPerMessage(limit: Int) {

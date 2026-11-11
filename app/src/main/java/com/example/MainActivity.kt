@@ -1040,6 +1040,7 @@ private fun OmniStudioRoot(
                                 onDismissCheaperModelSuggestion = viewModel::dismissCheaperModelSuggestion,
                                 onOverrideSpendingLimitOnce = viewModel::overrideSpendingLimitOnceForActiveChat,
                                 onSetContextTrimmingEnabled = viewModel::setContextTrimmingEnabledForChat,
+                                onCancelBackgroundSubagents = viewModel::cancelBackgroundSubagentsForConversation,
                                 onGenerateMediaInChat = viewModel::generateMediaInChat,
                                 onUpsertCustomCombo = { rawId, displayName, strategy, targetModels, description ->
                                     viewModel.upsertOmniRouteCustomCombo(

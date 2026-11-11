@@ -211,6 +211,7 @@ fun ChatWorkspaceScreen(
     onDismissCheaperModelSuggestion: (conversationId: String) -> Unit = {},
     onOverrideSpendingLimitOnce: () -> Unit = {},
     onSetContextTrimmingEnabled: (conversationId: String, enabled: Boolean) -> Unit = { _, _ -> },
+    onCancelBackgroundSubagents: (String) -> Unit = {},
     onGenerateMediaInChat: (
         modality: String,
         prompt: String,
@@ -778,6 +779,7 @@ fun ChatWorkspaceScreen(
                         onDismissCheaperModelSuggestion = onDismissCheaperModelSuggestion,
                         onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
                         onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
+                        onCancelBackgroundSubagents = onCancelBackgroundSubagents,
                         onRunCodeBlock = onRunCodeBlock,
                         onOpenHtmlPreview = onOpenHtmlPreview
                     )
@@ -874,6 +876,7 @@ fun ChatWorkspaceScreen(
                     onDismissCheaperModelSuggestion = onDismissCheaperModelSuggestion,
                     onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
                     onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
+                    onCancelBackgroundSubagents = onCancelBackgroundSubagents,
                     onRunCodeBlock = onRunCodeBlock,
                     onOpenHtmlPreview = onOpenHtmlPreview
                 )
@@ -995,6 +998,7 @@ private fun MinimalChatCanvas(
     onDismissCheaperModelSuggestion: (conversationId: String) -> Unit = {},
     onOverrideSpendingLimitOnce: () -> Unit = {},
     onSetContextTrimmingEnabled: (conversationId: String, enabled: Boolean) -> Unit = { _, _ -> },
+    onCancelBackgroundSubagents: (String) -> Unit = {},
     onRunCodeBlock: (language: String, code: String, messageId: String?) -> Unit = { _, _, _ -> },
     onOpenHtmlPreview: (htmlDocument: String, title: String) -> Unit = { _, _ -> }
 ) {
@@ -1733,6 +1737,50 @@ private fun MinimalChatCanvas(
                         modifier = Modifier
                             .size(14.dp)
                             .clickable(onClick = onDismissFirstTimeFileNotice)
+                    )
+                }
+            }
+        }
+
+        // Background subagents of this conversation: slim row above the composer while
+        // any are running, with one Cancel for all of them. Gone when none are running.
+        val runningBackgroundJobs = uiState.backgroundSubagentJobs.filter {
+            it.conversationId == activeConversation?.id &&
+                it.status == com.example.ui.viewmodel.BackgroundSubagentStatus.RUNNING
+        }
+        if (activeConversation != null && runningBackgroundJobs.isNotEmpty()) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
+                    .testTag("chat_background_subagents_row")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "◌ ${runningBackgroundJobs.size} subagent(s) working in background",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "Cancel",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable {
+                            onCancelBackgroundSubagents(activeConversation.id)
+                        }
                     )
                 }
             }

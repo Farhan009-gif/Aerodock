@@ -28,6 +28,9 @@ object SubagentTool {
     /** Tool results longer than this are truncated before they reach the parent chat. */
     const val MAX_RESULT_CHARS = 6_000
 
+    /** At most this many background subagents may run at once, app-wide. */
+    const val MAX_BACKGROUND_JOBS = 3
+
     private const val TOOL_DESCRIPTION =
         "Delegate a self-contained task to a subagent: a fresh AI conversation with its own " +
             "context that works independently and returns only its final answer. Use it to " +
@@ -35,10 +38,12 @@ object SubagentTool {
             "parallel — while you keep working. The brief must contain everything the " +
             "subagent needs: it cannot see this conversation. The subagent can use this " +
             "chat's tools except tools that need user approval, and it cannot spawn " +
-            "subagents of its own. A run is capped at 8 turns and 5 minutes."
+            "subagents of its own. A run is capped at 8 turns and 5 minutes. " +
+            "Set background=true when the task is long or the user may want to keep " +
+            "chatting; the result is posted back into this conversation when done."
 
     private const val INPUT_SCHEMA_JSON =
-        """{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for the subagent. Include all context it needs; it cannot see this conversation."},"role":{"type":"string","description":"Optional role or expertise for the subagent, e.g. 'a careful code reviewer'."},"model":{"type":"string","description":"Optional model id on the same provider as this chat. Defaults to this chat's current model."}},"required":["task"]}"""
+        """{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for the subagent. Include all context it needs; it cannot see this conversation."},"role":{"type":"string","description":"Optional role or expertise for the subagent, e.g. 'a careful code reviewer'."},"model":{"type":"string","description":"Optional model id on the same provider as this chat. Defaults to this chat's current model."},"background":{"type":"boolean","description":"Optional, default false. If true, the subagent runs in the background: this call returns immediately and the result is posted into this conversation when it finishes, so the user can keep chatting meanwhile."}},"required":["task"]}"""
 
     fun buildSubagentServerEntity(): McpServerEntity {
         return McpServerEntity(
@@ -82,7 +87,8 @@ object SubagentTool {
     data class SubagentRequest(
         val task: String,
         val role: String?,
-        val model: String?
+        val model: String?,
+        val background: Boolean = false
     )
 
     /** Parses the model's spawn_subagent arguments; blank optional fields become null. */
@@ -91,8 +97,15 @@ object SubagentTool {
         return SubagentRequest(
             task = obj?.optString("task")?.trim().orEmpty(),
             role = obj?.optString("role")?.trim()?.takeIf { it.isNotEmpty() },
-            model = obj?.optString("model")?.trim()?.takeIf { it.isNotEmpty() }
+            model = obj?.optString("model")?.trim()?.takeIf { it.isNotEmpty() },
+            background = obj?.optBoolean("background", false) ?: false
         )
+    }
+
+    /** Short one-line label for a task, used in the background-jobs row and the posted result. */
+    fun taskLabel(task: String): String {
+        val oneLine = task.trim().replace(Regex("\\s+"), " ")
+        return if (oneLine.length <= 60) oneLine else oneLine.take(57) + "…"
     }
 
     fun buildSystemPrompt(role: String?): String = buildString {

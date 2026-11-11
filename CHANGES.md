@@ -1,134 +1,167 @@
-# Runway Subagents — v1 (NOT pushed, NOT committed)
+# Runway Subagents — Round 2 (NOT pushed, NOT committed)
 
-Base: `origin/main` @ `7d06a9f` (Admin dashboard restyle, on top of Groups `eb0effe`).
-These changes are uncommitted working-tree changes in this staging clone only.
-(This file replaces the Groups CHANGES.md in this staging clone; the Groups version
-still exists untouched on origin/main.)
+Base: `origin/main` @ `70b529e` (Subagents v1, on Groups + Admin dashboard).
+Round 1 shipped `spawn_subagent` (foreground only) and is live on main. This round
+adds two things Farhan asked for after testing v1 on his phone: **unlimited web
+searches** and **background subagents** (chat with the main model while a subagent
+works). These changes are uncommitted working-tree changes in this staging clone only.
 
-## What the feature does
+## Change A — Web search limit removed (unlimited)
 
-Your chat agent gets a new built-in tool called **`spawn_subagent`**. When you ask the
-main model to delegate work, it can start a **subagent**: a fresh, separate AI conversation
-with its own context that works on one self-contained task and reports back only its final
-answer. The main chat never sees the subagent's back-and-forth — just the result, like a
-tool result.
+**What changed:** the "Web search limit reached (N searches per message)" rejection
+is gone. The main chat and subagents can search as many times as a turn needs.
 
-- The subagent starts **blank**: it gets a short system prompt plus the task brief, never
-  your chat history. The brief has to contain everything it needs.
-- If the model starts several subagents in one go, they **run at the same time**
-  (in parallel) and their answers come back in order.
-- The subagent can use tools too (see safety rules below), and it can run on a **different
-  model** on the same provider if the main model asks for one (e.g. main chat on the big
-  model, subagents on a smaller/faster one).
-- In the chat, a spawn looks like any other tool call: it appears in the existing tool-call
-  log UI under the name **Subagent / spawn_subagent**, with its runtime and result.
+**Where the cap lived:** one place — `LiveInfoToolsService.executeWebSearch()`
+checked a per-message counter against a limit (default 3, settable 1–20 in Settings;
+Farhan had it at 5, which is the "5 searches per message" he hit). Both the main
+loop and subagents reach searches through that single function, so removing the
+check there removes it everywhere. The counter itself still counts (stats only,
+never rejects).
 
-The tool is only offered when the chat's tools are on (same switch as MCP tools), the model
-supports function calling, and it's a normal chat (not Compare mode) — same conditions as
-the existing built-in tools.
+**Also tidied up:**
+- The now-pointless limit parameter was removed from `executeWebSearch`, from
+  `repository.executeLiveInfoToolAndLog`, and from both call sites in the ViewModel.
+- The **"Search limit per message" chips were removed from Settings > Live info** —
+  a control that does nothing would just be confusing. The stored setting, its
+  state field and its setter remain in the code but are now inert (kept to keep
+  this change small; they can be deleted in a later tidy-up).
+- The unit test that asserted the old blocking behaviour now asserts the opposite:
+  a 4th search in the same message runs fine.
 
-## How to use it
+**What did NOT change:** the ~3-second pause between two actual searches stays
+(it protects the free DuckDuckGo endpoint from hammering — it's a pacing delay,
+not a count cap), and the search cache stays. Accepted risk, as ordered: a
+subagent can now search a lot inside one run — but runs are still bounded by the
+8-turn cap and the 5-minute timeout.
 
-Just ask in a normal Runway chat, for example:
+## Change B — Background subagents
 
-> "Use two subagents in parallel: one summarises the pros of Firebase, the other the pros
-> of Supabase. Then compare their answers and give me a verdict."
+**What changed:** `spawn_subagent` gains a fourth, optional input: **`background`**
+(true/false, default false). Foreground behaviour is exactly round 1.
 
-Or:
+With `background=true`:
+- The tool call **returns immediately** — the parent reply finishes normally with
+  a tool result like "Background subagent started (job …). Its result will be
+  posted into this conversation when it finishes. Do not wait for it; continue
+  the conversation." You keep chatting with the main model.
+- When the subagent finishes, its answer appears in the **same conversation** as
+  a new assistant message: **"Subagent result — \<task\>:"** followed by the
+  answer (or **"Subagent failed — \<task\>:"** with the error). If you're looking
+  at that chat it pops in live; if you're elsewhere, it's there when you return.
+- **At most 3 background subagents can run at once** (app-wide). A 4th background
+  spawn gets an error result telling the model the limit is reached; foreground
+  spawns are unaffected.
+- While any background subagent for the open chat is running, a slim row sits
+  directly above the message box: **"◌ N subagent(s) working in background"**
+  with a **Cancel** button. Cancel stops those jobs and they post **nothing**
+  (no "cancelled" message — chosen so a cancelled job leaves no noise).
+- The spawn still writes its tool-call log row (server "Subagent"), and the
+  subagent's own tool calls log exactly like round 1. Same caps as foreground:
+  8 turns, 5 minutes, 6,000-character result.
 
-> "Spawn a subagent with the role 'strict code reviewer' to check this function for bugs,
-> then fix what it finds." *(paste the function into your message — the subagent can't see
-> your chat, so the main model includes what matters in the brief.)*
+**How to use it** — just ask, for example:
 
-The model decides the brief, the optional role, and the optional model itself — those are
-the tool's three inputs: `task` (required), `role` (optional), `model` (optional, defaults
-to the chat's current provider + model).
+> "Start a background subagent to research the best free TTS APIs and keep
+> chatting with me meanwhile."
+
+The model sets `background=true` itself; the tool's description tells it to do
+so for long tasks or when you may want to keep chatting.
+
+**How it works (short version):** at spawn time the app snapshots everything the
+run needs (provider + key + model, the filtered tool list, chat settings, the
+conversation id) into a "plan", then launches the run on that snapshot in the
+background. That's why switching chats or models mid-run can't disturb it.
+Foreground and background share the same execution core — the round-1 runner was
+split into *build plan* (spawn time) + *execute plan* (any time), not duplicated.
+
+**Honest limit:** background jobs live in the app process. **If the app is
+killed (swiped away / phone restart), running jobs die with it and no result is
+posted.** No foreground service or WorkManager in this round — that's the
+deliberate v1-of-background trade-off.
 
 ## Files changed
 
-- **NEW `app/src/main/java/com/example/data/agent/SubagentTool.kt`** (112 lines) — the
-  tool's name/description/input schema, its synthetic "server" and "tool" records (same
-  pattern as the built-in code runner), argument parsing, the subagent's system prompt,
-  and the result-truncation helper. No logic that touches the network or the database.
-- **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`**
-  (+265 / −1 lines) — everything else, all inside the existing `executeModelStream`:
-  - 3 coroutine imports (`async`, `withTimeoutOrNull`, `CancellationException`).
-  - The `spawn_subagent` tool is added to the tool list next to the built-in `run_code`
-    tool, so it reaches the model through the exact same path as every other tool.
-  - A new `runSubagent(...)` runner (nested next to the existing provider resolver) that
-    runs the subagent headlessly through the same `repository.streamChat` + repository
-    tool executors the main loop uses. The main loop itself was **not** refactored.
-  - Before the normal sequential tool loop, all `spawn_subagent` calls of a turn are run
-    **concurrently** (`async`), and the loop then hands out their results in call order.
-  - Each spawn writes one tool-call log row (like every other tool), so it shows in the
-    existing tool-call UI.
+- **EDITED `app/src/main/java/com/example/data/mcp/LiveInfoToolsService.kt`** —
+  the search-count rejection block and the limit parameter deleted (Change A).
+- **EDITED `app/src/main/java/com/example/data/repository/OmniRepository.kt`** —
+  `executeLiveInfoToolAndLog` no longer takes/forwards a search limit (A).
+- **EDITED `app/src/main/java/com/example/ui/screens/SettingsAndPhasePreviewScreens.kt`** —
+  the dead "Search limit per message" chips row removed (A).
+- **EDITED `app/src/test/java/com/example/LiveInfoToolsTest.kt`** — the rate-limit
+  test updated: the 4th same-message search now succeeds (A).
+- **EDITED `app/src/main/java/com/example/data/agent/SubagentTool.kt`** — new
+  `background` input in the schema + one description line, `background` field in
+  the parsed request, `MAX_BACKGROUND_JOBS = 3`, and a `taskLabel()` helper for
+  the short task name used in the row and the posted result (B).
+- **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`** —
+  the bulk of Change B: a `BackgroundSubagentJob` registry in UI state (id, task
+  label, conversation, status) + job handles; the round-1 runner split into
+  `buildSubagentPlan` (spawn-time snapshot) and `executeSubagentPlan` (shared
+  core), with `runSubagent` (foreground) and `startBackgroundSubagent`
+  (register → launch → post result message on completion) on top; the tool-call
+  pre-pass now routes background calls to start-and-return and foreground calls
+  to the round-1 concurrent block; a `cancelBackgroundSubagentsForConversation`
+  function for the row's Cancel button. (Also loses the two search-limit call
+  arguments, Change A.)
+- **EDITED `app/src/main/java/com/example/ui/screens/ChatScreen.kt`** — the
+  background-jobs row above the composer (only when this conversation has running
+  jobs) + the `onCancelBackgroundSubagents` callback plumbed through
+  `ChatWorkspaceScreen` → `MinimalChatCanvas` (B).
+- **EDITED `app/src/main/java/com/example/MainActivity.kt`** — one line wiring
+  that callback to the ViewModel (B).
 
-No new dependencies. No new screens. No database changes.
+No new dependencies. No new screens. No database changes (the posted result is an
+ordinary message row).
 
-## Caps and safety rules
+## Caps and safety (unchanged from round 1, still apply to background runs)
 
-- **Turn cap:** a subagent gets at most **8 model turns**, then it is stopped and its last
-  message (with a note) is returned.
-- **Timeout:** a subagent run is cut off after **5 minutes**.
-- **Result cap:** results longer than **6,000 characters** are truncated with a note.
-- **Depth cap 1 (hard rule):** a subagent never receives the `spawn_subagent` tool, so
-  subagents cannot spawn subagents. There is no setting that changes this.
-- **No approval dialogs, ever:** a subagent only inherits tools that would run in the main
-  chat *without asking you first*. The check is the exact same `canAutoRun` logic the main
-  loop uses (per-tool Always/Ask/Never policy + server approval mode + read-only check),
-  evaluated at spawn time. Consequences:
-  - `run_code` is **never** given to a subagent (it always asks for confirmation).
-  - Write/delete MCP tools are **never** given to a subagent (they always ask).
-  - Read-only MCP tools are inherited only if your current settings would auto-run them.
-  - Live Info tools (`web_search`, `news_headlines`) are inherited when they're enabled —
-    they never ask. A subagent's searches count toward the same per-message search limit.
-  - If a tool isn't in the subagent's list, it can't run it — it just gets an error text.
-- **Fail-soft:** if a subagent errors, times out, or gets a bad brief, the main chat gets an
-  "Error: …" tool result and **carries on**. A broken subagent can never break your chat.
-  Pressing Stop cancels running subagents too.
-- **Keys stay on the device:** the subagent uses the same provider and API key as your
-  chat (resolved the same way, including the OmniRoute fallback). Nothing new is stored,
-  nothing leaves the phone except the requests to your own chosen provider — same as a
-  normal chat.
-- The subagent is told in its system prompt that approval-needing tools are unavailable
-  and that it cannot ask questions — it has to work with what it has and say so if it can't.
+- Depth cap 1: subagents never get `spawn_subagent` or `run_code`.
+- Subagents only inherit tools that would auto-run without asking you; no
+  approval sheet can ever appear from a subagent (background or foreground).
+- 8 turns / 5 minutes / 6,000 characters per run. Fail-soft: errors post as
+  "Subagent failed — …" (background) or return as an error tool result
+  (foreground); the main chat is never broken by a subagent.
+- The turn's Stop button behaves as before — it stops the current reply, not
+  background jobs. The row's Cancel is the background stop.
 
-## Deliberately skipped in v1
+## Deliberately skipped this round
 
-- **No saved transcripts.** A subagent's conversation is gone when it finishes; only its
-  final answer (and the tool-call log rows, like any tool) remain. No database changes.
-- **No subagent dashboard or new UI.** Spawns show as normal tool calls; that's all.
-- **No provider failover inside a subagent.** The main loop can fail over to a backup
-  provider mid-turn; a subagent just reports the error and the main model decides what to
-  do. Keeps the runner small.
-- **Subagent token usage is not added to the chat's token/cost totals.** The requests still
-  cost whatever your provider charges — the in-app counters just don't include them yet.
-- **No settings screen / toggles** for caps — 8 turns and 5 minutes are constants in
-  `SubagentTool.kt` if you ever want to change them.
-- **No unit test added.** The pure helpers (argument parsing, truncation) are tiny, and the
-  Android `org.json` stub makes them awkward to test in plain JVM unit tests; the runner
-  itself needs the full app. CI + a phone test are the proof for v1 (see below).
-- If one of your own MCP servers ever has a tool literally named `spawn_subagent`, the
-  built-in wins and shadows it (same behaviour as the existing `run_code` / `web_search`
-  built-in names).
+- **No survival across app kill** (see the honest limit above) — no foreground
+  service, no WorkManager, no persisted job queue.
+- **No job history screen** — finished jobs leave only their posted message;
+  the in-app job list keeps at most the 10 most recent finished entries.
+- **No per-job cancel** — the row's Cancel stops all background jobs of the
+  open conversation at once.
+- The inert search-limit setting plumbing (stored value, state field, setter)
+  was left in place rather than ripped out — behaviour is unlimited either way.
 
 ## What CI must prove (nothing compiled locally — no Android SDK here)
 
-This code was written and reviewed by reading, **not compiled**. The GitHub Actions build
-is the first real check. Things to watch:
+Written and reviewed by reading, **not compiled**. Watch:
 
 1. **It compiles.** Main risks, in order:
-   - The new nested `runSubagent` function in `OmniStudioViewModel.kt` (~210 lines) —
-     it captures a lot of the surrounding function's state (`resolveProviderRuntime`,
-     `enabledToolTriples`, `assistantMsgId`, UI state). Reviewed line-by-line against the
-     surrounding code and the approval-policy source, but only the compiler can confirm.
-   - `SubagentTool.kt`'s `org.json` parsing (standard Android API, same as used elsewhere
-     in the ViewModel).
-2. **On-phone smoke test** (only you can do this):
-   - In a chat with tools on and a function-calling model, send the Firebase/Supabase
-     prompt above → you should see the status line "Running 2 subagent(s)…", then the
-     comparison answer, and two **Subagent / spawn_subagent** entries in the tool log.
-   - Ask the model to spawn a subagent that runs code → the subagent must report it can't
-     (no confirmation sheet should ever appear for a subagent).
-   - Kill the network mid-run → the chat should continue with an "Error: subagent failed"
-     result instead of dying.
+   - The ViewModel runner split (`buildSubagentPlan` / `executeSubagentPlan`):
+     the execution body was re-pointed from live locals to the plan snapshot
+     field by field and re-read in full, but only the compiler can confirm every
+     reference landed.
+   - The local `SubagentRunPlan` data class inside `executeModelStream` and the
+     background launch's message insertion (`dao.upsertMessage` +
+     `syncMessageToRunwayTree`, mirroring how the turn's own assistant message
+     is inserted).
+   - The ChatScreen row: it reuses the tool-status banner's exact styling and
+     symbols; the Cancel tap uses the smart-cast conversation inside its
+     null-check block.
+2. **On-phone smoke test** (only Farhan can do this):
+   - Ask for a background research subagent → the reply should finish at once,
+     the "◌ 1 subagent(s) working in background" row should show above the
+     composer, you can send more messages, and the result should land in the
+     chat as "Subagent result — …" when done.
+   - Start one, tap **Cancel** → the row disappears and **no** result message
+     ever appears.
+   - Start background subagents in two different chats → each result lands in
+     its own chat; only 3 can run at once.
+   - Search test: ask for something needing 6+ web searches in one message →
+     no "limit reached" text anywhere (allow for the 3-second pacing between
+     searches).
+   - Foreground regression: the round-1 Firebase/Supabase parallel prompt
+     should behave exactly as before.

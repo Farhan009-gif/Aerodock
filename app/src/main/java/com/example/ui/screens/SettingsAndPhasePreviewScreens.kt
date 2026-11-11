@@ -577,43 +577,6 @@ fun MinimalSettingsAndThemeScreen(
 
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
 
-                    // 3. Max web searches per user message limit (default 3)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("live_info_search_limit_row"),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Search limit per message",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "At most ${uiState.liveInfoMaxSearchesPerMessage} web search(es) per user message (3s interval)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            listOf(1, 2, 3, 5).forEach { limitOption ->
-                                MinimalChip(
-                                    label = limitOption.toString(),
-                                    selected = uiState.liveInfoMaxSearchesPerMessage == limitOption,
-                                    onClick = { onSetLiveInfoMaxSearchesPerMessage(limitOption) },
-                                    testTag = "live_info_search_limit_chip_$limitOption"
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
-
                     // 4. Saved HTTPS RSS News Feeds list with Add and Remove buttons
                     Text(
                         text = "News RSS feeds (${uiState.liveInfoRssFeeds.size} HTTPS feeds)",

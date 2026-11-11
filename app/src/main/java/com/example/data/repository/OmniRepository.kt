@@ -2760,14 +2760,12 @@ class OmniRepository(
         messageId: String,
         toolName: String,
         argumentsJson: String,
-        maxSearchesPerMessage: Int,
         configuredFeeds: List<com.example.data.mcp.RssFeedConfig>
     ): Pair<ToolCallLogEntity, com.example.data.mcp.LiveInfoToolExecutionResult> = withContext(Dispatchers.IO) {
         val execResult = when (toolName) {
             com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME -> {
                 liveInfoToolsService.executeWebSearch(
-                    argumentsJson = argumentsJson,
-                    maxSearchesPerMessage = maxSearchesPerMessage
+                    argumentsJson = argumentsJson
                 )
             }
             com.example.data.mcp.LiveInfoToolsService.NEWS_HEADLINES_TOOL_NAME -> {

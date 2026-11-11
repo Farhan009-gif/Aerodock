@@ -184,10 +184,10 @@ class LiveInfoToolsService(
 
     /**
      * Executes `web_search(query, max_results = 5)`.
+     * No per-message search cap: the counter below is kept for stats only and never rejects.
      */
     suspend fun executeWebSearch(
-        argumentsJson: String,
-        maxSearchesPerMessage: Int = DEFAULT_MAX_SEARCHES_PER_MESSAGE
+        argumentsJson: String
     ): LiveInfoToolExecutionResult = searchMutex.withLock {
         val startMs = clockMs()
 
@@ -230,24 +230,6 @@ class LiveInfoToolsService(
             )
         }
 
-        val effectiveLimit = maxSearchesPerMessage.coerceIn(1, 20)
-        if (currentMessageSearchCount >= effectiveLimit) {
-            val limitMsg = "Web search limit reached ($effectiveLimit searches per message)."
-            val wrapped = capResponseTo2Kb(
-                wrapAsUntrustedData(
-                    toolName = WEB_SEARCH_TOOL_NAME,
-                    body = limitMsg
-                )
-            )
-            return@withLock LiveInfoToolExecutionResult(
-                toolName = WEB_SEARCH_TOOL_NAME,
-                modelResponseText = wrapped,
-                displaySummaryText = limitMsg,
-                sources = emptyList(),
-                isSuccess = false,
-                durationMs = (clockMs() - startMs).coerceAtLeast(1L)
-            )
-        }
         currentMessageSearchCount++
 
         val cacheKey = normalizeQueryCacheKey(rawQuery)

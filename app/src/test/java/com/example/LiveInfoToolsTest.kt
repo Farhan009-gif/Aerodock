@@ -258,28 +258,28 @@ class LiveInfoToolsTest {
         )
 
         // 1. First search at t=1_000_000
-        val s1 = service.executeWebSearch("""{"query":"first query"}""", maxSearchesPerMessage = 3)
+        val s1 = service.executeWebSearch("""{"query":"first query"}""")
         assertTrue(s1.isSuccess)
         assertEquals(1, networkSearchCalls)
         assertTrue(recordedSleeps.isEmpty())
 
         // 2. Same query within 10 minutes uses cache (no network call, no sleep)
         fakeNowMs += 1_000L
-        val s2Cached = service.executeWebSearch("""{"query":"FIRST   QUERY"}""", maxSearchesPerMessage = 3)
+        val s2Cached = service.executeWebSearch("""{"query":"FIRST   QUERY"}""")
         assertTrue(s2Cached.isSuccess)
         assertEquals(1, networkSearchCalls)
         assertTrue(recordedSleeps.isEmpty())
 
         // 3. Second distinct search 1 second after first network search -> waits 2,000ms to satisfy 3s minimum interval
-        val s3 = service.executeWebSearch("""{"query":"second query"}""", maxSearchesPerMessage = 3)
+        val s3 = service.executeWebSearch("""{"query":"second query"}""")
         assertTrue(s3.isSuccess)
         assertEquals(2, networkSearchCalls)
         assertEquals(listOf(2_000L), recordedSleeps)
 
-        // 4. Fourth search in the same message exceeds maxSearchesPerMessage = 3
-        val s4Blocked = service.executeWebSearch("""{"query":"third query"}""", maxSearchesPerMessage = 3)
-        assertFalse(s4Blocked.isSuccess)
-        assertTrue(s4Blocked.modelResponseText.contains("Web search limit reached"))
+        // 4. Fourth search in the same message still runs — there is no per-message search cap
+        val s4 = service.executeWebSearch("""{"query":"third query"}""")
+        assertTrue(s4.isSuccess)
+        assertEquals(3, networkSearchCalls)
 
         // Reset per-message counter for next user message
         service.resetPerMessageSearchCounter()
