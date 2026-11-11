@@ -26,9 +26,11 @@ service cloud.firestore {
              get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
     }
 
-    // Profile cards: a user can read/write only their own doc.
+    // Profile cards: a user can write only their own doc; reads are the
+    // owner plus admins (the admin page lists everyone who signed in).
     match /users/{uid} {
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
     // Admin list: signed-in users may read it (the app checks membership
@@ -70,9 +72,11 @@ service cloud.firestore {
     }
 
     match /groups/{groupId} {
-      // Members only. The matching query (whereArrayContains memberUids)
-      // is provable against this rule, so list queries work.
-      allow read: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+      // Members, plus admins. The matching query (whereArrayContains
+      // memberUids) is provable against this rule, so list queries work;
+      // the admin's unfiltered list query is provable via isAdmin().
+      allow read: if isSignedIn()
+        && (request.auth.uid in resource.data.memberUids || isAdmin());
 
       // Creator must make themselves owner and a member.
       allow create: if isSignedIn()
@@ -100,7 +104,9 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
 
       match /messages/{messageId} {
-        allow read: if isGroupMember(groupId);
+        // Members of the parent group, plus admins (recent-activity feed
+        // runs as a collectionGroup query, which this rule also covers).
+        allow read: if isGroupMember(groupId) || isAdmin();
         // Sender must be a member and must write as themselves.
         // (senderName is cosmetic and not verified in Phase 1.)
         allow create: if isGroupMember(groupId)

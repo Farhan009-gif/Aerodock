@@ -59,6 +59,26 @@ class GroupsViewModel : ViewModel() {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GroupStats())
 
+    /** Admin-only views (rules deny them to everyone else): every group, the
+     * latest messages app-wide, and every signed-in user. */
+    val allGroups: StateFlow<List<GroupRoom>> = isAdmin
+        .flatMapLatest { admin ->
+            if (admin) repo.allGroupsFlow() else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val recentActivity: StateFlow<List<GroupMessage>> = isAdmin
+        .flatMapLatest { admin ->
+            if (admin) repo.recentMessagesFlow() else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val allUsers: StateFlow<List<GroupUser>> = isAdmin
+        .flatMapLatest { admin ->
+            if (admin) repo.allUsersFlow() else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val selectedGroup: StateFlow<GroupRoom?> = combine(groups, _selectedGroupId) { list, id ->
         list.firstOrNull { it.id == id }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

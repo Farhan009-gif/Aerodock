@@ -19,10 +19,20 @@ data class GroupRoom(
 
 data class GroupMessage(
     val id: String,
+    /** Parent group id — filled from the document path, never stored as a field. */
+    val groupId: String = "",
     val senderUid: String,
     val senderName: String,
     val text: String,
     val createdAt: Long = 0L
+)
+
+/** A row of users/{uid} — only ever read by admins (see firestore.rules). */
+data class GroupUser(
+    val uid: String,
+    val displayName: String,
+    val email: String,
+    val lastActiveAt: Long = 0L
 )
 
 data class GroupStats(

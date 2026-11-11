@@ -1151,7 +1151,7 @@ private fun ProviderSpendRowCard(
 }
 
 @Composable
-private fun UsageKpiCard(
+internal fun UsageKpiCard(
     label: String,
     value: String,
     subtitle: String? = null,

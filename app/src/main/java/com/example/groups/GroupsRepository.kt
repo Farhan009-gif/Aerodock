@@ -184,6 +184,59 @@ class GroupsRepository {
         runCatching { incrementStat("totalMessages") }
     }
 
+    // ---------------------------------------------------------------- admin
+
+    /** Every group on the backend, most recently active first. Admin-only (rules). */
+    fun allGroupsFlow(): Flow<List<GroupRoom>> {
+        val firestore = db ?: return flowOf(emptyList())
+        return callbackFlow {
+            val registration = firestore.collection("groups")
+                .addSnapshotListener { snapshot, _ ->
+                    val rooms = snapshot?.documents.orEmpty()
+                        .map { it.toGroupRoom() }
+                        .sortedByDescending { it.lastMessageAt }
+                    trySend(rooms)
+                }
+            awaitClose { registration.remove() }
+        }
+    }
+
+    /** Latest messages across all groups, newest first. Admin-only (rules). */
+    fun recentMessagesFlow(limit: Long = 25): Flow<List<GroupMessage>> {
+        val firestore = db ?: return flowOf(emptyList())
+        return callbackFlow {
+            val registration = firestore.collectionGroup("messages")
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(limit)
+                .addSnapshotListener { snapshot, _ ->
+                    trySend(snapshot?.documents.orEmpty().map { it.toGroupMessage() })
+                }
+            awaitClose { registration.remove() }
+        }
+    }
+
+    /** Every signed-in user, alphabetical. Admin-only (rules). */
+    fun allUsersFlow(): Flow<List<GroupUser>> {
+        val firestore = db ?: return flowOf(emptyList())
+        return callbackFlow {
+            val registration = firestore.collection("users")
+                .addSnapshotListener { snapshot, _ ->
+                    val users = snapshot?.documents.orEmpty()
+                        .map { doc ->
+                            GroupUser(
+                                uid = doc.id,
+                                displayName = doc.getString("displayName").orEmpty(),
+                                email = doc.getString("email").orEmpty(),
+                                lastActiveAt = doc.getTimestamp("lastActiveAt")?.toDate()?.time ?: 0L
+                            )
+                        }
+                        .sortedBy { it.displayName.lowercase() }
+                    trySend(users)
+                }
+            awaitClose { registration.remove() }
+        }
+    }
+
     // ---------------------------------------------------------------- stats
 
     /** App-wide counters. Rules allow only admins to read stats/global. */
@@ -246,6 +299,7 @@ class GroupsRepository {
 
     private fun DocumentSnapshot.toGroupMessage(): GroupMessage = GroupMessage(
         id = id,
+        groupId = reference.parent.parent?.id.orEmpty(),
         senderUid = getString("senderUid").orEmpty(),
         senderName = getString("senderName").orEmpty(),
         text = getString("text").orEmpty(),
