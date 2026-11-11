@@ -3679,7 +3679,12 @@ class OmniStudioViewModel(
                     subagentToolEntity,
                     com.example.data.agent.SubagentTool.buildSubagentToolDefinition()
                 )
-                mcpTriples + runCodeTriple + spawnSubagentTriple
+                val spawnSubagentChainTriple = Triple(
+                    subagentServer,
+                    com.example.data.agent.SubagentTool.buildChainToolEntity(),
+                    com.example.data.agent.SubagentTool.buildChainToolDefinition()
+                )
+                mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple
             } else {
                 emptyList()
             }
@@ -3697,18 +3702,21 @@ class OmniStudioViewModel(
 
         val allToolTriples = mcpAndSandboxTriples + liveInfoTriples
         // Work mode decides what the MAIN model is offered this turn: AUTO = everything,
-        // MODEL_ONLY = everything except spawn_subagent, AGENT_ONLY = only spawn_subagent
-        // (it can delegate but cannot do tool work itself). toolDefinitions and
+        // MODEL_ONLY = everything except the subagent tools (spawn_subagent and
+        // spawn_subagent_chain), AGENT_ONLY = only the subagent tools (it can delegate
+        // but cannot do tool work itself). toolDefinitions and
         // toolLookupByName both derive from this filtered list, so the round-3 text-call
         // parser and the spawn pre-pass honour the mode too. buildSubagentPlan below
         // still inherits from allToolTriples — the full set — so a subagent keeps the
         // real tools it needs in every mode.
         val enabledToolTriples = when (_uiState.value.workMode) {
             WorkMode.AGENT_ONLY -> allToolTriples.filter {
-                it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME
+                it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME ||
+                    it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME
             }
             WorkMode.MODEL_ONLY -> allToolTriples.filterNot {
-                it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME
+                it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME ||
+                    it.third.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME
             }
             WorkMode.AUTO -> allToolTriples
         }
@@ -3823,7 +3831,10 @@ class OmniStudioViewModel(
             val webSearchEnabled: Boolean,
             val newsHeadlinesEnabled: Boolean,
             val rssFeeds: List<com.example.data.mcp.RssFeedConfig>,
-            val approvedCleartextHosts: Set<String>
+            val approvedCleartextHosts: Set<String>,
+            // Tool name written on this run's tool-call log row: spawn_subagent for a
+            // normal spawn, spawn_subagent_chain for one step of a chain.
+            val logToolName: String = com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME
         )
 
         // Spawn-time plan builder: resolves the provider and computes the subagent's
@@ -3839,8 +3850,8 @@ class OmniStudioViewModel(
 
             // Tool inheritance filter, applied to allToolTriples (the full set, NOT the
             // work-mode-filtered offer list — in AGENT_ONLY the subagent is the one who
-            // needs the real tools). spawn_subagent itself is dropped (depth cap 1:
-            // subagents cannot spawn subagents) and run_code is dropped (the parent
+            // needs the real tools). spawn_subagent and spawn_subagent_chain are dropped
+            // (depth cap 1: subagents cannot spawn subagents) and run_code is dropped (the parent
             // loop always asks for confirmation before running code). Live Info tools
             // never ask. An MCP tool is kept only when the exact canAutoRun check used
             // by the parent tool loop below passes for it right now.
@@ -3848,6 +3859,7 @@ class OmniStudioViewModel(
                         val name = triple.third.toolName
                         when {
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
+                            name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME -> false
                             name == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_TOOL_NAME -> false
                             com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(name) -> true
                             else -> {
@@ -4087,7 +4099,7 @@ class OmniStudioViewModel(
                     messageId = plan.assistantMessageId,
                     serverId = com.example.data.agent.SubagentTool.SUBAGENT_SERVER_ID,
                     serverName = com.example.data.agent.SubagentTool.SUBAGENT_SERVER_NAME,
-                    toolName = com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME,
+                    toolName = plan.logToolName,
                     argumentsJson = plan.argumentsJson,
                     resultText = finalResult,
                     isSuccess = !finalResult.startsWith("Error:"),
@@ -4112,6 +4124,50 @@ class OmniStudioViewModel(
             } catch (e: Exception) {
                 "Error: subagent failed — ${e.message ?: e.javaClass.simpleName}"
             }
+        }
+
+        // Registers one background job entry. Finished entries are pruned past the
+        // newest 10 — the posted result message in the conversation is the durable
+        // record of a job.
+        // shortcut: pruning is a plain list trim in UI state, fine at this scale;
+        // upgrade to a persisted job store only if job history ever becomes a feature.
+        fun registerBackgroundSubagentJob(jobId: String, label: String, conversationId: String) {
+            _uiState.update { state ->
+                val running = state.backgroundSubagentJobs.filter {
+                    it.status == BackgroundSubagentStatus.RUNNING
+                }
+                val finished = state.backgroundSubagentJobs.filter {
+                    it.status != BackgroundSubagentStatus.RUNNING
+                }
+                state.copy(
+                    backgroundSubagentJobs = running + finished.takeLast(10) +
+                        BackgroundSubagentJob(
+                            id = jobId,
+                            taskLabel = label,
+                            conversationId = conversationId
+                        )
+                )
+            }
+        }
+
+        // Posts a finished background run's outcome as a new assistant message in the
+        // origin conversation, through the same DAO path normal assistant messages use.
+        fun postBackgroundResultMessage(plan: SubagentRunPlan, content: String) {
+            val resultMessage = MessageEntity(
+                id = UUID.randomUUID().toString(),
+                conversationId = plan.conversationId,
+                role = "ASSISTANT",
+                content = content,
+                providerInstanceId = plan.provider.id,
+                modelId = plan.modelId,
+                createdAt = System.currentTimeMillis()
+            )
+            dao.upsertMessage(resultMessage)
+            com.example.data.local.RunwayDataMigrationManager.syncMessageToRunwayTree(
+                dao = dao,
+                message = resultMessage,
+                providerName = plan.provider.displayName
+            )
         }
 
         // Background spawn: snapshot the plan, register the job, launch it in
@@ -4141,24 +4197,7 @@ class OmniStudioViewModel(
             }
             val jobId = "subjob_${UUID.randomUUID().toString().take(10)}"
             val label = com.example.data.agent.SubagentTool.taskLabel(subRequest.task)
-            _uiState.update { state ->
-                // shortcut: finished entries are pruned past the newest 10 — the posted
-                // result message in the conversation is the durable record of a job.
-                val running = state.backgroundSubagentJobs.filter {
-                    it.status == BackgroundSubagentStatus.RUNNING
-                }
-                val finished = state.backgroundSubagentJobs.filter {
-                    it.status != BackgroundSubagentStatus.RUNNING
-                }
-                state.copy(
-                    backgroundSubagentJobs = running + finished.takeLast(10) +
-                        BackgroundSubagentJob(
-                            id = jobId,
-                            taskLabel = label,
-                            conversationId = plan.conversationId
-                        )
-                )
-            }
+            registerBackgroundSubagentJob(jobId, label, plan.conversationId)
             val handle = viewModelScope.launch {
                 val result = try {
                     executeSubagentPlan(plan)
@@ -4172,24 +4211,13 @@ class OmniStudioViewModel(
                 }
                 if (stillRunning) {
                     val failed = result.startsWith("Error:")
-                    val resultMessage = MessageEntity(
-                        id = UUID.randomUUID().toString(),
-                        conversationId = plan.conversationId,
-                        role = "ASSISTANT",
-                        content = if (failed) {
+                    postBackgroundResultMessage(
+                        plan,
+                        if (failed) {
                             "Subagent failed — $label:\n\n$result"
                         } else {
                             "Subagent result — $label:\n\n$result"
-                        },
-                        providerInstanceId = plan.provider.id,
-                        modelId = plan.modelId,
-                        createdAt = System.currentTimeMillis()
-                    )
-                    dao.upsertMessage(resultMessage)
-                    com.example.data.local.RunwayDataMigrationManager.syncMessageToRunwayTree(
-                        dao = dao,
-                        message = resultMessage,
-                        providerName = plan.provider.displayName
+                        }
                     )
                     updateBackgroundSubagentStatus(
                         jobId,
@@ -4200,6 +4228,114 @@ class OmniStudioViewModel(
             }
             backgroundSubagentHandles[jobId] = handle
             return "Background subagent started (job $jobId). Its result will be posted into this conversation when it finishes. Do not wait for it; continue the conversation."
+        }
+
+        // Background subagent chain: an ordered pipeline of steps run by ONE
+        // background job (it counts once toward the background cap and the composer
+        // row). The plan snapshot is taken once, here at chain start; the steps then
+        // run sequentially through the same executeSubagentPlan core, each step's
+        // plan a copy of the snapshot carrying that step's brief — the step's own
+        // task plus, from step 2 on, the previous step's result stapled underneath.
+        // Each step posts its own result message; the first failure stops the chain
+        // (later steps never run), and cancelling the job stops it the same way
+        // cancelling a single background spawn does.
+        suspend fun startBackgroundChain(call: ModelToolCallRequest): String {
+            val steps = com.example.data.agent.SubagentTool.parseChainSteps(call.argumentsJson)
+            val maxSteps = com.example.data.agent.SubagentTool.MAX_CHAIN_STEPS
+            if (steps.size !in 1..maxSteps || steps.any { it.task.isBlank() }) {
+                return "Error: spawn_subagent_chain needs 1–$maxSteps steps, each with a non-blank 'task' brief. Nothing was started."
+            }
+            val maxJobs = com.example.data.agent.SubagentTool.MAX_BACKGROUND_JOBS
+            val runningCount = _uiState.value.backgroundSubagentJobs.count {
+                it.status == BackgroundSubagentStatus.RUNNING
+            }
+            if (runningCount >= maxJobs) {
+                return "Error: background subagent limit reached — $maxJobs background subagents are already running. Wait for one to finish before starting a chain."
+            }
+            val basePlan = try {
+                buildSubagentPlan(
+                    call,
+                    com.example.data.agent.SubagentTool.SubagentRequest(
+                        task = steps.first().task,
+                        role = steps.first().role,
+                        model = null
+                    )
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return "Error: subagent failed — ${e.message ?: e.javaClass.simpleName}"
+            }
+            val jobId = "subjob_${UUID.randomUUID().toString().take(10)}"
+            val label = "Chain: " + com.example.data.agent.SubagentTool.taskLabel(steps.first().task)
+            registerBackgroundSubagentJob(jobId, label, basePlan.conversationId)
+            val handle = viewModelScope.launch {
+                try {
+                    var previousResult: String? = null
+                    var chainFailed = false
+                    for ((index, step) in steps.withIndex()) {
+                        val jobRunning = _uiState.value.backgroundSubagentJobs.any {
+                            it.id == jobId && it.status == BackgroundSubagentStatus.RUNNING
+                        }
+                        if (!jobRunning) break
+                        val stepTask = if (previousResult == null) {
+                            step.task
+                        } else {
+                            step.task + "\n\n---\n\nResult of the previous step:\n\n" + previousResult
+                        }
+                        val stepArguments = org.json.JSONObject().put("task", stepTask)
+                        if (step.role != null) {
+                            stepArguments.put("role", step.role)
+                        }
+                        val stepPlan = basePlan.copy(
+                            argumentsJson = stepArguments.toString(),
+                            request = com.example.data.agent.SubagentTool.SubagentRequest(
+                                task = stepTask,
+                                role = step.role,
+                                model = null
+                            ),
+                            logToolName = com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME
+                        )
+                        val result = executeSubagentPlan(stepPlan)
+                        val stillRunning = _uiState.value.backgroundSubagentJobs.any {
+                            it.id == jobId && it.status == BackgroundSubagentStatus.RUNNING
+                        }
+                        if (!stillRunning) break
+                        val failed = result.startsWith("Error:")
+                        val stepLabel = "Step ${index + 1} of ${steps.size} · " +
+                            com.example.data.agent.SubagentTool.taskLabel(step.task)
+                        postBackgroundResultMessage(
+                            basePlan,
+                            if (failed) {
+                                "Subagent failed — $stepLabel:\n\n$result"
+                            } else {
+                                "Subagent result — $stepLabel:\n\n$result"
+                            }
+                        )
+                        if (failed) {
+                            updateBackgroundSubagentStatus(jobId, BackgroundSubagentStatus.FAILED)
+                            chainFailed = true
+                            break
+                        }
+                        previousResult = result
+                    }
+                    if (!chainFailed) {
+                        val stillRunning = _uiState.value.backgroundSubagentJobs.any {
+                            it.id == jobId && it.status == BackgroundSubagentStatus.RUNNING
+                        }
+                        if (stillRunning) {
+                            updateBackgroundSubagentStatus(jobId, BackgroundSubagentStatus.DONE)
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    updateBackgroundSubagentStatus(jobId, BackgroundSubagentStatus.CANCELLED)
+                    backgroundSubagentHandles.remove(jobId)
+                    throw e
+                }
+                backgroundSubagentHandles.remove(jobId)
+            }
+            backgroundSubagentHandles[jobId] = handle
+            return "Background subagent chain started (job $jobId, ${steps.size} steps). Each step's result will be posted into this conversation as it finishes. Do not wait for it; continue the conversation."
         }
 
         while (iteration < maxIterations) {
@@ -4505,6 +4641,16 @@ class OmniStudioViewModel(
                 } else {
                     foregroundSpawnCalls.add(spawnCall)
                 }
+            }
+            // spawn_subagent_chain calls always run in the background: start the
+            // chain now and hand the loop its immediate "started" result, exactly
+            // like a background spawn. Only honoured when the tool was offered.
+            val chainCalls = turnToolCalls.filter {
+                it.toolName == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME &&
+                    toolLookupByName.containsKey(com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME)
+            }
+            for (chainCall in chainCalls) {
+                spawnResultsByCallId[chainCall.id] = startBackgroundChain(chainCall)
             }
             if (foregroundSpawnCalls.isNotEmpty()) {
                 _uiState.update {

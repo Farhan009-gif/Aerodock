@@ -10,7 +10,9 @@ import org.json.JSONObject
 /**
  * Built-in `spawn_subagent` tool: lets the chat agent delegate a self-contained task to a
  * fresh subagent (its own short conversation, no parent history) and read back only its
- * final answer. This object holds only the tool's identity, synthetic entities and text
+ * final answer. Also holds the sibling `spawn_subagent_chain` tool: an ordered pipeline
+ * of subagent steps, run by one background job, each step fed the previous step's result.
+ * This object holds only the tools' identity, synthetic entities and text
  * helpers; the runner itself lives in OmniStudioViewModel.executeModelStream, next to the
  * other built-in tool executors (run_code, Live Info), because it reuses that loop's
  * provider resolution, tool list and repository executors.
@@ -18,6 +20,7 @@ import org.json.JSONObject
 object SubagentTool {
 
     const val SPAWN_SUBAGENT_TOOL_NAME = "spawn_subagent"
+    const val SPAWN_SUBAGENT_CHAIN_TOOL_NAME = "spawn_subagent_chain"
     const val SUBAGENT_SERVER_ID = "builtin_subagent"
     const val SUBAGENT_SERVER_NAME = "Subagent"
 
@@ -30,6 +33,9 @@ object SubagentTool {
 
     /** At most this many background subagents may run at once, app-wide. */
     const val MAX_BACKGROUND_JOBS = 3
+
+    /** At most this many steps in one `spawn_subagent_chain` pipeline. */
+    const val MAX_CHAIN_STEPS = 4
 
     private const val TOOL_DESCRIPTION =
         "Delegate a self-contained task to a subagent: a fresh AI conversation with its own " +
@@ -44,6 +50,20 @@ object SubagentTool {
 
     private const val INPUT_SCHEMA_JSON =
         """{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for the subagent. Include all context it needs; it cannot see this conversation."},"role":{"type":"string","description":"Optional role or expertise for the subagent, e.g. 'a careful code reviewer'."},"model":{"type":"string","description":"Optional model id on the same provider as this chat. Defaults to this chat's current model."},"background":{"type":"boolean","description":"Optional, default false. If true, the subagent runs in the background: this call returns immediately and the result is posted into this conversation when it finishes, so the user can keep chatting meanwhile."}},"required":["task"]}"""
+
+    private const val CHAIN_TOOL_DESCRIPTION =
+        "Run a pipeline of subagents in the background: 2–4 steps executed in order, " +
+            "where each step is a fresh subagent under the same rules as spawn_subagent " +
+            "and each step's result is passed into the next step's brief. Use it when a " +
+            "later step needs an earlier step's output — e.g. step 1 gathers facts, " +
+            "step 2 checks them. Write every step's task to stand on its own, except " +
+            "that it may refer to 'the previous step's result', which is appended to " +
+            "its brief automatically. This call returns immediately; each step's result " +
+            "is posted into this conversation as it finishes, and the chain stops if a " +
+            "step fails. A chain counts as one background job."
+
+    private const val CHAIN_INPUT_SCHEMA_JSON =
+        """{"type":"object","properties":{"steps":{"type":"array","description":"2–4 steps, executed in order; each step's result is fed into the next step.","minItems":1,"maxItems":4,"items":{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for this step's subagent. It may refer to 'the previous step's result'."},"role":{"type":"string","description":"Optional role or expertise for this step's subagent."}},"required":["task"]}}},"required":["steps"]}"""
 
     fun buildSubagentServerEntity(): McpServerEntity {
         return McpServerEntity(
@@ -84,6 +104,32 @@ object SubagentTool {
         )
     }
 
+    fun buildChainToolEntity(): McpToolEntity {
+        return McpToolEntity(
+            id = "$SUBAGENT_SERVER_ID:$SPAWN_SUBAGENT_CHAIN_TOOL_NAME",
+            serverId = SUBAGENT_SERVER_ID,
+            serverName = SUBAGENT_SERVER_NAME,
+            toolName = SPAWN_SUBAGENT_CHAIN_TOOL_NAME,
+            description = CHAIN_TOOL_DESCRIPTION,
+            inputSchemaJson = CHAIN_INPUT_SCHEMA_JSON,
+            // Same reasoning as spawn_subagent: the steps only receive tools that
+            // already run without user approval, so no approval prompt is ever needed.
+            isReadOnlyHint = true,
+            isEnabled = true
+        )
+    }
+
+    fun buildChainToolDefinition(): McpToolDefinition {
+        return McpToolDefinition(
+            serverId = SUBAGENT_SERVER_ID,
+            serverName = SUBAGENT_SERVER_NAME,
+            toolName = SPAWN_SUBAGENT_CHAIN_TOOL_NAME,
+            description = CHAIN_TOOL_DESCRIPTION,
+            inputSchemaJson = CHAIN_INPUT_SCHEMA_JSON,
+            isReadOnlyHint = true
+        )
+    }
+
     data class SubagentRequest(
         val task: String,
         val role: String?,
@@ -100,6 +146,29 @@ object SubagentTool {
             model = obj?.optString("model")?.trim()?.takeIf { it.isNotEmpty() },
             background = obj?.optBoolean("background", false) ?: false
         )
+    }
+
+    data class SubagentChainStep(
+        val task: String,
+        val role: String?
+    )
+
+    /**
+     * Parses the model's spawn_subagent_chain arguments into steps. Malformed input
+     * yields an empty list; the caller validates the count (1–[MAX_CHAIN_STEPS]) and
+     * non-blank tasks, mirroring how a blank spawn_subagent task is rejected.
+     */
+    fun parseChainSteps(argumentsJson: String): List<SubagentChainStep> {
+        val obj = runCatching { JSONObject(argumentsJson.ifBlank { "{}" }) }.getOrNull()
+            ?: return emptyList()
+        val steps = obj.optJSONArray("steps") ?: return emptyList()
+        return (0 until steps.length()).map { index ->
+            val step = steps.optJSONObject(index)
+            SubagentChainStep(
+                task = step?.optString("task")?.trim().orEmpty(),
+                role = step?.optString("role")?.trim()?.takeIf { it.isNotEmpty() }
+            )
+        }
     }
 
     /** Short one-line label for a task, used in the background-jobs row and the posted result. */
