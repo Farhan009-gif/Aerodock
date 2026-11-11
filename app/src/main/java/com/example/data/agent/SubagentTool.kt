@@ -25,7 +25,7 @@ object SubagentTool {
     const val SUBAGENT_SERVER_NAME = "Subagent"
 
     /** Hard caps for one subagent run: model turns and wall-clock time. */
-    const val MAX_TURNS = 8
+    const val MAX_TURNS = 12
     const val TIMEOUT_MS = 300_000L
 
     /** Tool results longer than this are truncated before they reach the parent chat. */
@@ -44,7 +44,7 @@ object SubagentTool {
             "parallel — while you keep working. The brief must contain everything the " +
             "subagent needs: it cannot see this conversation. The subagent can use this " +
             "chat's tools except tools that need user approval, and it cannot spawn " +
-            "subagents of its own. A run is capped at 8 turns and 5 minutes. " +
+            "subagents of its own. A run is capped at $MAX_TURNS turns and 5 minutes. " +
             "Set background=true when the task is long or the user may want to keep " +
             "chatting; the result is posted back into this conversation when done."
 
@@ -74,7 +74,7 @@ object SubagentTool {
             authHeaderName = "",
             approvalMode = McpApprovalMode.ASK_EVERY_TIME.name,
             isEnabled = true,
-            lastTestStatus = "Built-in subagent delegation (fresh context, 8-turn / 5-minute cap)"
+            lastTestStatus = "Built-in subagent delegation (fresh context, $MAX_TURNS-turn / 5-minute cap)"
         )
     }
 

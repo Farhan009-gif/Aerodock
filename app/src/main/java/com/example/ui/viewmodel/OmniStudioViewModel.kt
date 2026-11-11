@@ -185,6 +185,39 @@ private const val AGENT_ONLY_DISPATCHER_INSTRUCTION =
         "subagent's result. Do not do the work yourself. Answer directly only when no " +
         "tools are needed."
 
+private const val NO_FABRICATION_INSTRUCTION =
+    "If a tool call or a subagent fails, errors, or hits its turn limit, say so " +
+        "plainly in your reply. Never invent results, claims, sources, dates, or a " +
+        "demonstration exercise in place of real output."
+
+private const val LIVE_TOOLS_INSTRUCTION =
+    "You have live web_search and news_headlines tools. For anything time-sensitive " +
+        "or current, use them instead of answering from memory, and never claim you " +
+        "lack real-time or internet access."
+
+/**
+ * Request-time context appended to the system prompt of every chat turn and every
+ * subagent run: the live clock (so "today" means something to the model) plus the
+ * standing truth instruction. Computed fresh on each call and never persisted.
+ * The live-tools sentence is included only when [liveToolsOffered] — claiming tools
+ * that are not in the request would be its own lie. Uses java.util date classes, not
+ * java.time: minSdk is 24 with no core-library desugaring, and SimpleDateFormat is
+ * the codebase's established date pattern.
+ */
+private fun liveContextBlock(liveToolsOffered: Boolean): String {
+    val zone = java.util.TimeZone.getDefault()
+    val clock = java.text.SimpleDateFormat("EEEE, d MMMM yyyy, HH:mm zzz", java.util.Locale.ENGLISH)
+        .apply { timeZone = zone }
+        .format(java.util.Date())
+    return buildString {
+        append("Current date and time: ").append(clock).append(" (").append(zone.id).append(").")
+        append("\n").append(NO_FABRICATION_INSTRUCTION)
+        if (liveToolsOffered) {
+            append("\n").append(LIVE_TOOLS_INSTRUCTION)
+        }
+    }
+}
+
 data class OmniUiState(
     val currentTab: WorkspaceTab = WorkspaceTab.CHAT,
     val onboardingCompleted: Boolean = true,
@@ -3699,13 +3732,29 @@ class OmniStudioViewModel(
             baseSystemPrompt = conv.systemPrompt,
             skillsBlock = deterministicSkillsBlock
         )
+        // Resolved here (not further down with the other tool lists) because the
+        // system prompt below needs to know whether Live Info tools are actually
+        // offered in this request. Compare turns offer none.
+        val liveInfoTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> =
+            if (comparisonGroupId == null) {
+                com.example.data.mcp.LiveInfoToolsService.resolveEnabledLiveInfoToolTriples(
+                    modelSupportsFunctionCalling = modelDescriptor.supportsFunctionCalling,
+                    webSearchEnabled = _uiState.value.liveInfoWebSearchEnabled,
+                    newsHeadlinesEnabled = _uiState.value.liveInfoNewsHeadlinesEnabled
+                )
+            } else {
+                emptyList()
+            }
+
         // AGENT_ONLY work mode: append the dispatcher instruction for this turn (the
         // tool filter below also leaves spawn_subagent as the only offered tool).
-        val effectiveSystemPrompt = if (_uiState.value.workMode == WorkMode.AGENT_ONLY) {
+        // Every turn also gets the live clock + truth instruction appended; it is
+        // request-time context only and never stored in the conversation.
+        val effectiveSystemPrompt = (if (_uiState.value.workMode == WorkMode.AGENT_ONLY) {
             stableSystemPrefix + "\n\n" + AGENT_ONLY_DISPATCHER_INSTRUCTION
         } else {
             stableSystemPrefix
-        }
+        }) + "\n\n" + liveContextBlock(liveToolsOffered = liveInfoTriples.isNotEmpty())
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
         // Reset per-message web search counter at the start of each turn
@@ -3767,17 +3816,6 @@ class OmniStudioViewModel(
                     com.example.data.agent.SubagentTool.buildChainToolDefinition()
                 )
                 mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple
-            } else {
-                emptyList()
-            }
-
-        val liveInfoTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> =
-            if (comparisonGroupId == null) {
-                com.example.data.mcp.LiveInfoToolsService.resolveEnabledLiveInfoToolTriples(
-                    modelSupportsFunctionCalling = modelDescriptor.supportsFunctionCalling,
-                    webSearchEnabled = _uiState.value.liveInfoWebSearchEnabled,
-                    newsHeadlinesEnabled = _uiState.value.liveInfoNewsHeadlinesEnabled
-                )
             } else {
                 emptyList()
             }
@@ -4015,7 +4053,15 @@ class OmniStudioViewModel(
                             emptyList()
                         }
                     val subToolLookup = plan.toolTriples.associateBy { it.third.toolName }
-                    val subSystemPrompt = com.example.data.agent.SubagentTool.buildSystemPrompt(subRequest.role)
+                    // Same live clock + truth instruction as the main chat; the
+                    // live-tools sentence applies only if this run was actually
+                    // offered a Live Info tool.
+                    val subSystemPrompt = com.example.data.agent.SubagentTool.buildSystemPrompt(subRequest.role) +
+                        "\n\n" + liveContextBlock(
+                            liveToolsOffered = subToolDefinitions.any {
+                                com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(it.toolName)
+                            }
+                        )
                     val subMessages = mutableListOf(
                         ChatMessagePayload(role = "user", content = subRequest.task)
                     )

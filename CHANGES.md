@@ -1,175 +1,170 @@
-# Runway — Round 6 (NOT pushed, NOT committed)
+# Runway — Round 7 (NOT pushed, NOT committed)
 
-Base: `origin/main` @ `c2ea05e` (Round 5: spawn_subagent_chain — background
-step pipelines). Rounds 1–5 are live on main. This round fixes two composer
-problems Farhan hit on the phone while testing:
+Base: `origin/main` @ `323a0ba` (Round 6: message queueing while generating +
+paragraph Enter key, including the round-5 build fix). Rounds 1–6 are live on
+main. This round comes straight from Farhan's on-phone test of the
+collect-then-fact-check prompt (screenshots, 11 Nov 16:09):
 
-1. **While the model is working, he can't send anything.** He typed "hii"
-   during a reply and it just sat in the box — the send button is replaced by
-   Stop for the whole turn.
-2. **The keyboard's Enter key sends instead of making a new paragraph.** He
-   circled the keyboard's send key and asked for "a enter option in keyboard
-   instead of a different paragraph one" — then corrected the direction
-   himself: he wants the **paragraph (newline) key**, not send-on-Enter.
+1. **The model doesn't know what day it is.** Asked "what's today's date", it
+   answered: "I don't have access to real-time information, so I can't tell
+   you today's specific date." Every claim it produced in that session was
+   dated March 2024 — it was reasoning from training data with no idea that
+   "today" is 11 November 2026.
+2. **When a subagent failed, the main model made the answer up.** The first
+   research subagent hit its turn limit; instead of saying so, the main model
+   staged a fake "Fact-Checking Exercise" with invented claims and
+   "fact-checked" its own inventions.
+3. **Research subagents die at 8 turns.** The collecting subagent spent all 8
+   turns searching and never got to write its answer.
 
 These changes are uncommitted working-tree changes in this staging clone only.
 
-## Feature A — Send while generating (the message queue)
+## Change 1 — The live clock in every request
 
-**What changed:** while a reply is generating, a second button appears in the
-composer — an up-arrow next to Stop (testTag `composer_queue_button`). Type a
-message, tap it, and the message is **queued**: the composer clears, and a
-pill with your text appears in a slim "Queued" row above the composer. When
-the current turn ends, the queued message **sends itself** through the normal
-send path, exactly as if you had typed and sent it then.
+**What changed:** every chat request and every subagent run now carries one
+extra line in its system context, computed **fresh at the moment the request
+is built** (never cached at app start, never stored in the conversation,
+never shown in the UI):
+
+> `Current date and time: Wednesday, 11 November 2026, 16:12 IST (Asia/Kolkata).`
+
+The date format is exactly `EEEE, d MMMM yyyy, HH:mm zzz` (weekday and month
+spelled out, English names so free models parse them reliably) in the
+**device's own timezone**, followed by the timezone id in brackets. On a phone
+in another timezone it prints that zone's abbreviation and id instead.
 
 **How it works:**
 
-- The queue lives in the ViewModel's UI state as a list of `QueuedMessage`
-  (id, conversationId, text) — in-memory only, per conversation. Tapping the
-  queue button runs `queueMessage()`, which appends the trimmed draft for the
-  open conversation and clears the composer.
-- The pills row sits directly above the composer, **below** the
-  background-subagents row (same Surface styling family), and shows only the
-  open conversation's queue. Each pill is the queued text on one line
-  (truncated) with an ✕ that removes just that entry. No row when the queue
-  is empty.
-- **Draining:** every turn end shares one signal — the UI state's `isStreaming`
-  flag flipping true → false (a reply finishing, erroring, a compare run
-  ending, an in-chat image/video finishing, or **Stop**). A small collector in
-  the ViewModel watches that edge and calls `drainQueuedMessage()`, which pops
-  the open conversation's **first** entry and runs it through the untouched
-  `sendMessage()` — same validation, same slash-commands, same everything. One
-  entry per turn end: sending starts a new turn, and the remaining entries
-  wait for that turn's end. So **Stop + a queued message = steering**: stop a
-  reply going the wrong way and your queued correction fires immediately.
-  Anything you had already typed for the *next* message while the drained one
-  sends is preserved — the drain restores your in-progress draft afterwards.
-- **Targeting choice (and why):** sends in Runway are hard-bound to the open
-  conversation — `sendMessage()` reads the global draft and
-  `activeConversationId`, and there is exactly one stream at a time. So a
-  queue entry only drains while **its** conversation is the open one; entries
-  for other conversations simply wait (their pills are there when you go back
-  to that chat). Retargeting sends at arbitrary conversations would have meant
-  rewriting the send path; this way the normal path is reused untouched.
-- **Guards:** a queue entry never drains into a deleted conversation — the
-  drain checks the conversation still exists and drops that conversation's
-  queue silently if it is gone. Draining is also held while you are editing a
-  message (an edit is never hijacked by a queued send). If `sendMessage()`
-  declines a drained entry because another turn started first, the entry is
-  put back at the front of the queue, not lost.
-- **Cap: 5 queued messages per conversation.** At the cap the queue button
-  hides, and `queueMessage()` refuses further entries.
+- One small helper, `liveContextBlock(liveToolsOffered)`, in
+  `OmniStudioViewModel.kt`, builds the clock line plus the Change-2
+  instruction block. Both call sites use it — the formatting logic exists
+  exactly once.
+- **Main chat:** `executeModelStream` appends the block to
+  `effectiveSystemPrompt` (after the conversation's own system prompt, the
+  skills block, and — in AGENT_ONLY mode — the dispatcher instruction). That
+  one value feeds the context trimmer and every request attempt, including
+  failover retries. Compare turns go through the same assembly, so they get
+  the clock too (but not the live-tools sentence — see Change 2).
+- **Subagents:** `executeSubagentPlan` appends the same block to the
+  subagent's system prompt, computed when the run executes. Foreground spawns,
+  background spawns and **chain steps all run through that one function**, so
+  every step of a chain gets a fresh clock with no extra code.
+- The block is request-time context only, exactly like the round-4 dispatcher
+  instruction: it is not persisted into stored messages and does not appear
+  anywhere on screen.
 
-**Honest limits (same rule as background jobs):** the queue is **in-memory
-only**. Kill the app (swipe away, phone restart) and queued messages are gone
-— they were never written anywhere. And a drained message is a *text* send:
-if you attach files after queueing, the drained send goes through the normal
-path with whatever is in the composer at that moment.
+## Change 2 — The standing truth instruction
 
-## Feature B — Paragraph Enter key in the main composer
+**What changed:** right under the clock line, the same system context now
+carries a short instruction block (63 words total). Verbatim:
 
-**What changed:** in the **main chat composer only**, the text field no longer
-declares an IME Send action. Its keyboard options now use `ImeAction.None`
-when the composer's `enterToSend` flag is off, and the `onSend` keyboard
-handler is only wired when that flag is on — so the on-screen keyboard shows
-its **return/paragraph key** and pressing Enter starts a new line in the
-multiline field. The on-screen arrow button remains the way to send (and the
-queue button from Feature A is how you send while a reply is generating).
+> If a tool call or a subagent fails, errors, or hits its turn limit, say so
+> plainly in your reply. Never invent results, claims, sources, dates, or a
+> demonstration exercise in place of real output.
 
-**How, exactly:** `MinimalChatCanvas` now passes `enterToSend = false` to the
-composer bar, and inside the bar the off-branch uses `ImeAction.None` (it was
-`ImeAction.Default` before) with `KeyboardActions.Default` instead of an
-`onSend` handler. One honest consequence, left visible in a code comment: the
-Settings **"Enter to send" toggle no longer drives the main composer** — the
-stored setting, its vault flow and the Settings switches are untouched, but
-the main composer always uses paragraph Enter now, per Farhan's corrected
-request. Re-wiring the toggle is a two-line change if it is ever wanted back.
+That first part — **anti-fabrication — is unconditional**: it is in every
+chat request (all work modes, Compare included) and every subagent run.
 
-**What it does NOT affect:** the separate legacy `ChatScreen` composer (still
-passes `enterToSend = true`, untouched), the edit-message flow's fields, the
-compare composer, and every Settings/other text field in the app — all
-untouched, Enter behaviour there is exactly as before.
+Only when Live Info tools are actually offered in that request, one more
+sentence follows:
+
+> You have live web_search and news_headlines tools. For anything
+> time-sensitive or current, use them instead of answering from memory, and
+> never claim you lack real-time or internet access.
+
+**The condition matters:** claiming tools that don't exist would be its own
+lie, so the sentence is included only when the offered tool set really
+contains a Live Info tool — for the main chat, when the resolved Live Info
+tool list for this request is non-empty (both Live Info toggles off, a model
+without function calling, or a Compare turn → the sentence is absent); for a
+subagent, when the tools that run was actually offered include `web_search`
+or `news_headlines`.
+
+## Change 3 — Subagent turn cap 8 → 12
+
+**What changed:** `SubagentTool.MAX_TURNS` is now **12** (was 8). Everything
+that reports the cap already read the constant — the "[Note: subagent stopped
+at the 12-turn limit…]" and "Error: subagent used all 12 turns…" strings are
+now correct automatically. The two places that had the number hard-coded as
+text (the `spawn_subagent` tool description the model reads, and the tool's
+status string) now take it from the constant too, so they can't drift again.
+
+**Unchanged:** the **300-second (5-minute) timeout** stays exactly as it was —
+a run gets more turns, not more wall-clock time. Chains inherit the new cap
+automatically because every chain step executes through
+`executeSubagentPlan`, the same loop the cap lives in (verified: foreground
+spawn, background spawn and chain steps are its only three callers).
 
 ## Files changed
 
 - **EDITED `app/src/main/java/com/example/ui/viewmodel/OmniStudioViewModel.kt`** —
-  `QueuedMessage` + `MAX_QUEUED_MESSAGES_PER_CONVERSATION = 5`; the
-  `queuedMessages` UI-state field; the `isStreaming` true→false collector in
-  `init`; `queueMessage()`, `removeQueuedMessage()` and the private
-  `drainQueuedMessage()` (A).
-- **EDITED `app/src/main/java/com/example/ui/screens/ChatScreen.kt`** —
-  `onQueueMessage` / `onRemoveQueuedMessage` plumbed ChatWorkspaceScreen →
-  both MinimalChatCanvas call sites → canvas; the "Queued" pills row above the
-  composer; the composer gains the queue button and `onQueue`/`queuedCount`
-  params; `enterToSend = false` at the main-canvas composer call; the
-  composer's off-branch now uses `ImeAction.None` with no `onSend` handler
-  (A + B).
-- **EDITED `app/src/main/java/com/example/MainActivity.kt`** — two lines wiring
-  `onQueueMessage = viewModel::queueMessage` and
-  `onRemoveQueuedMessage = viewModel::removeQueuedMessage` (A).
+  the `NO_FABRICATION_INSTRUCTION` and `LIVE_TOOLS_INSTRUCTION` constants and
+  the `liveContextBlock()` helper; `liveInfoTriples` is now resolved a few
+  lines earlier (same code, same result — the system prompt needs to know
+  whether Live Info is offered) and `effectiveSystemPrompt` appends the block;
+  `executeSubagentPlan` appends the same block to the subagent's system
+  prompt (Changes 1 + 2).
+- **EDITED `app/src/main/java/com/example/data/agent/SubagentTool.kt`** —
+  `MAX_TURNS` 8 → 12; the tool description and status string now derive the
+  number from the constant (Change 3).
 
-No new dependencies. No new screens. No database changes, nothing persisted.
+No new dependencies. No UI changes. No database changes, nothing persisted.
+
+## One deviation from the spec, on purpose
+
+The spec said to format the clock with `java.time`. The code uses
+`java.util.TimeZone` + `java.text.SimpleDateFormat` instead. Reason: this app
+has **minSdk 24 and no core-library desugaring**, and `java.time` only exists
+on Android API 26+ — it would crash on API 24/25 devices, and there is not a
+single `java.time` use anywhere in the codebase today, while
+`SimpleDateFormat` is the established date pattern (five other files use it).
+The output is identical: device timezone, English weekday/month names, same
+line format.
 
 ## Deliberately skipped this round
 
-- **Attachments in the queue** — v1 is text only. With files attached, the
-  queue button never appears and today's behaviour is unchanged.
-- **A persisted queue** — nothing is written to disk; an app kill loses the
-  queue (see the honest limit above).
-- **Per-conversation send retargeting** — the drain only fires for the open
-  conversation, because that is what the existing send path targets.
-- **Removing the now-inert "Enter to send" Settings toggle** — left in place
-  (stored value, vault flow, switches) rather than rip out settings plumbing
-  in a composer round; the main composer ignores it now.
-- **Enter behaviour everywhere else** — edit-message, compare and Settings
-  fields keep their current behaviour (Feature B is main-composer only).
+- **A `get_current_datetime` tool** — the model would have to *choose* to
+  call it, which is exactly the failure in the screenshots (it never occurred
+  to the model to check). Injection is always there.
+- **Dedicated live-data tools** (weather, scores, prices) — that was option B
+  of the real-time request; this round is the clock, the truth instruction
+  and the cap only.
+- **Any UI trace of the clock** — no chip, no banner, nothing stored. The
+  model knows the date; the screen doesn't need to say it.
+- **Raising the 300-second timeout** — turns went up, wall-clock didn't.
 
 ## What CI must prove (nothing compiled locally — no Android SDK here)
 
-Written and reviewed by reading, **not compiled**. Brace/paren balance of all
-three edited files matches HEAD exactly; the diff was read hunk by hunk.
-Watch, in order:
+Written and reviewed by reading, **not compiled**. Brace/paren balance of
+both edited files is exact; the diff was read hunk by hunk; a repo-wide sweep
+confirms no "8 turns" text survives anywhere in the subagent feature. Watch,
+in order:
 
-1. **OmniStudioViewModel.kt** — the drain collector in `init` and
-   `drainQueuedMessage()` (its requeue-on-decline branch reads the draft back
-   after calling `sendMessage()`; the logic is reviewed but only the compiler
-   and a phone can prove the flow).
-2. **ChatScreen.kt** — the queue button's `canQueue` condition and the pills
-   row (new Surface/Row block in the canvas Column), the conditional
-   `keyboardActions` expression, and the new defaulted params on
-   `ChatWorkspaceScreen` / `MinimalChatCanvas` / `MinimalFloatingComposerBar`.
-3. **MainActivity.kt** — the two wiring lines (lowest risk).
+1. **OmniStudioViewModel.kt** — the moved `liveInfoTriples` resolution (it
+   must remain the *only* declaration, and everything it used to feed sits
+   below its new home) and the parenthesised prompt concatenation; then the
+   `liveContextBlock()` helper and its two call sites.
+2. **SubagentTool.kt** — the `$MAX_TURNS` string template inside the
+   `private const val` tool description (a const template referencing another
+   const in the same object — legal constant folding, but if CI disagrees,
+   the one-line fallback is the literal text "12 turns").
+3. **executeSubagentPlan's prompt append** — plain string concatenation
+   (lowest risk).
 
 **On-phone smoke test** (only Farhan can do this):
 
-1. Start a long reply, type a message, tap the **queue button** → a pill
-   appears above the composer; when the turn ends, the message sends itself
-   with no further tap.
-2. Queue **two** messages during one turn → they send one per turn, in the
-   order you queued them.
-3. Queue one, then tap **Stop** → the queued message fires immediately after
-   the stop (steering).
-4. Queue one, tap its pill's **✕** → it never sends.
-5. Open the keyboard in the composer → the **return/paragraph key** is shown,
-   Enter starts a new line mid-message, and the on-screen arrow still sends.
-   In Settings, other text fields behave as before.
-
-## Also in this push: round-5 build fix
-
-Build #90 (the round-5 chains push) failed to compile, so chains never reached
-a phone. The cause: round 5 had split one helper out of the background-subagent
-code — `postBackgroundResultMessage`, the piece that posts a finished
-background run's result into the chat. The code it contains saves the message
-to the database, and database saves are *suspend* operations in Kotlin: they
-may only run inside a coroutine. The extracted helper was declared as a plain
-function, so the compiler rejected those two calls ("Suspension functions can
-only be called within coroutine body").
-
-The fix is one word: the helper is now a `suspend fun`. Both places that call
-it — a finished background subagent and each step of a finished chain — already
-run inside coroutines, so nothing else had to change: the result message is
-still saved exactly once per completion, in the same order as before (message
-first, then the job's status update). **No behaviour changes** — background
-subagents, chains and this round's queue/Enter work exactly as described
-above; the code now simply compiles.
+1. Ask any model **"What's today's date?"** → it answers **Wednesday 11
+   November 2026** (the actual current date) directly — no searching, no
+   "I don't have access to real-time information" disclaimer.
+2. Ask for **today's top news** → it uses web search / headlines and frames
+   the results as today's, with today's date attached to the claims.
+3. **Agent only:** the two-step collect-then-fact-check prompt ("Step 1:
+   spawn a subagent to collect today's top world-affairs claims, with
+   sources. Step 2: …fact-check those exact claims…") → the research
+   subagent now finishes **inside 12 turns** and returns real, sourced,
+   current claims — or honestly reports that it failed. No March 2024, no
+   staged "exercise".
+4. Turn **Live Info OFF** in Settings, then ask about today's news → the
+   model must **not** claim it has live tools (the live-tools sentence is
+   absent from its context); it should answer from memory and say so, dated
+   against the clock line it still has.
