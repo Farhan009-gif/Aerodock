@@ -118,6 +118,14 @@ import kotlinx.coroutines.delay
 
 class MainActivity : FragmentActivity() {
 
+    /** Bumped when an MCP OAuth redirect returns to the already-running app. */
+    private var oauthCallbackTick by mutableStateOf(0)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        oauthCallbackTick++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -131,6 +139,12 @@ class MainActivity : FragmentActivity() {
             val viewModel: OmniStudioViewModel = viewModel(
                 factory = OmniStudioViewModel.Factory(repository, dao)
             )
+            // MCP OAuth redirects land here via OAuthCallbackActivity.
+            LaunchedEffect(oauthCallbackTick) {
+                com.example.data.mcp.McpOAuthCallbacks.consume()?.let { callbackUri ->
+                    viewModel.handleMcpOAuthCallback(callbackUri)
+                }
+            }
             val providersViewModel: ProvidersViewModel = viewModel(
                 factory = ProvidersViewModel.Factory(repository, secretVault, dao)
             )
@@ -920,6 +934,7 @@ private fun OmniStudioRoot(
                             perToolPolicies = uiState.connectorToolChoices,
                             confirmedWriteAlwaysToolIds = uiState.confirmedWriteAlwaysTools,
                             maskedTokensByServer = uiState.maskedMcpTokensByServer,
+                            oauthStatusByServer = uiState.mcpOAuthStatusByServer,
                             approvedCleartextHosts = uiState.approvedCleartextHosts,
                             busyServerId = uiState.busyMcpServerId,
                             onBack = viewModel::closeConnectorsScreen,
@@ -930,6 +945,8 @@ private fun OmniStudioRoot(
                             onTestConnectionAndDiscover = viewModel::testAndDiscoverMcpServer,
                             onUpdateConnectorToken = viewModel::updateConnectorTokenOnly,
                             onClearConnectorToken = viewModel::clearMcpServerToken,
+                            onOAuthSignIn = viewModel::signInMcpOAuth,
+                            onOAuthDisconnect = viewModel::disconnectMcpOAuth,
                             onDeleteConnector = viewModel::deleteMcpServer,
                             onSetAllToolsChoice = viewModel::setConnectorAllToolsChoice,
                             onSetSingleToolChoice = viewModel::setSingleToolChoice

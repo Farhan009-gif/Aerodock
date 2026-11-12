@@ -40,7 +40,14 @@ data class McpToolCallResult(
  * - Cleartext HTTP host guard enforcement via the shared OkHttpClient interceptor.
  */
 class McpClient(
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    /**
+     * For OAuth-signed-in servers: given a server ID, force-refreshes the
+     * access token and returns the new one (null when the server has no OAuth
+     * record or the refresh failed). Consulted once when a request meets a
+     * 401, so an expired token renews itself instead of failing the call.
+     */
+    private val oauthRefresher: (suspend (serverId: String) -> String?)? = null
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val requestIdCounter = AtomicInteger(1)
@@ -215,29 +222,48 @@ class McpClient(
         method: String,
         params: JSONObject?
     ): JSONObject {
-        val reqId = requestIdCounter.getAndIncrement()
-        val payload = buildJsonRpcPayload(reqId, method, params)
-        val reqBuilder = buildHttpPostRequest(server, rawAuthToken, payload)
+        var tokenToUse = rawAuthToken
+        var attempt = 0
+        while (true) {
+            val reqId = requestIdCounter.getAndIncrement()
+            val payload = buildJsonRpcPayload(reqId, method, params)
+            val reqBuilder = buildHttpPostRequest(server, tokenToUse, payload)
 
-        okHttpClient.newCall(reqBuilder.build()).execute().use { response ->
-            val sessionHeader = response.header("Mcp-Session-Id")
-                ?: response.header("mcp-session-id")
-            if (!sessionHeader.isNullOrBlank()) {
-                sessionIdsByServer[server.id] = sessionHeader.trim()
+            val failure = okHttpClient.newCall(reqBuilder.build()).execute().use { response ->
+                val sessionHeader = response.header("Mcp-Session-Id")
+                    ?: response.header("mcp-session-id")
+                if (!sessionHeader.isNullOrBlank()) {
+                    sessionIdsByServer[server.id] = sessionHeader.trim()
+                }
+
+                val rawBody = response.body?.string().orEmpty()
+                if (response.isSuccessful) {
+                    return extractJsonRpcResultOrThrow(rawBody, server.name)
+                }
+                response.code to rawBody
             }
 
-            val rawBody = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                throw ProviderNormalizedException(
-                    ErrorNormalizer.normalizeHttpError(
-                        statusCode = response.code,
-                        responseBody = rawBody,
-                        providerName = "MCP (${server.name})"
-                    )
+            // One OAuth retry: a 401 on a signed-in server usually means the
+            // access token expired mid-session — refresh it and try once more.
+            val (statusCode, rawBody) = failure
+            if (statusCode == 401 && attempt == 0 && oauthRefresher != null) {
+                val refreshed = runCatching {
+                    kotlinx.coroutines.runBlocking { oauthRefresher.invoke(server.id) }
+                }.getOrNull()
+                if (!refreshed.isNullOrBlank() && refreshed != tokenToUse) {
+                    tokenToUse = refreshed
+                    attempt++
+                    continue
+                }
+            }
+
+            throw ProviderNormalizedException(
+                ErrorNormalizer.normalizeHttpError(
+                    statusCode = statusCode,
+                    responseBody = rawBody,
+                    providerName = "MCP (${server.name})"
                 )
-            }
-
-            return extractJsonRpcResultOrThrow(rawBody, server.name)
+            )
         }
     }
 

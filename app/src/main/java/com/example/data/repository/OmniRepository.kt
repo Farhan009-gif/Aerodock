@@ -147,9 +147,39 @@ class OmniRepository(
         YouTubeIntegrationClient(fileUploadOkHttpClient)
     }
 
-    val mcpClient: McpClient by lazy {
-        McpClient(okHttpClient)
+    val mcpOAuthManager: com.example.data.mcp.McpOAuthManager by lazy {
+        com.example.data.mcp.McpOAuthManager(okHttpClient, secretVault)
     }
+
+    val mcpClient: McpClient by lazy {
+        McpClient(okHttpClient) { serverId ->
+            mcpOAuthManager.forceRefreshAccessToken(serverId)
+        }
+    }
+
+    /**
+     * The credential an MCP request should carry: a fresh OAuth access token
+     * when the server was signed in with OAuth, otherwise the static vault
+     * token (API key / PAT) as before.
+     */
+    suspend fun resolveMcpAuthToken(server: McpServerEntity): String {
+        val oauthToken = mcpOAuthManager.freshAccessToken(server.id)
+        if (!oauthToken.isNullOrBlank()) {
+            return oauthToken
+        }
+        return secretVault.getApiKey(TinkSecretVault.mcpServerSecretId(server.id))
+    }
+
+    /** Opens [url] in the user's browser (used by the MCP OAuth sign-in). */
+    fun launchBrowser(url: String): Boolean = runCatching {
+        context.startActivity(
+            android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse(url)
+            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        true
+    }.getOrDefault(false)
 
     fun resolveAdapter(provider: ProviderInstanceEntity): AiProvider {
         return when (provider.presetEnum()) {
@@ -2635,6 +2665,7 @@ class OmniRepository(
         dao.deleteMcpToolsForServer(serverId)
         dao.deleteMcpServerById(serverId)
         secretVault.deleteApiKey(TinkSecretVault.mcpServerSecretId(serverId))
+        mcpOAuthManager.disconnect(serverId)
     }
 
     suspend fun testAndDiscoverMcpServer(
@@ -2642,7 +2673,7 @@ class OmniRepository(
         overrideToken: String? = null
     ): Result<McpDiscoveryResult> = withContext(Dispatchers.IO) {
         val tokenToUse = overrideToken?.trim()?.takeIf { it.isNotEmpty() }
-            ?: secretVault.getApiKey(TinkSecretVault.mcpServerSecretId(server.id))
+            ?: resolveMcpAuthToken(server)
 
         val res = mcpClient.testAndDiscoverServer(server, tokenToUse)
         res.onSuccess { discovery ->
@@ -2688,7 +2719,7 @@ class OmniRepository(
         argumentsJson: String
     ): ToolCallLogEntity = withContext(Dispatchers.IO) {
         val startMs = System.currentTimeMillis()
-        val token = secretVault.getApiKey(TinkSecretVault.mcpServerSecretId(server.id))
+        val token = resolveMcpAuthToken(server)
         val callRes = mcpClient.callTool(
             server = server,
             rawAuthToken = token,

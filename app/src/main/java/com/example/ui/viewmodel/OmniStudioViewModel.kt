@@ -299,6 +299,7 @@ data class OmniUiState(
     val youTubePublishDraft: YouTubePublishDraft? = null,
     // Phase 6: Skills (SKILL.md) & Remote MCP Servers state
     val maskedMcpTokensByServer: Map<String, String> = emptyMap(),
+    val mcpOAuthStatusByServer: Map<String, String> = emptyMap(),
     val busyMcpServerId: String? = null,
     val mcpDiscoverySummaries: Map<String, McpDiscoveryResult> = emptyMap(),
     val pendingToolApproval: PendingToolApprovalRequest? = null,
@@ -784,10 +785,14 @@ class OmniStudioViewModel(
             }
         }
         val mcpMap = mutableMapOf<String, String>()
+        val mcpOAuthMap = mutableMapOf<String, String>()
         for (srv in dao.getMcpServersOnce()) {
             val masked = repository.secretVault.getMaskedApiKey(TinkSecretVault.mcpServerSecretId(srv.id))
             if (masked.isNotBlank()) {
                 mcpMap[srv.id] = masked
+            }
+            if (repository.mcpOAuthManager.getRecord(srv.id) != null) {
+                mcpOAuthMap[srv.id] = "Signed in"
             }
         }
         val ghMasked = repository.secretVault.getMaskedApiKey(TinkSecretVault.INTEGRATION_GITHUB_PAT_ID)
@@ -802,6 +807,7 @@ class OmniStudioViewModel(
             state.copy(
                 maskedKeysByProvider = map,
                 maskedMcpTokensByServer = mcpMap,
+                mcpOAuthStatusByServer = mcpOAuthMap,
                 maskedGitHubPat = ghMasked,
                 maskedYouTubeAccessToken = ytMasked,
                 youTubeClientId = ytClientId,
@@ -6140,6 +6146,46 @@ class OmniStudioViewModel(
             repository.secretVault.deleteApiKey(TinkSecretVault.mcpServerSecretId(server.id))
             refreshMaskedKeys()
             _uiState.update { it.copy(statusToast = "Cleared encrypted token for ${server.name}") }
+        }
+    }
+
+    /** Browser OAuth sign-in for MCP servers that take no static key (e.g. Onshape). */
+    fun signInMcpOAuth(server: McpServerEntity) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(busyMcpServerId = server.id) }
+            val result = repository.mcpOAuthManager.signIn(server) { url ->
+                repository.launchBrowser(url)
+            }
+            _uiState.update { it.copy(busyMcpServerId = null) }
+            result.onSuccess {
+                _uiState.update { it.copy(statusToast = "Signed in to ${server.name} with OAuth") }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        statusToast = "OAuth sign-in failed: ${err.message?.take(90) ?: "unknown error"}"
+                    )
+                }
+            }
+            refreshMaskedKeys()
+        }
+    }
+
+    fun disconnectMcpOAuth(server: McpServerEntity) {
+        viewModelScope.launch {
+            repository.mcpOAuthManager.disconnect(server.id)
+            refreshMaskedKeys()
+            _uiState.update { it.copy(statusToast = "OAuth sign-in removed for ${server.name}") }
+        }
+    }
+
+    /** Called by MainActivity when the OAuth redirect lands back in the app. */
+    fun handleMcpOAuthCallback(uriString: String) {
+        viewModelScope.launch {
+            val completed = repository.mcpOAuthManager.handleCallback(uriString)
+            refreshMaskedKeys()
+            if (completed) {
+                _uiState.update { it.copy(statusToast = "OAuth sign-in complete") }
+            }
         }
     }
 

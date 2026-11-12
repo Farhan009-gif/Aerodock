@@ -106,6 +106,7 @@ fun ConnectorsScreen(
     perToolPolicies: Map<String, ToolApprovalChoice>,
     confirmedWriteAlwaysToolIds: Set<String>,
     maskedTokensByServer: Map<String, String>,
+    oauthStatusByServer: Map<String, String>,
     approvedCleartextHosts: Set<String>,
     busyServerId: String?,
     onBack: () -> Unit,
@@ -122,6 +123,8 @@ fun ConnectorsScreen(
     onTestConnectionAndDiscover: (McpServerEntity, String?) -> Unit,
     onUpdateConnectorToken: (McpServerEntity, String) -> Unit,
     onClearConnectorToken: (McpServerEntity) -> Unit,
+    onOAuthSignIn: (McpServerEntity) -> Unit,
+    onOAuthDisconnect: (McpServerEntity) -> Unit,
     onDeleteConnector: (String) -> Unit,
     onSetAllToolsChoice: (
         server: McpServerEntity,
@@ -255,6 +258,9 @@ fun ConnectorsScreen(
             perToolPolicies = perToolPolicies,
             confirmedWriteAlwaysToolIds = confirmedWriteAlwaysToolIds,
             maskedToken = maskedTokensByServer[selectedServer.id].orEmpty(),
+            oauthStatusText = oauthStatusByServer[selectedServer.id].orEmpty(),
+            onOAuthSignIn = { onOAuthSignIn(selectedServer) },
+            onOAuthDisconnect = { onOAuthDisconnect(selectedServer) },
             isBusy = busyServerId == selectedServer.id,
             onBackToConnectorsList = { onSelectConnector(null) },
             onToggleConnected = { onToggleConnectorConnected(selectedServer) },
@@ -699,6 +705,9 @@ private fun ConnectorDetailView(
     perToolPolicies: Map<String, ToolApprovalChoice>,
     confirmedWriteAlwaysToolIds: Set<String>,
     maskedToken: String,
+    oauthStatusText: String,
+    onOAuthSignIn: () -> Unit,
+    onOAuthDisconnect: () -> Unit,
     isBusy: Boolean,
     onBackToConnectorsList: () -> Unit,
     onToggleConnected: () -> Unit,
@@ -870,6 +879,46 @@ private fun ConnectorDetailView(
                                         label = "Clear",
                                         onClick = onClearToken
                                     )
+                                }
+                            }
+                        }
+
+                        // OAuth sign-in row — for HTTPS servers that take a
+                        // browser sign-in instead of a static key (e.g. Onshape).
+                        if (server.url.startsWith("https://", ignoreCase = true)) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "OAuth Sign-In (browser)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (oauthStatusText.isNotBlank()) {
+                                            "Signed in — tokens refresh automatically"
+                                        } else {
+                                            "Not signed in — for servers like Onshape that use OAuth instead of a key"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    MinimalChip(
+                                        label = if (oauthStatusText.isNotBlank()) "Reconnect" else "Sign in",
+                                        onClick = onOAuthSignIn
+                                    )
+                                    if (oauthStatusText.isNotBlank()) {
+                                        MinimalChip(
+                                            label = "Disconnect",
+                                            onClick = onOAuthDisconnect
+                                        )
+                                    }
                                 }
                             }
                         }

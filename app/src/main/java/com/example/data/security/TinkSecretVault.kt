@@ -101,6 +101,14 @@ class TinkSecretVault(private val context: Context) {
 
         fun mcpServerSecretId(serverId: String): String = "$MCP_SERVER_TOKEN_PREFIX$serverId"
 
+        private const val MCP_OAUTH_RECORD_PREFIX = "mcp_oauth_record_"
+        private const val MCP_OAUTH_ERROR_PREFIX = "mcp_oauth_error_"
+        private const val MCP_OAUTH_PENDING_ID = "mcp_oauth_pending_current"
+
+        fun mcpOAuthRecordId(serverId: String): String = "$MCP_OAUTH_RECORD_PREFIX$serverId"
+        fun mcpOAuthErrorId(serverId: String): String = "$MCP_OAUTH_ERROR_PREFIX$serverId"
+        fun mcpOAuthPendingId(): String = MCP_OAUTH_PENDING_ID
+
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_THEME_ACCENT = stringPreferencesKey("theme_accent")
