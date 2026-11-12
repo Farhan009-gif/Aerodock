@@ -724,6 +724,15 @@ private fun RunwayMarkdownBlockquote(
 }
 
 private val inlineImageExtractRegex = Regex("!\\[([^\\]]*)]\\(([^)]+)\\)")
+private val inlineLinkExtractRegex = Regex("\\[([^\\]]*)\\]\\(([^)]+)\\)")
+
+private val IMAGE_FILE_EXTENSIONS = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")
+
+/** True when [url] points at an image file (query string and fragment ignored). */
+internal fun isImageFileUrl(url: String): Boolean {
+    val path = url.trim().substringBefore('?').substringBefore('#').lowercase()
+    return IMAGE_FILE_EXTENSIONS.any { path.endsWith(it) }
+}
 
 @Composable
 private fun RunwayInlineRichText(
@@ -748,9 +757,29 @@ private fun RunwayInlineRichText(
         if (inlineImages.isEmpty()) text else inlineImageExtractRegex.replace(text, "").trim()
     }
 
-    val annotated = remember(textWithoutImages, isStreaming, color, inlineCodeBg, onSurfaceVariant, accentColor) {
+    // Promote plain links that point at image files to image previews: models
+    // often wrap a returned image URL as [name](url) instead of ![name](url),
+    // which otherwise shows as a bare link with no picture (seen 2026-11-12
+    // with a Composio-generated image). Non-image links stay clickable text.
+    val promotedImages = remember(textWithoutImages) {
+        inlineLinkExtractRegex.findAll(textWithoutImages)
+            .filter { isImageFileUrl(it.groupValues[2]) }
+            .map { it.groupValues[1] to it.groupValues[2].trim() }
+            .toList()
+    }
+    val displayText = remember(textWithoutImages, promotedImages) {
+        if (promotedImages.isEmpty()) {
+            textWithoutImages
+        } else {
+            inlineLinkExtractRegex.replace(textWithoutImages) { match ->
+                if (isImageFileUrl(match.groupValues[2])) "" else match.value
+            }.trim()
+        }
+    }
+
+    val annotated = remember(displayText, isStreaming, color, inlineCodeBg, onSurfaceVariant, accentColor) {
         buildInlineMarkdownAnnotatedString(
-            raw = textWithoutImages,
+            raw = displayText,
             isStreaming = isStreaming,
             baseColor = color,
             codeBg = inlineCodeBg,
@@ -784,7 +813,7 @@ private fun RunwayInlineRichText(
             }
         }
 
-        inlineImages.forEach { (alt, url) ->
+        (inlineImages + promotedImages).forEach { (alt, url) ->
             RunwayReplyImageItem(
                 altText = alt,
                 imageUrl = url,
