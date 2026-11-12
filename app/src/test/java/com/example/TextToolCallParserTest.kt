@@ -128,4 +128,92 @@ class TextToolCallParserTest {
         val result = TextToolCallParser.extract(content, offered)
         assertEquals(TextToolCallParser.MAX_EXTRACTED_CALLS, result.calls.size)
     }
+
+    // --- DSML dialect (DeepSeek) — regression for the 2026-11-12 leak, where a
+    // Composio multi-execute call printed as text and never ran. ---
+
+    private val dsmlOffered = setOf("COMPOSIO_MULTI_EXECUTE_TOOL", "COMPOSIO_SEARCH_TOOLS")
+
+    @Test
+    fun `dsml block with json and string parameters is extracted`() {
+        val content = "I found the tool. Now generating the image.\n" +
+            "<｜DSML｜calls>\n" +
+            "<｜DSML｜invoke name=\"COMPOSIO_MULTI_EXECUTE_TOOL\">\n" +
+            "<｜DSML｜parameter name=\"tools\" string=\"false\">[{\"tool_slug\": \"GEMINI_GENERATE_IMAGE\", \"arguments\": {\"prompt\": \"two teenagers walking home\", \"aspect_ratio\": \"16:9\"}}]</｜DSML｜parameter>\n" +
+            "<｜DSML｜parameter name=\"session_id\" string=\"true\">coal</｜DSML｜parameter>\n" +
+            "<｜DSML｜parameter name=\"current_step\" string=\"true\">Generate the image with GEMINI_GENERATE_IMAGE</｜DSML｜parameter>\n" +
+            "</｜DSML｜invoke>\n" +
+            "</｜DSML｜calls>"
+        val result = TextToolCallParser.extract(content, dsmlOffered)
+        assertEquals(1, result.calls.size)
+        assertEquals("COMPOSIO_MULTI_EXECUTE_TOOL", result.calls[0].toolName)
+        val args = JSONObject(result.calls[0].argumentsJson)
+        val tools = args.getJSONArray("tools")
+        assertEquals(1, tools.length())
+        assertEquals("GEMINI_GENERATE_IMAGE", tools.getJSONObject(0).getString("tool_slug"))
+        assertEquals(
+            "two teenagers walking home",
+            tools.getJSONObject(0).getJSONObject("arguments").getString("prompt")
+        )
+        assertEquals("coal", args.getString("session_id"))
+        assertEquals("Generate the image with GEMINI_GENERATE_IMAGE", args.getString("current_step"))
+        assertFalse(result.cleanedContent.contains("DSML"))
+        assertTrue(result.cleanedContent.contains("Now generating the image."))
+    }
+
+    @Test
+    fun `dsml ascii pipe variant is extracted`() {
+        val content = "<|DSML|calls>" +
+            "<|DSML|invoke name=\"web_search\">" +
+            "<|DSML|parameter name=\"query\" string=\"true\">monsoon news</|DSML|parameter>" +
+            "</|DSML|invoke>" +
+            "</|DSML|calls>"
+        val result = TextToolCallParser.extract(content, offered)
+        assertEquals(1, result.calls.size)
+        assertEquals("web_search", result.calls[0].toolName)
+        assertEquals("monsoon news", JSONObject(result.calls[0].argumentsJson).getString("query"))
+        assertEquals("", result.cleanedContent)
+    }
+
+    @Test
+    fun `dsml unknown tool name stays as plain text`() {
+        val content = "<｜DSML｜calls>" +
+            "<｜DSML｜invoke name=\"delete_everything\">" +
+            "<｜DSML｜parameter name=\"x\" string=\"true\">1</｜DSML｜parameter>" +
+            "</｜DSML｜invoke>" +
+            "</｜DSML｜calls>"
+        val result = TextToolCallParser.extract(content, dsmlOffered)
+        assertTrue(result.calls.isEmpty())
+        assertEquals(content, result.cleanedContent)
+    }
+
+    @Test
+    fun `dsml parameter without string attribute is treated as a string`() {
+        val content = "<｜DSML｜calls>" +
+            "<｜DSML｜invoke name=\"web_search\">" +
+            "<｜DSML｜parameter name=\"query\">123</｜DSML｜parameter>" +
+            "</｜DSML｜invoke>" +
+            "</｜DSML｜calls>"
+        val result = TextToolCallParser.extract(content, offered)
+        assertEquals(1, result.calls.size)
+        // A bare "123" with no string="false" flag stays the string "123".
+        assertEquals("123", JSONObject(result.calls[0].argumentsJson).getString("query"))
+    }
+
+    @Test
+    fun `dsml multiple invokes in one block are all extracted in order`() {
+        val content = "<｜DSML｜calls>" +
+            "<｜DSML｜invoke name=\"COMPOSIO_SEARCH_TOOLS\">" +
+            "<｜DSML｜parameter name=\"queries\" string=\"false\">[{\"use_case\": \"generate an image\"}]</｜DSML｜parameter>" +
+            "</｜DSML｜invoke>" +
+            "<｜DSML｜invoke name=\"COMPOSIO_MULTI_EXECUTE_TOOL\">" +
+            "<｜DSML｜parameter name=\"tools\" string=\"false\">[]</｜DSML｜parameter>" +
+            "</｜DSML｜invoke>" +
+            "</｜DSML｜calls>"
+        val result = TextToolCallParser.extract(content, dsmlOffered)
+        assertEquals(2, result.calls.size)
+        assertEquals("COMPOSIO_SEARCH_TOOLS", result.calls[0].toolName)
+        assertEquals("COMPOSIO_MULTI_EXECUTE_TOOL", result.calls[1].toolName)
+        assertEquals("", result.cleanedContent)
+    }
 }
