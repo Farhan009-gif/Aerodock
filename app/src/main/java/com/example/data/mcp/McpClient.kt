@@ -246,9 +246,10 @@ class McpClient(
             // One OAuth retry: a 401 on a signed-in server usually means the
             // access token expired mid-session — refresh it and try once more.
             val (statusCode, rawBody) = failure
-            if (statusCode == 401 && attempt == 0 && oauthRefresher != null) {
+            val refresher = oauthRefresher
+            if (statusCode == 401 && attempt == 0 && refresher != null) {
                 val refreshed = runCatching {
-                    kotlinx.coroutines.runBlocking { oauthRefresher.invoke(server.id) }
+                    kotlinx.coroutines.runBlocking { refresher.invoke(server.id) }
                 }.getOrNull()
                 if (!refreshed.isNullOrBlank() && refreshed != tokenToUse) {
                     tokenToUse = refreshed
