@@ -1525,7 +1525,7 @@ private fun RunwaySectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -1535,7 +1535,7 @@ private fun RunwaySectionHeader(
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = Modifier
-                .size(38.dp)
+                .size(34.dp)
                 .testTag("section_back_button")
         ) {
             Box(contentAlignment = Alignment.Center) {

@@ -723,4 +723,34 @@ object ModelPriceTable {
             append(" · Cost: $costLabel")
         }
     }
+
+    /**
+     * Round 14: one-line variant of [formatConversationUsageSummary] for the
+     * slim chat footer — same numbers, terse labels, no prefix.
+     */
+    fun formatConversationUsageSummaryCompact(
+        totalInputTokens: Int,
+        totalOutputTokens: Int,
+        totalEstimatedCostUsd: Double,
+        toolCallsCount: Int,
+        codeRunsCount: Int,
+        hasEstimatedTokens: Boolean,
+        currency: String = "USD",
+        totalCachedInputTokens: Int = 0
+    ): String {
+        val costLabel = formatEstimatedCost(totalEstimatedCostUsd, currency)
+        return buildString {
+            append("$totalInputTokens in · $totalOutputTokens out")
+            if (totalCachedInputTokens > 0) {
+                append(" · cached $totalCachedInputTokens")
+            }
+            if (toolCallsCount > 0 || codeRunsCount > 0) {
+                append(" · $toolCallsCount calls · $codeRunsCount runs")
+            }
+            append(" · $costLabel")
+            if (hasEstimatedTokens) {
+                append(" (est)")
+            }
+        }
+    }
 }

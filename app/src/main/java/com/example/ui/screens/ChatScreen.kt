@@ -1114,7 +1114,7 @@ private fun MinimalChatCanvas(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1122,7 +1122,7 @@ private fun MinimalChatCanvas(
                 IconButton(
                     onClick = onOpenMenu,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(40.dp)
                         .testTag("open_drawer_button")
                 ) {
                     Icon(
@@ -1133,7 +1133,7 @@ private fun MinimalChatCanvas(
                     )
                 }
             } else {
-                Spacer(modifier = Modifier.size(44.dp))
+                Spacer(modifier = Modifier.size(40.dp))
             }
 
             // Center tappable model pill ("+ Combo" moved into the Tools sheet)
@@ -1147,12 +1147,12 @@ private fun MinimalChatCanvas(
                     color = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerHigh else accentBubble.fill,
                     border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else accentBubble.fill),
                     modifier = Modifier
-                        .heightIn(min = 38.dp)
+                        .heightIn(min = 34.dp)
                         .widthIn(max = 210.dp)
                         .testTag("top_bar_model_selector_pill")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -1197,7 +1197,7 @@ private fun MinimalChatCanvas(
             IconButton(
                 onClick = onOpenToolsSheet,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(40.dp)
                     .testTag("top_bar_tools_overflow_button")
             ) {
                 Icon(
@@ -1213,13 +1213,13 @@ private fun MinimalChatCanvas(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp),
+                .padding(bottom = 4.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "$activeSkillsCount skills · $enabledMcpToolsCount tools ready",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .clickable(onClick = onOpenSkillsAndToolsSheet)
@@ -1656,7 +1656,7 @@ private fun MinimalChatCanvas(
                         log.serverId == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_SERVER_ID
                 }
                 val mcpToolCallsCount = (conversationToolLogs.size - codeRunsCount).coerceAtLeast(0)
-                com.example.data.provider.ModelPriceTable.formatConversationUsageSummary(
+                com.example.data.provider.ModelPriceTable.formatConversationUsageSummaryCompact(
                     totalInputTokens = totalIn,
                     totalOutputTokens = totalOut,
                     totalEstimatedCostUsd = totalCost,
@@ -1666,26 +1666,17 @@ private fun MinimalChatCanvas(
                     totalCachedInputTokens = totalCached
                 )
             }
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(10.dp),
+            Text(
+                text = conversationSummaryText,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .wrapContentHeight()
                     .padding(horizontal = 16.dp, vertical = 2.dp)
                     .testTag("chat_conversation_usage_summary_bar")
-            ) {
-                Text(
-                    text = conversationSummaryText,
-                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    softWrap = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
+            )
         }
 
         // Active tool turn status indicator banner while loop runs
