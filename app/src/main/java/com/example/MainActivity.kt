@@ -895,7 +895,39 @@ private fun OmniStudioRoot(
                             }
                         )
                 ) {
-                    if (homeVisible) {
+                    // Round 15: section switches (Home <-> Chat and friends) get the
+                    // same slide+fade the tab switches already had, not a hard cut.
+                    val sectionIndex = when {
+                        homeVisible -> 0
+                        groupsVisible -> 1
+                        uiState.showConnectorsScreen -> 3
+                        else -> 2
+                    }
+                    AnimatedContent(
+                        targetState = sectionIndex,
+                        transitionSpec = {
+                            if (areAnimationsDisabled) {
+                                EnterTransition.None togetherWith ExitTransition.None
+                            } else {
+                                val direction = if (targetState > initialState) 1 else -1
+                                (slideInHorizontally(
+                                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> direction * fullWidth }
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = 150)
+                                )) togetherWith (slideOutHorizontally(
+                                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                    targetOffsetX = { fullWidth -> -direction * fullWidth }
+                                ) + fadeOut(
+                                    animationSpec = tween(durationMillis = 150)
+                                ))
+                            }
+                        },
+                        label = "section_switch_animation",
+                        modifier = Modifier.fillMaxSize()
+                    ) { section ->
+                    when (section) {
+                        0 -> {
                         RunwayHomeScreen(
                             models = models,
                             conversations = conversations,
@@ -917,14 +949,16 @@ private fun OmniStudioRoot(
                             },
                             onSelectModel = viewModel::switchActiveConversationModel
                         )
-                    } else if (groupsVisible) {
+                        }
+                        1 -> {
                         GroupsRoot(
                             onExit = {
                                 groupsVisible = false
                                 homeVisible = true
                             }
                         )
-                    } else if (uiState.showConnectorsScreen) {
+                        }
+                        3 -> {
                         ConnectorsScreen(
                             mcpServers = mcpServers,
                             mcpTools = mcpTools,
@@ -951,7 +985,8 @@ private fun OmniStudioRoot(
                             onSetAllToolsChoice = viewModel::setConnectorAllToolsChoice,
                             onSetSingleToolChoice = viewModel::setSingleToolChoice
                         )
-                    } else {
+                        }
+                        else -> {
                         AnimatedContent(
                             targetState = currentPrimaryTab,
                             transitionSpec = {
@@ -1483,6 +1518,8 @@ private fun OmniStudioRoot(
                         }
                     }
                 }
+                    }
+                    }
             }
         }
 
