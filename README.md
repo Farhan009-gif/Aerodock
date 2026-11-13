@@ -38,7 +38,7 @@ No Aerodock account. No Aerodock cloud. Your conversations live in a local datab
 
 ## 📲 Download
 
-**Latest release: [Aerodock 2.3 (as Runway)](https://github.com/Farhan009-gif/Aerodock/releases/tag/v2.3)**
+**Latest release: [Aerodock 2.6](https://github.com/Farhan009-gif/Aerodock/releases/tag/v2.6)**
 
 Download `app-debug.apk` from the release and install it (you may need to allow "install from unknown sources" for your browser/files app). The release APK is CI debug-signed — fine for sideloading and sharing, and it installs alongside nothing else under the package `com.example.runway`-lineage build.
 
