@@ -198,7 +198,7 @@ enum class SpecializedImageCategory(
 }
 
 data class ImageBrandKitProfile(
-    val brandName: String = "Runway Visuals",
+    val brandName: String = "Aerodock Visuals",
     val primaryHex: String = "#6366F1",
     val secondaryHex: String = "#10B981",
     val safeZoneTypographyOverlay: String = "Top 20% reserved for headline copy",

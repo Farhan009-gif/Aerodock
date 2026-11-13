@@ -20,7 +20,7 @@ object BiometricAuthHelper {
 
     fun authenticate(
         activity: FragmentActivity,
-        title: String = "Unlock Runway Vault",
+        title: String = "Unlock Aerodock Vault",
         subtitle: String = "Verify your identity to access encrypted API keys and workspace",
         onSuccess: () -> Unit,
         onError: (String) -> Unit

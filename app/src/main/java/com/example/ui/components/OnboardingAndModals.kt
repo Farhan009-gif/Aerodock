@@ -277,7 +277,7 @@ fun OmniRouteOnboardingSheet(
                             )
                         }
                         Text(
-                            text = "Runway blocks unencrypted HTTP by default unless the host is in your Approved Host List.",
+                            text = "Aerodock blocks unencrypted HTTP by default unless the host is in your Approved Host List.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -812,7 +812,7 @@ fun ParameterTuningBottomSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var systemPrompt by rememberSaveable(conversation?.id) {
-        mutableStateOf(conversation?.systemPrompt ?: "You are a helpful, precise AI assistant in Runway.")
+        mutableStateOf(conversation?.systemPrompt ?: "You are a helpful, precise AI assistant in Aerodock.")
     }
     var temperature by rememberSaveable(conversation?.id) {
         mutableFloatStateOf(conversation?.temperature ?: 0.7f)

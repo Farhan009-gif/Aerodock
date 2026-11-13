@@ -325,7 +325,7 @@ fun McpSystemStudioSheet(
                                         inlineSecretInput.takeIf { it.isNotBlank() },
                                         cfg.approvalMode
                                     )
-                                    statusBanner = "Imported & synced '${cfg.name}' (${cfg.protocol.name}) to Runway Connect"
+                                    statusBanner = "Imported & synced '${cfg.name}' (${cfg.protocol.name}) to Aerodock Connect"
                                 }
                             }
                         },

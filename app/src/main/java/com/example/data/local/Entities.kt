@@ -195,7 +195,7 @@ data class ConversationEntity(
     val isPinned: Boolean = false,
     val providerInstanceId: String,
     val modelId: String,
-    val systemPrompt: String = "You are a helpful, precise AI assistant in Runway.",
+    val systemPrompt: String = "You are a helpful, precise AI assistant in Aerodock.",
     val temperature: Float = 0.7f,
     val maxTokens: Int = 2048,
     val topP: Float = 1.0f,

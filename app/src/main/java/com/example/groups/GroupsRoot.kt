@@ -194,7 +194,7 @@ private fun GroupsScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "The group service could not be started on this device. " +
-                                "Everything else in Runway works as usual.",
+                                "Everything else in Aerodock works as usual.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

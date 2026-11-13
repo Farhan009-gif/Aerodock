@@ -2366,12 +2366,12 @@ private suspend fun saveReplyImageToDevice(context: Context, imageUrl: String): 
             }
             if (bitmap == null) return@runCatching false
 
-            val filename = "Runway_${System.currentTimeMillis()}.png"
+            val filename = "Aerodock_${System.currentTimeMillis()}.png"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Runway")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Aerodock")
                 }
                 val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                     ?: return@runCatching false
@@ -2394,7 +2394,7 @@ private fun shareReplyImage(context: Context, imageUrl: String, altText: String)
     runCatching {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, altText.ifBlank { "Runway Image" })
+            putExtra(Intent.EXTRA_SUBJECT, altText.ifBlank { "Aerodock Image" })
             putExtra(Intent.EXTRA_TEXT, imageUrl)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }

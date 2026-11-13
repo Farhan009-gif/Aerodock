@@ -187,7 +187,7 @@ fun OmniAutopilotScreen(
                         },
                         placeholder = {
                             Text(
-                                text = "Tell Runway what to do...",
+                                text = "Tell Aerodock what to do...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -287,7 +287,7 @@ fun OmniAutopilotScreen(
                                             RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                                             RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                                         )
-                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Tell Runway what to do...")
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Tell Aerodock what to do...")
                                     }
                                     speechLauncher.launch(intent)
                                 } catch (_: Exception) {

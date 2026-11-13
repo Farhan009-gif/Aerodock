@@ -88,7 +88,7 @@ private sealed class PendingWriteToolConfirmation {
  * Features:
  * - Top bar with back arrow, title "Connectors", and a + button to add a connector.
  * - "Connector discovery" card with a toggle and the text:
- *   "Runway will help you find available connectors in your directory."
+ *   "Aerodock will help you find available connectors in your directory."
  * - List of connected connectors showing each connector's icon, name, and a badge with the tool count.
  * - Tapping a connector opens its detail screen with:
  *   - "Set all tools" row showing the current default (Always / Ask / Never) and applying it to every tool.
@@ -365,7 +365,7 @@ fun ConnectorsScreen(
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "Runway will help you find available connectors in your directory.",
+                                            text = "Aerodock will help you find available connectors in your directory.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

@@ -5471,7 +5471,7 @@ class OmniStudioViewModel(
             _uiState.update {
                 it.copy(
                     gitHubPushDraft = GitHubPushDraft(
-                        title = conv?.title ?: "Runway Conversation",
+                        title = conv?.title ?: "Aerodock Conversation",
                         suggestedFileName = "$slug.md",
                         suggestedFilePath = "exports/$slug.md",
                         content = markdown
@@ -5677,11 +5677,11 @@ class OmniStudioViewModel(
 
     fun openYouTubePublishDialog(job: VideoJobEntity) {
         val cleanPrompt = job.prompt.trim()
-        val suggestedTitle = cleanPrompt.take(72).ifBlank { "Runway Generated Video" }
+        val suggestedTitle = cleanPrompt.take(72).ifBlank { "Aerodock Generated Video" }
         val suggestedDesc = buildString {
             appendLine(cleanPrompt)
             appendLine()
-            appendLine("Generated in Runway")
+            appendLine("Generated in Aerodock")
             appendLine("• Provider: ${job.providerDisplayName}")
             appendLine("• Model: ${job.modelId}")
             appendLine("• Format: ${job.aspectRatio} • ${job.resolution} • ${job.durationSeconds}s")
@@ -5693,7 +5693,7 @@ class OmniStudioViewModel(
                     job = job,
                     suggestedTitle = suggestedTitle,
                     suggestedDescription = suggestedDesc,
-                    suggestedTagsCsv = "AI,Runway,GenerativeVideo,$modelTag"
+                    suggestedTagsCsv = "AI,Aerodock,GenerativeVideo,$modelTag"
                 )
             )
         }

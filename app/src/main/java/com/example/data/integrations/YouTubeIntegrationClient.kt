@@ -164,7 +164,7 @@ class YouTubeIntegrationClient(
             val normalizedPrivacy = privacyStatus.trim().lowercase().let {
                 if (it in listOf("private", "unlisted", "public")) it else "private"
             }
-            val cleanTitle = title.trim().ifBlank { "Runway Generated Video" }.take(100)
+            val cleanTitle = title.trim().ifBlank { "Aerodock Generated Video" }.take(100)
             val metadataJson = buildVideoMetadataJson(
                 title = cleanTitle,
                 description = description.trim(),

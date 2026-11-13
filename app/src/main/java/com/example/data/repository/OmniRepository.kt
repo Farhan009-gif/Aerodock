@@ -1449,13 +1449,13 @@ class OmniRepository(
                     }
                 }
 
-                val fileName = "Runway_${image.id}_${System.currentTimeMillis()}.jpg"
+                val fileName = "Aerodock_${image.id}_${System.currentTimeMillis()}.jpg"
                 val contentValues = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                     put(
                         MediaStore.Images.Media.RELATIVE_PATH,
-                        Environment.DIRECTORY_PICTURES + "/Runway"
+                        Environment.DIRECTORY_PICTURES + "/Aerodock"
                     )
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
@@ -1473,7 +1473,7 @@ class OmniRepository(
                 contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
                 resolver.update(itemUri, contentValues, null, null)
 
-                "Saved to Pictures/Runway/$fileName"
+                "Saved to Pictures/Aerodock/$fileName"
             }
         }
 
@@ -1707,13 +1707,13 @@ class OmniRepository(
                     }
                 }
 
-                val fileName = "Runway_${job.id}_${System.currentTimeMillis()}.mp4"
+                val fileName = "Aerodock_${job.id}_${System.currentTimeMillis()}.mp4"
                 val contentValues = ContentValues().apply {
                     put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
                     put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
                     put(
                         MediaStore.Video.Media.RELATIVE_PATH,
-                        Environment.DIRECTORY_MOVIES + "/Runway"
+                        Environment.DIRECTORY_MOVIES + "/Aerodock"
                     )
                     put(MediaStore.Video.Media.IS_PENDING, 1)
                 }
@@ -1731,7 +1731,7 @@ class OmniRepository(
                 contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
                 resolver.update(itemUri, contentValues, null, null)
 
-                "Saved to Movies/Runway/$fileName"
+                "Saved to Movies/Aerodock/$fileName"
             }
         }
 
@@ -2066,7 +2066,7 @@ class OmniRepository(
         val mcpTools = dao.getMcpToolsOnce()
         val approvedHosts = secretVault.refreshApprovedHostsSnapshot()
         val root = JSONObject()
-        root.put("app", "Runway")
+        root.put("app", "Aerodock")
         root.put("version", 6)
         root.put("keysIncluded", includeKeys)
         root.put("approvedCleartextHosts", JSONArray(approvedHosts.toList()))

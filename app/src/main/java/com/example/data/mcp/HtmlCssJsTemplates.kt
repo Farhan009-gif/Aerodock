@@ -773,7 +773,7 @@ object HtmlCssJsTemplateCatalog {
                   <label class="field-label">Email Address</label>
                   <input id="email-input" type="email" class="text-input" placeholder="dev@example.com" value="engineer@runway.dev" />
                   <label class="field-label">API Secret Passphrase</label>
-                  <input id="pwd-input" type="password" class="text-input" placeholder="Enter at least 8 chars" value="Runway#2025!" />
+                  <input id="pwd-input" type="password" class="text-input" placeholder="Enter at least 8 chars" value="Aerodock#2025!" />
                   <div class="meter-track"><div id="meter-bar" class="meter-bar"></div></div>
                   <p id="form-feedback" class="feedback">Strength: Strong</p>
                   <button type="submit" class="submit-btn">Validate Credentials</button>

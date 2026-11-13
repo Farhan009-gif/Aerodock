@@ -1361,9 +1361,9 @@ private fun OmniStudioRoot(
                                 onVerifyGitHub = viewModel::verifyAndFetchGitHubRepos,
                                 onOpenQuickGitHubGist = {
                                     viewModel.openGitHubPushForContent(
-                                        title = "Runway Workspace Note",
+                                        title = "Aerodock Workspace Note",
                                         suggestedFileName = "runway-note.md",
-                                        content = "# Runway Note\n\nCreated manually from Connect."
+                                        content = "# Aerodock Note\n\nCreated manually from Connect."
                                     )
                                 },
                                 onSaveYouTubeCredentials = viewModel::saveYouTubeOAuthCredentials,

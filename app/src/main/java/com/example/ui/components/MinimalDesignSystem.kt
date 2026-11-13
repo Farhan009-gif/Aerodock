@@ -1230,7 +1230,7 @@ fun RunwayLogoIcon(
 
     Icon(
         imageVector = runwayVector,
-        contentDescription = "Runway",
+        contentDescription = "Aerodock",
         tint = Color.Unspecified,
         modifier = modifier.size(size)
     )

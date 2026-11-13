@@ -105,7 +105,7 @@ fun GitHubPushDialog(
 ) {
     var mode by rememberSaveable { mutableStateOf("GIST") } // "GIST" | "REPO_COMMIT"
     var gistDescription by rememberSaveable(draft.title) {
-        mutableStateOf("${draft.title} — Exported from Runway")
+        mutableStateOf("${draft.title} — Exported from Aerodock")
     }
     var gistFileName by rememberSaveable(draft.suggestedFileName) {
         mutableStateOf(draft.suggestedFileName)
@@ -122,7 +122,7 @@ fun GitHubPushDialog(
         mutableStateOf(draft.suggestedFilePath)
     }
     var commitMessage by rememberSaveable(draft.title) {
-        mutableStateOf("Add ${draft.suggestedFileName} (${draft.title}) via Runway")
+        mutableStateOf("Add ${draft.suggestedFileName} (${draft.title}) via Aerodock")
     }
     var editableContent by rememberSaveable(draft.content) {
         mutableStateOf(draft.content)

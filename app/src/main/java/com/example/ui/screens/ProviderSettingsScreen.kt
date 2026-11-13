@@ -197,7 +197,7 @@ fun ProviderSettingsScreen(
                 OutlinedTextField(
                     value = rawImportJson,
                     onValueChange = { rawImportJson = it },
-                    placeholder = { Text("Paste exported Runway JSON here…") },
+                    placeholder = { Text("Paste exported Aerodock JSON here…") },
                     minLines = 5,
                     maxLines = 10,
                     modifier = Modifier.fillMaxWidth()
@@ -737,7 +737,7 @@ fun ProviderSettingsScreen(
                         )
                     }
                     Text(
-                        text = "Android's static network_security_config cannot whitelist CIDR IP ranges like 192.168.x.x. Runway blocks HTTP by default in OkHttp unless the exact LAN IP, Tailscale host, or emulator loopback (10.0.2.2) is approved below.",
+                        text = "Android's static network_security_config cannot whitelist CIDR IP ranges like 192.168.x.x. Aerodock blocks HTTP by default in OkHttp unless the exact LAN IP, Tailscale host, or emulator loopback (10.0.2.2) is approved below.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

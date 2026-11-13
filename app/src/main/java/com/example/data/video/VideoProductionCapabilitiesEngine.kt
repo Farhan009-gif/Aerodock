@@ -141,7 +141,7 @@ enum class SpecializedVideoCategory(
 }
 
 data class BrandKitProfile(
-    val brandName: String = "Runway Studio",
+    val brandName: String = "Aerodock Studio",
     val primaryHex: String = "#6366F1",
     val accentHex: String = "#10B981",
     val dynamicTextOverlay: String = "RUNWAY PRODUCTION • 4K HDR",

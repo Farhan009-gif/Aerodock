@@ -53,7 +53,7 @@ internal fun AdminScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         GroupsHeader(
             title = "Admin",
-            subtitle = "Runway usage at a glance",
+            subtitle = "Aerodock usage at a glance",
             onBack = onBack
         )
         LazyColumn(
@@ -74,7 +74,7 @@ internal fun AdminScreen(
                         UsageKpiCard(
                             label = "Users",
                             value = stats.totalUsers.toString(),
-                            subtitle = "signed in to Runway",
+                            subtitle = "signed in to Aerodock",
                             modifier = Modifier.weight(0.38f)
                         )
                         UsageKpiCard(
@@ -127,7 +127,7 @@ internal fun AdminScreen(
                 MinimalCard(modifier = Modifier.fillMaxWidth()) {
                     AdminCardHeader(
                         title = "Activity by group",
-                        subtitle = "Every group on Runway",
+                        subtitle = "Every group on Aerodock",
                         badge = "${allGroups.size} groups"
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -152,7 +152,7 @@ internal fun AdminScreen(
                 MinimalCard(modifier = Modifier.fillMaxWidth()) {
                     AdminCardHeader(
                         title = "People",
-                        subtitle = "Everyone signed in to Runway",
+                        subtitle = "Everyone signed in to Aerodock",
                         badge = "${allUsers.size} users"
                     )
                     Spacer(modifier = Modifier.height(12.dp))
