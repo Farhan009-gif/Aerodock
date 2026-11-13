@@ -1246,7 +1246,7 @@ fun RunwayWordmark(
     color: Color = MaterialTheme.colorScheme.onBackground
 ) {
     Text(
-        text = "Runway",
+        text = "Aerodock",
         style = MaterialTheme.typography.titleLarge.copy(
             fontWeight = FontWeight.Medium,
             letterSpacing = androidx.compose.ui.unit.TextUnit(0.5f, androidx.compose.ui.unit.TextUnitType.Sp)

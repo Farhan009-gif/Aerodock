@@ -19,3 +19,8 @@ local.properties
 .aistudio/
 public/
 app/applet/
+
+# Signing material — never commit
+*.keystore
+*.jks
+keystore.properties

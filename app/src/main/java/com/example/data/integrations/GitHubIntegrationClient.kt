@@ -139,7 +139,7 @@ class GitHubIntegrationClient(
             require(content.isNotBlank()) { "Cannot publish an empty Gist." }
 
             val payload = buildGistPayloadJson(
-                description = description.trim().ifBlank { "Exported from Runway" },
+                description = description.trim().ifBlank { "Exported from Aerodock" },
                 fileName = safeFileName,
                 content = content,
                 isPublic = isPublic
@@ -203,7 +203,7 @@ class GitHubIntegrationClient(
 
             val payload = buildRepoCommitPayloadJson(
                 content = content,
-                commitMessage = commitMessage.trim().ifBlank { "Add $cleanPath via Runway" },
+                commitMessage = commitMessage.trim().ifBlank { "Add $cleanPath via Aerodock" },
                 branch = cleanBranch,
                 existingSha = existingSha
             )

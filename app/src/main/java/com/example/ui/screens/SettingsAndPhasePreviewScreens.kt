@@ -840,7 +840,7 @@ fun MinimalSettingsAndThemeScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Runway local storage (v${mig.schemaVersion})",
+                                text = "Aerodock local storage (v${mig.schemaVersion})",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -888,6 +888,51 @@ fun MinimalSettingsAndThemeScreen(
                         icon = LucideIcons.Trash,
                         filled = false,
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // Support Card (round 19): report a bug by email with diagnostics prefilled.
+        item {
+            MinimalSectionHeader(title = "Support")
+            Spacer(modifier = Modifier.height(8.dp))
+            MinimalCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Found something broken? Send a bug report — your app version and device details are filled in for you.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    MinimalButton(
+                        text = "Report a bug",
+                        icon = LucideIcons.MessageSquare,
+                        onClick = {
+                            val body = buildString {
+                                append("What went wrong?\n\n\n")
+                                append("What did you expect to happen?\n\n\n")
+                                append("Steps to reproduce:\n1. \n2. \n3. \n\n")
+                                append("---\n")
+                                append("App: Aerodock ${com.example.BuildConfig.VERSION_NAME} (${com.example.BuildConfig.VERSION_CODE})\n")
+                                append("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
+                                append("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})\n")
+                            }
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
+                                data = android.net.Uri.parse("mailto:musarratquadri@gmail.com")
+                                putExtra(android.content.Intent.EXTRA_SUBJECT, "Aerodock bug report")
+                                putExtra(android.content.Intent.EXTRA_TEXT, body)
+                            }
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent.createChooser(intent, "Report a bug")
+                                )
+                            }
+                        },
+                        filled = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("report_bug_button")
                     )
                 }
             }

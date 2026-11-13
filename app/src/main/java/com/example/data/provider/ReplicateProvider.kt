@@ -70,7 +70,7 @@ class ReplicateProvider(
                 NormalizedAiError(
                     category = ErrorCategory.SERVER_ERROR,
                     title = "Image/Video Provider",
-                    message = "Replicate is configured for Image and Video generation in Runway.",
+                    message = "Replicate is configured for Image and Video generation in Aerodock.",
                     suggestedFix = "Open the Images tab to generate with Replicate Flux/SDXL."
                 )
             )

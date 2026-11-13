@@ -537,7 +537,7 @@ object McpConfigurationParser {
     }
 
     fun serializeToYamlMcp(config: McpLinkConfig): String = buildString {
-        appendLine("# Runway MCP Server Link Configuration (.mcp)")
+        appendLine("# Aerodock MCP Server Link Configuration (.mcp)")
         appendLine("server:")
         appendLine("  name: \"${config.name}\"")
         appendLine("  version: \"${config.version}\"")
@@ -1330,7 +1330,7 @@ class McpPluginLoader(
             GrpcMcpProtocolPlugin(okHttpClient)
         )
         builtIns.forEach { plugin ->
-            registerPlugin(plugin, sourceRepository = "Runway Built-in SDK")
+            registerPlugin(plugin, sourceRepository = "Aerodock Built-in SDK")
         }
     }
 

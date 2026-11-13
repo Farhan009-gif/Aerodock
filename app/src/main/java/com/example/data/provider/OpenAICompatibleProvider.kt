@@ -113,7 +113,7 @@ class OpenAICompatibleProvider(
                         }
                         if (provider.presetEnum() == ProviderPresetType.OPENROUTER) {
                             requestBuilder.header("HTTP-Referer", "https://omniai.studio")
-                            requestBuilder.header("X-Title", "Runway")
+                            requestBuilder.header("X-Title", "Aerodock")
                         }
 
                         okHttpClient.newCall(requestBuilder.build()).execute().use { response ->
@@ -416,7 +416,7 @@ class OpenAICompatibleProvider(
                         }
                         if (request.provider.presetEnum() == ProviderPresetType.OPENROUTER) {
                             reqBuilder.header("HTTP-Referer", "https://omniai.studio")
-                            reqBuilder.header("X-Title", "Runway")
+                            reqBuilder.header("X-Title", "Aerodock")
                         }
 
                         val r = okHttpClient.newCall(reqBuilder.build()).execute()

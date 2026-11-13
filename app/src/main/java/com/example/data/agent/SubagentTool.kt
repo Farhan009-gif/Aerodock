@@ -178,7 +178,7 @@ object SubagentTool {
     }
 
     fun buildSystemPrompt(role: String?): String = buildString {
-        appendLine("You are a subagent inside the Runway app, working for the main assistant.")
+        appendLine("You are a subagent inside the Aerodock app, working for the main assistant.")
         if (!role.isNullOrBlank()) {
             appendLine("Your role: ${role.trim()}")
         }

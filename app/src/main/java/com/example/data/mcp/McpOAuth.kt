@@ -398,7 +398,7 @@ class McpOAuthManager(
                     put(
                         "clientInfo",
                         JSONObject().apply {
-                            put("name", "Runway Android")
+                            put("name", "Aerodock Android")
                             put("version", "1.0.0")
                         }
                     )
@@ -462,7 +462,7 @@ class McpOAuthManager(
             throw IOException("This sign-in server does not support automatic app registration")
         }
         val payload = JSONObject().apply {
-            put("client_name", "Runway")
+            put("client_name", "Aerodock")
             put("redirect_uris", JSONArray().put(REDIRECT_URI))
             put("grant_types", JSONArray().put("authorization_code").put("refresh_token"))
             put("response_types", JSONArray().put("code"))

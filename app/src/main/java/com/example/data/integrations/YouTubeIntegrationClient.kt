@@ -293,7 +293,7 @@ class YouTubeIntegrationClient(
         ): JSONObject {
             val cleanTags = tags.map { it.trim() }.filter { it.isNotEmpty() }
             val snippet = JSONObject().apply {
-                put("title", title.trim().ifBlank { "Runway Video" }.take(100))
+                put("title", title.trim().ifBlank { "Aerodock Video" }.take(100))
                 put("description", description.trim())
                 put("categoryId", categoryId)
                 if (cleanTags.isNotEmpty()) {

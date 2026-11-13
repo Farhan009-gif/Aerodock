@@ -487,7 +487,7 @@ class OmniAutopilotEngine(
             result.add(
                 OmniAgentAction.CreateSkillAction(
                     name = name,
-                    description = "Created live by Runway Autopilot",
+                    description = "Created live by Aerodock Autopilot",
                     instructions = instructions
                 )
             )
@@ -722,7 +722,7 @@ class OmniAutopilotEngine(
                     "CREATE_SKILL" -> {
                         val n = obj.optString("name", "Custom Agent Skill")
                         val inst = obj.optString("instructions", "Follow best engineering practices.")
-                        list.add(OmniAgentAction.CreateSkillAction(n, "Created by Runway Autopilot", inst))
+                        list.add(OmniAgentAction.CreateSkillAction(n, "Created by Aerodock Autopilot", inst))
                     }
                     "SCAN_HEALTH" -> {
                         list.add(OmniAgentAction.RunHealthAndLatencyScan(obj.optBoolean("benchmark", true)))
@@ -772,7 +772,7 @@ class OmniAutopilotEngine(
             it.copy(
                 isExecuting = true,
                 liveStepsInProgress = emptyList(),
-                liveStatusBanner = "Runway Autopilot executing: \"$rawCommand\"",
+                liveStatusBanner = "Aerodock Autopilot executing: \"$rawCommand\"",
                 lastUndoSnapshot = undoSnapshot
             )
         }

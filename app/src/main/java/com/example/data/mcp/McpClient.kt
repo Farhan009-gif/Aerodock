@@ -69,7 +69,7 @@ class McpClient(
                 put(
                     "clientInfo",
                     JSONObject().apply {
-                        put("name", "Runway Android")
+                        put("name", "Aerodock Android")
                         put("version", "1.0.0")
                     }
                 )
