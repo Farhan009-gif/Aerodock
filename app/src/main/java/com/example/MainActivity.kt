@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
@@ -239,6 +240,18 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun RunwaySplashScreen() {
+    // Takeoff transition: the plane climbs up and to the right as the app loads.
+    val takeoff = androidx.compose.runtime.remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(Unit) {
+        takeoff.animateTo(
+            targetValue = 1f,
+            animationSpec = androidx.compose.animation.core.tween(
+                durationMillis = 620,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing
+            )
+        )
+    }
+    val p = takeoff.value
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -250,7 +263,12 @@ private fun RunwaySplashScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            com.example.ui.components.RunwayLogoIcon(size = 84.dp)
+            com.example.ui.components.RunwayLogoIcon(
+                size = 84.dp,
+                modifier = Modifier
+                    .offset(x = (16 * p).dp, y = (-20 * p).dp)
+                    .androidx.compose.ui.draw.alpha(1f - 0.15f * p)
+            )
             com.example.ui.components.RunwayWordmark(
                 color = MaterialTheme.colorScheme.onBackground
             )
