@@ -91,6 +91,22 @@ fun RunwayHomeScreen(
 ) {
     val isDarkTheme = runwayIsDarkTheme()
     val homeContext = LocalContext.current
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) onToggleVoice()
+    }
+    val handleMicTap: () -> Unit = {
+        val hasPerm = androidx.core.content.ContextCompat.checkSelfPermission(
+            homeContext,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (hasPerm) {
+            onToggleVoice()
+        } else {
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
     val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(5)
     ) { uris ->
@@ -263,7 +279,7 @@ fun RunwayHomeScreen(
                                 .size(36.dp)
                                 .clip(CircleShape)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                .clickable { onToggleVoice() },
+                                .clickable { handleMicTap() },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
