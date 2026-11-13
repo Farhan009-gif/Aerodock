@@ -61,6 +61,10 @@ Kotlin · Jetpack Compose (Material 3) · Room · DataStore · Google Tink (Andr
 
 The Home-first redesign has shipped. Next up: shared project files inside Groups, then AI participating in group chats — plus deeper offline/local-model support so more of the workspace works with the internet off.
 
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
+
 ---
 
 Built by **Farhan** ([@farhan.now_](https://instagram.com/farhan.now_)) — a student developer in Bokaro, India. Runway is developed in the open; issues and ideas are welcome on GitHub.
