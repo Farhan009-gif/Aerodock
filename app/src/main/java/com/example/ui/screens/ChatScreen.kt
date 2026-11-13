@@ -1247,19 +1247,19 @@ private fun MinimalChatCanvas(
                         modifier = Modifier.size(18.dp)
                     )
                 }
-            IconButton(
-                onClick = onOpenToolsSheet,
-            }
-                modifier = Modifier
-                    .size(40.dp)
-                    .testTag("top_bar_tools_overflow_button")
-            ) {
-                Icon(
-                    imageVector = LucideIcons.MoreHorizontal,
-                    contentDescription = "Tools",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
+                IconButton(
+                    onClick = onOpenToolsSheet,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("top_bar_tools_overflow_button")
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.MoreHorizontal,
+                        contentDescription = "Tools",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
