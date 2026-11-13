@@ -353,7 +353,10 @@ class GeminiProvider(
                     JSONObject().apply {
                         put("name", tool.toolName)
                         put("description", tool.description)
-                        put("parameters", paramsSchema)
+                        // Gemini accepts only a restricted schema subset; MCP
+                        // schemas (e.g. Composio's x-mcp-header) must be cleaned
+                        // first or the whole request fails with HTTP 400.
+                        put("parameters", sanitizeGeminiSchema(paramsSchema))
                     }
                 )
             }
@@ -650,5 +653,60 @@ class GeminiProvider(
             )
             Result.failure(ProviderNormalizedException(normError))
         }
+    }
+}
+
+/**
+ * Round 12: Gemini's function-declaration `parameters` accepts only a restricted
+ * OpenAPI subset. Any other key — e.g. the `x-mcp-header` Composio embeds in its
+ * MCP tool schemas — makes the whole request fail with HTTP 400 "Unknown name".
+ * Rebuild the schema keeping only allowed keys, recursing into nested schemas
+ * (properties values, items, anyOf/allOf). Scalars, enums and required lists
+ * pass through untouched.
+ */
+internal fun sanitizeGeminiSchema(node: Any?): Any? {
+    val allowed = setOf(
+        "type", "format", "description", "nullable", "enum", "items", "properties",
+        "required", "anyOf", "allOf", "minimum", "maximum", "exclusiveMinimum",
+        "exclusiveMaximum", "multipleOf", "minLength", "maxLength", "pattern",
+        "minItems", "maxItems", "minProperties", "maxProperties"
+    )
+    return when (node) {
+        is JSONObject -> {
+            val out = JSONObject()
+            val keys = node.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                if (key !in allowed) continue
+                val value = node.opt(key)
+                val cleaned: Any? = when (key) {
+                    "properties" -> {
+                        val props = value as? JSONObject
+                        if (props == null) {
+                            value
+                        } else {
+                            val cleanedProps = JSONObject()
+                            val propKeys = props.keys()
+                            while (propKeys.hasNext()) {
+                                val propName = propKeys.next()
+                                cleanedProps.put(propName, sanitizeGeminiSchema(props.opt(propName)))
+                            }
+                            cleanedProps
+                        }
+                    }
+                    "items", "anyOf", "allOf" -> sanitizeGeminiSchema(value)
+                    else -> value
+                }
+                out.put(key, cleaned)
+            }
+            if (out.has("properties") && !out.has("type")) out.put("type", "object")
+            out
+        }
+        is JSONArray -> {
+            val out = JSONArray()
+            for (i in 0 until node.length()) out.put(sanitizeGeminiSchema(node.opt(i)))
+            out
+        }
+        else -> node
     }
 }
