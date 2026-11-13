@@ -1203,36 +1203,29 @@ fun RunwayLogoIcon(
                 arcTo(112f, 112f, 0f, false, true, 112f, 0f)
                 close()
             }
-            group(
-                scaleX = 15.5f,
-                scaleY = 15.5f,
-                translationX = 71f,
-                translationY = 69f
+            path(
+                fill = SolidColor(logoAccent),
+                stroke = null
             ) {
-                path(
-                    fill = SolidColor(logoAccent),
-                    stroke = null
-                ) {
-                    moveTo(2.50f, 19.00f)
-                    lineTo(21.50f, 19.00f)
-                    lineTo(21.50f, 21.00f)
-                    lineTo(2.50f, 21.00f)
-                    lineTo(2.50f, 19.00f)
+                moveTo(109.8f, 363.5f)
+                    lineTo(404.2f, 363.5f)
+                    lineTo(404.2f, 394.5f)
+                    lineTo(109.8f, 394.5f)
+                    lineTo(109.8f, 363.5f)
                     close()
-                    moveTo(22.07f, 9.64f)
-                    curveTo(21.86f, 8.84f, 21.03f, 8.36f, 20.23f, 8.58f)
-                    lineTo(14.92f, 10.00f)
-                    lineTo(8.02f, 3.57f)
-                    lineTo(6.09f, 4.08f)
-                    lineTo(10.23f, 11.25f)
-                    lineTo(5.26f, 12.58f)
-                    lineTo(3.29f, 11.04f)
-                    lineTo(1.84f, 11.43f)
-                    lineTo(4.43f, 15.92f)
-                    curveTo(4.43f, 15.92f, 11.55f, 14.02f, 21.00f, 11.49f)
-                    curveTo(21.81f, 11.26f, 22.28f, 10.44f, 22.07f, 9.64f)
+                    moveTo(413.1f, 218.4f)
+                    curveTo(409.8f, 206.0f, 397.0f, 198.6f, 384.6f, 202.0f)
+                    lineTo(302.3f, 224.0f)
+                    lineTo(195.3f, 124.3f)
+                    lineTo(165.4f, 132.2f)
+                    lineTo(229.6f, 243.4f)
+                    lineTo(152.5f, 264.0f)
+                    lineTo(122.0f, 240.1f)
+                    lineTo(99.5f, 246.2f)
+                    lineTo(139.7f, 315.8f)
+                    curveTo(139.7f, 315.8f, 250.0f, 286.3f, 396.5f, 247.1f)
+                    curveTo(409.1f, 243.5f, 416.3f, 230.8f, 413.1f, 218.4f)
                     close()
-                }
             }
         }.build()
     }

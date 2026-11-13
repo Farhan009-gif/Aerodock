@@ -58,6 +58,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -267,7 +268,7 @@ private fun RunwaySplashScreen() {
                 size = 84.dp,
                 modifier = Modifier
                     .offset(x = (16 * p).dp, y = (-20 * p).dp)
-                    .androidx.compose.ui.draw.alpha(1f - 0.15f * p)
+                    .alpha(1f - 0.15f * p)
             )
             com.example.ui.components.RunwayWordmark(
                 color = MaterialTheme.colorScheme.onBackground
