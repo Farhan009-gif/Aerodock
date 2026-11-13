@@ -25,17 +25,17 @@ object SubagentTool {
     const val SUBAGENT_SERVER_NAME = "Subagent"
 
     /** Hard caps for one subagent run: model turns and wall-clock time. */
-    const val MAX_TURNS = 12
-    const val TIMEOUT_MS = 300_000L
+    const val MAX_TURNS = 60
+    const val TIMEOUT_MS = 1_200_000L
 
     /** Tool results longer than this are truncated before they reach the parent chat. */
-    const val MAX_RESULT_CHARS = 6_000
+    const val MAX_RESULT_CHARS = 12_000
 
     /** At most this many background subagents may run at once, app-wide. */
-    const val MAX_BACKGROUND_JOBS = 3
+    const val MAX_BACKGROUND_JOBS = 12
 
     /** At most this many steps in one `spawn_subagent_chain` pipeline. */
-    const val MAX_CHAIN_STEPS = 4
+    const val MAX_CHAIN_STEPS = 16
 
     private const val TOOL_DESCRIPTION =
         "Delegate a self-contained task to a subagent: a fresh AI conversation with its own " +
@@ -44,7 +44,7 @@ object SubagentTool {
             "parallel — while you keep working. The brief must contain everything the " +
             "subagent needs: it cannot see this conversation. The subagent can use this " +
             "chat's tools except tools that need user approval, and it cannot spawn " +
-            "subagents of its own. A run is capped at $MAX_TURNS turns and 5 minutes. " +
+            "subagents of its own. A run is capped at $MAX_TURNS turns and ${TIMEOUT_MS / 60_000} minutes. " +
             "Set background=true when the task is long or the user may want to keep " +
             "chatting; the result is posted back into this conversation when done."
 
@@ -52,7 +52,7 @@ object SubagentTool {
         """{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for the subagent. Include all context it needs; it cannot see this conversation."},"role":{"type":"string","description":"Optional role or expertise for the subagent, e.g. 'a careful code reviewer'."},"model":{"type":"string","description":"Optional model id on the same provider as this chat. Defaults to this chat's current model."},"background":{"type":"boolean","description":"Optional, default false. If true, the subagent runs in the background: this call returns immediately and the result is posted into this conversation when it finishes, so the user can keep chatting meanwhile."}},"required":["task"]}"""
 
     private const val CHAIN_TOOL_DESCRIPTION =
-        "Run a pipeline of subagents in the background: 2–4 steps executed in order, " +
+        "Run a pipeline of subagents in the background: up to $MAX_CHAIN_STEPS steps executed in order, " +
             "where each step is a fresh subagent under the same rules as spawn_subagent " +
             "and each step's result is passed into the next step's brief. Use it when a " +
             "later step needs an earlier step's output — e.g. step 1 gathers facts, " +
@@ -63,7 +63,7 @@ object SubagentTool {
             "step fails. A chain counts as one background job."
 
     private const val CHAIN_INPUT_SCHEMA_JSON =
-        """{"type":"object","properties":{"steps":{"type":"array","description":"2–4 steps, executed in order; each step's result is fed into the next step.","minItems":1,"maxItems":4,"items":{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for this step's subagent. It may refer to 'the previous step's result'."},"role":{"type":"string","description":"Optional role or expertise for this step's subagent."}},"required":["task"]}}},"required":["steps"]}"""
+        """{"type":"object","properties":{"steps":{"type":"array","description":"Up to 16 steps, executed in order; each step's result is fed into the next step.","minItems":1,"maxItems":16,"items":{"type":"object","properties":{"task":{"type":"string","description":"The complete, self-contained brief for this step's subagent. It may refer to 'the previous step's result'."},"role":{"type":"string","description":"Optional role or expertise for this step's subagent."}},"required":["task"]}}},"required":["steps"]}"""
 
     fun buildSubagentServerEntity(): McpServerEntity {
         return McpServerEntity(
@@ -74,7 +74,7 @@ object SubagentTool {
             authHeaderName = "",
             approvalMode = McpApprovalMode.ASK_EVERY_TIME.name,
             isEnabled = true,
-            lastTestStatus = "Built-in subagent delegation (fresh context, $MAX_TURNS-turn / 5-minute cap)"
+            lastTestStatus = "Built-in subagent delegation (fresh context, $MAX_TURNS-turn / ${TIMEOUT_MS / 60_000}-minute cap)"
         )
     }
 

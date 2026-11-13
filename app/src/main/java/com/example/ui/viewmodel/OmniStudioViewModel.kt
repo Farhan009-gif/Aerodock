@@ -4095,7 +4095,7 @@ class OmniStudioViewModel(
                         )
                         // Free routes 429 often and a subagent has no user watching,
                         // so a rate-limited model request retries in place (10s, then
-                        // 20s) instead of killing the run. The 5-minute timeout still
+                        // 20s) instead of killing the run. The 20-minute timeout still
                         // bounds the total, and cancellation interrupts the wait.
                         var streamAttempt = 0
                         while (true) {
@@ -4221,7 +4221,7 @@ class OmniStudioViewModel(
                 "Error: subagent failed — ${e.message ?: e.javaClass.simpleName}"
             }
             val finalResult = com.example.data.agent.SubagentTool.truncateResult(
-                timedResult ?: "Error: subagent timed out after 5 minutes and was stopped."
+                timedResult ?: "Error: subagent timed out after ${com.example.data.agent.SubagentTool.TIMEOUT_MS / 60_000} minutes and was stopped."
             )
             // One log row per spawn, like every other tool call, so the run shows up in the
             // chat's existing tool-call UI (and the subagent's own tool calls are logged by
