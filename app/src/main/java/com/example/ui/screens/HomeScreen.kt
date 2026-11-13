@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,13 +27,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +65,7 @@ fun RunwayHomeScreen(
     enabledSkillsCount: Int,
     mcpToolsCount: Int,
     onOpenChat: () -> Unit,
+    onSendFromHome: (String) -> Unit,
     onOpenCreate: () -> Unit,
     onOpenAutopilot: () -> Unit,
     onOpenConnect: () -> Unit,
@@ -70,6 +76,7 @@ fun RunwayHomeScreen(
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = runwayIsDarkTheme()
+    var homeInput by remember { mutableStateOf("") }
     val greeting = remember {
         when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
             in 5..11 -> "Good morning"
@@ -144,7 +151,6 @@ fun RunwayHomeScreen(
         // Ask anything card -> opens Chat
         item {
             Surface(
-                onClick = onOpenChat,
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -156,23 +162,41 @@ fun RunwayHomeScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Ask anything…",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    BasicTextField(
+                        value = homeInput,
+                        onValueChange = { homeInput = it },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            Box {
+                                if (homeInput.isEmpty()) {
+                                    Text(
+                                        text = "Ask anything…",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        HomeAskToolPill(icon = LucideIcons.Plus, label = "Attach")
-                        HomeAskToolPill(icon = LucideIcons.Sparkles, label = "Skills")
+                        HomeAskToolPill(icon = LucideIcons.Plus, label = "Attach", modifier = Modifier.clickable { onOpenChat() })
+                        HomeAskToolPill(icon = LucideIcons.Sparkles, label = "Skills", modifier = Modifier.clickable { onOpenChat() })
                         Spacer(modifier = Modifier.weight(1f))
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                .clickable { onOpenChat() },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -186,7 +210,15 @@ fun RunwayHomeScreen(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
+                                .background(MaterialTheme.colorScheme.primary)
+                                .clickable {
+                                    if (homeInput.isNotBlank()) {
+                                        onSendFromHome(homeInput)
+                                        homeInput = ""
+                                    } else {
+                                        onOpenChat()
+                                    }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -400,10 +432,11 @@ private fun HomeSectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun HomeAskToolPill(icon: ImageVector, label: String) {
+private fun HomeAskToolPill(icon: ImageVector, label: String, modifier: Modifier = Modifier) {
     Surface(
         shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.primaryContainer
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = modifier
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),

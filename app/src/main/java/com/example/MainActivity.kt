@@ -958,6 +958,7 @@ private fun OmniStudioRoot(
                             enabledSkillsCount = skills.count { it.isEnabled },
                             mcpToolsCount = mcpTools.size,
                             onOpenChat = { switchToBottomTab(RunwayBottomTab.CHAT) },
+                            onSendFromHome = { text -> viewModel.sendFromHome(text); switchToBottomTab(RunwayBottomTab.CHAT) },
                             onOpenCreate = { switchToBottomTab(RunwayBottomTab.CREATE) },
                             onOpenAutopilot = { switchToBottomTab(RunwayBottomTab.AUTOPILOT) },
                             onOpenConnect = { switchToBottomTab(RunwayBottomTab.CONNECT) },

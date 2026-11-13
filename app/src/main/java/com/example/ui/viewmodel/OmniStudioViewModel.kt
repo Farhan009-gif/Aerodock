@@ -2714,6 +2714,34 @@ class OmniStudioViewModel(
         }
     }
 
+    /**
+     * Home "Ask anything" send: the message lands in the most recent
+     * conversation, or in a brand-new one when no conversation exists yet.
+     * If that conversation is mid-stream, sendMessage() no-ops and the text
+     * stays as the chat draft instead of being lost.
+     */
+    fun sendFromHome(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            val latest = dao.getConversationsOnce().maxByOrNull { it.updatedAt }
+            if (latest != null) {
+                selectConversation(latest.id)
+            } else {
+                val before = _uiState.value.activeConversationId
+                createNewConversation()
+                var waitedMs = 0
+                while ((_uiState.value.activeConversationId == null ||
+                        _uiState.value.activeConversationId == before) && waitedMs < 3000) {
+                    delay(50)
+                    waitedMs += 50
+                }
+            }
+            updateDraftMessage(trimmed)
+            sendMessage()
+        }
+    }
+
     fun deleteConversation(conversationId: String) {
         viewModelScope.launch {
             val conv = dao.getConversationById(conversationId)
