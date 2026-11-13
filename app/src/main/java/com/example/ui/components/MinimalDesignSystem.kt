@@ -1169,10 +1169,10 @@ fun MinimalStatusDot(
 }
 
 /**
- * Original Runway logo rendered natively from the 512x512 SVG specification:
+ * Aerodock logo rendered natively at 512x512:
  * - Background: rounded square (~22% corner radius, rx=112 at 512), solid #0B0D10
- * - Runway lines: stroke #6C7CFF, 28px at 512 scale, round caps and joins
- * - Center dashes: white, 16px at 512 scale, round caps, getting shorter toward the top
+ * - Mark: an aeroplane taking off over a runway strip (Material flight_takeoff
+ *   glyph), filled with the theme accent
  */
 @Composable
 fun RunwayLogoIcon(
@@ -1182,7 +1182,7 @@ fun RunwayLogoIcon(
     val logoAccent = MaterialTheme.colorScheme.primary
     val runwayVector = androidx.compose.runtime.remember(logoAccent) {
         ImageVector.Builder(
-            name = "RunwayLogo512",
+            name = "AerodockLogo512",
             defaultWidth = 512.dp,
             defaultHeight = 512.dp,
             viewportWidth = 512f,
@@ -1203,27 +1203,36 @@ fun RunwayLogoIcon(
                 arcTo(112f, 112f, 0f, false, true, 112f, 0f)
                 close()
             }
-            path(
-                fill = null,
-                stroke = SolidColor(logoAccent),
-                strokeLineWidth = 28f,
-                strokeLineCap = StrokeCap.Round,
-                strokeLineJoin = StrokeJoin.Round
+            group(
+                scaleX = 15.5f,
+                scaleY = 15.5f,
+                translationX = 71f,
+                translationY = 69f
             ) {
-                moveTo(156f, 400f)
-                lineTo(236f, 112f)
-                lineTo(276f, 112f)
-                lineTo(356f, 400f)
-            }
-            path(
-                fill = null,
-                stroke = SolidColor(Color.White),
-                strokeLineWidth = 16f,
-                strokeLineCap = StrokeCap.Round
-            ) {
-                moveTo(256f, 360f); lineTo(256f, 312f)
-                moveTo(256f, 266f); lineTo(256f, 230f)
-                moveTo(256f, 192f); lineTo(256f, 168f)
+                path(
+                    fill = SolidColor(logoAccent),
+                    stroke = null
+                ) {
+                    moveTo(2.50f, 19.00f)
+                    lineTo(21.50f, 19.00f)
+                    lineTo(21.50f, 21.00f)
+                    lineTo(2.50f, 21.00f)
+                    lineTo(2.50f, 19.00f)
+                    close()
+                    moveTo(22.07f, 9.64f)
+                    curveTo(21.86f, 8.84f, 21.03f, 8.36f, 20.23f, 8.58f)
+                    lineTo(14.92f, 10.00f)
+                    lineTo(8.02f, 3.57f)
+                    lineTo(6.09f, 4.08f)
+                    lineTo(10.23f, 11.25f)
+                    lineTo(5.26f, 12.58f)
+                    lineTo(3.29f, 11.04f)
+                    lineTo(1.84f, 11.43f)
+                    lineTo(4.43f, 15.92f)
+                    curveTo(4.43f, 15.92f, 11.55f, 14.02f, 21.00f, 11.49f)
+                    curveTo(21.81f, 11.26f, 22.28f, 10.44f, 22.07f, 9.64f)
+                    close()
+                }
             }
         }.build()
     }
