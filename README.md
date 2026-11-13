@@ -65,7 +65,7 @@ The Home-first redesign has shipped. Next up: shared project files inside Groups
 
 ## 👨‍💻 About the developer
 
-**Farhan** — a 9th-grade student developer from India.
+**Farhan** — a 9th-grade student developer from Jharkhand, India.
 
 I build Android apps for one simple reason: I couldn't afford the subscriptions, so I built the tools myself — and made them respect the person using them. Aerodock is my biggest project: a full AI workspace that runs on *your* keys and *your* servers, because I believe you shouldn't have to rent your own intelligence back from a cloud.
 
