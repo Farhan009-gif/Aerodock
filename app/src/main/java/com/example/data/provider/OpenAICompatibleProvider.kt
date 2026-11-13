@@ -27,14 +27,21 @@ import org.json.JSONObject
  * least 7 seconds apart for any provider whose name or base URL mentions
  * LiteRouter, so concurrent callers queue up instead of bursting.
  */
+/**
+ * Pool providers (today: LiteRouter) front many upstream keys behind one
+ * endpoint. Shared test so the request gate and the error mapper agree on
+ * what counts as a pool provider. Round 11.
+ */
+internal fun isPoolProviderNameOrUrl(name: String, url: String): Boolean =
+    name.contains("literouter", ignoreCase = true) || url.contains("literouter", ignoreCase = true)
+
 object LiteRouterRequestGate {
     private const val MIN_GAP_MS = 7_000L
     private val mutex = Mutex()
     private var nextSlotMs = 0L
 
     private fun appliesTo(provider: ProviderInstanceEntity): Boolean =
-        provider.baseUrl.contains("literouter", ignoreCase = true) ||
-            provider.displayName.contains("literouter", ignoreCase = true)
+        isPoolProviderNameOrUrl(provider.displayName, provider.baseUrl)
 
     suspend fun awaitTurn(provider: ProviderInstanceEntity) {
         if (!appliesTo(provider)) return

@@ -510,6 +510,19 @@ object ProviderErrorMapper {
                     httpStatus = statusCode
                 )
             }
+            statusCode == 403 && isPoolProviderNameOrUrl(providerName, attemptedUrl) -> {
+                // Round 11: a pool provider's 403 usually means the pool drew a
+                // dead upstream key, not that the user's key is wrong. Classify
+                // it as rate-limited so retry ladders (main chat, subagents,
+                // chains) re-draw instead of failing instantly. A truly wrong
+                // key still fails once the caller's retries are exhausted.
+                val retryMs = parseRetryAfterMs(headers, redactedBody)
+                ProviderError.RateLimited(
+                    message = cleanMsg.ifBlank { "$providerName rate limit reached (HTTP $statusCode)." },
+                    retryAfterMs = retryMs,
+                    httpStatus = statusCode
+                )
+            }
             statusCode == 401 || statusCode == 403 ||
                 lower.contains("invalid_api_key") || lower.contains("incorrect api key") ||
                 lower.contains("unauthorized") -> {
