@@ -183,7 +183,13 @@ class GeminiProvider(
                                                 ModelToolCallRequest(
                                                     id = "gem_call_${p}_${System.currentTimeMillis()}",
                                                     toolName = fnName,
-                                                    argumentsJson = argsObj.toString()
+                                                    argumentsJson = argsObj.toString(),
+                                                    // Round 18: keep Gemini's thought
+                                                    // signature so the call can be
+                                                    // replayed on the next step.
+                                                    thoughtSignature = partObj
+                                                        .optString("thoughtSignature", "")
+                                                        .ifBlank { null }
                                                 )
                                             )
                                         )
@@ -273,15 +279,19 @@ class GeminiProvider(
                     }
                     for (tc in msg.toolCalls) {
                         val argsObj = runCatching { JSONObject(tc.argumentsJson) }.getOrElse { JSONObject() }
-                        partsArr.put(
-                            JSONObject().put(
-                                "functionCall",
-                                JSONObject().apply {
-                                    put("name", tc.toolName)
-                                    put("args", argsObj)
-                                }
-                            )
+                        val part = JSONObject().put(
+                            "functionCall",
+                            JSONObject().apply {
+                                put("name", tc.toolName)
+                                put("args", argsObj)
+                            }
                         )
+                        // Round 18: Gemini thinking models require the thought
+                        // signature captured with the call to come back with it.
+                        tc.thoughtSignature?.takeIf { it.isNotBlank() }?.let {
+                            part.put("thoughtSignature", it)
+                        }
+                        partsArr.put(part)
                     }
                     contentsArr.put(
                         JSONObject().apply {

@@ -48,7 +48,11 @@ data class McpToolDefinition(
 data class ModelToolCallRequest(
     val id: String,
     val toolName: String,
-    val argumentsJson: String
+    val argumentsJson: String,
+    // Gemini thinking models stamp each function call with a thought
+    // signature and reject follow-up requests that replay the call without
+    // it (round 18). Null for every other provider and for text-parsed calls.
+    val thoughtSignature: String? = null
 )
 
 data class MediaAttachmentPayload(
