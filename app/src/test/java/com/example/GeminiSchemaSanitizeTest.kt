@@ -107,7 +107,62 @@ class GeminiSchemaSanitizeTest {
         val anyOf = props.getJSONObject("mode").getJSONArray("anyOf")
         assertEquals("fast", anyOf.getJSONObject(0).getJSONArray("enum").getString(0))
         assertFalse(anyOf.getJSONObject(0).has("x-extra"))
-        assertFalse(anyOf.getJSONObject(1).has("title"))
+        // Round 16: the {"type":"null"} branch is dropped (Gemini has no null
+        // type) and the property becomes nullable instead.
+        assertEquals(1, anyOf.length())
+        assertTrue(props.getJSONObject("mode").getBoolean("nullable"))
+    }
+
+    @Test
+    fun `type list collapses to first real type with nullable`() {
+        val out = sanitize(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "nickname": {"type": ["string", "null"]},
+                "count": {"type": ["integer"]}
+              }
+            }
+            """.trimIndent()
+        )
+        val props = out.getJSONObject("properties")
+        assertEquals("string", props.getJSONObject("nickname").getString("type"))
+        assertTrue(props.getJSONObject("nickname").getBoolean("nullable"))
+        assertEquals("integer", props.getJSONObject("count").getString("type"))
+        assertFalse(props.getJSONObject("count").has("nullable"))
+    }
+
+    @Test
+    fun `tuple items and prefixItems flatten to a single schema`() {
+        val out = sanitize(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "pair": {"type": "array", "items": [{"type": "string"}, {"type": "integer"}]},
+                "fixed": {"type": "array", "prefixItems": [{"type": "boolean"}]}
+              }
+            }
+            """.trimIndent()
+        )
+        val props = out.getJSONObject("properties")
+        assertEquals("string", props.getJSONObject("pair").getJSONObject("items").getString("type"))
+        val fixed = props.getJSONObject("fixed")
+        assertEquals("boolean", fixed.getJSONObject("items").getString("type"))
+        assertFalse(fixed.has("prefixItems"))
+    }
+
+    @Test
+    fun `bare null type becomes nullable without a type`() {
+        val out = sanitize(
+            """
+            {"type": "object", "properties": {"maybe": {"type": "null"}}}
+            """.trimIndent()
+        )
+        val maybe = out.getJSONObject("properties").getJSONObject("maybe")
+        assertFalse(maybe.has("type"))
+        assertTrue(maybe.getBoolean("nullable"))
     }
 
     @Test

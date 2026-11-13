@@ -849,7 +849,11 @@ private fun OmniStudioRoot(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                if (!homeVisible && !groupsVisible) {
+                // Round 17: on the Chat tab the section header is hidden - its
+                // back arrow moves into the chat's own top bar, saving a full row.
+                val chatTabActive = !homeVisible && !groupsVisible && !uiState.showConnectorsScreen &&
+                    currentPrimaryTab == RunwayBottomTab.CHAT
+                if (!homeVisible && !groupsVisible && !chatTabActive) {
                     RunwaySectionHeader(
                         title = if (uiState.showConnectorsScreen) {
                             "Connectors"
@@ -1019,6 +1023,10 @@ private fun OmniStudioRoot(
                                 models = models,
                                 conversations = conversations,
                                 messages = activeMessages,
+                                onBackToHome = {
+                                    viewModel.setCompareModeEnabled(false)
+                                    homeVisible = true
+                                },
                                 skills = skills,
                                 mcpTools = mcpTools,
                                 conversationToolLogs = activeConversationToolLogs,

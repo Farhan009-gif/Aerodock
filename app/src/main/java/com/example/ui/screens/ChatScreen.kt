@@ -8,6 +8,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -172,6 +174,7 @@ fun ChatWorkspaceScreen(
     onMoveConversationToFolder: (conversationId: String, folderId: String?) -> Unit = { _, _ -> },
     onSaveFolder: (id: String?, name: String, colorHex: String) -> Unit = { _, _, _ -> },
     onDeleteFolder: (String) -> Unit = {},
+    onBackToHome: () -> Unit = {},
     onHistorySearchChange: (String) -> Unit,
     onOpenModelPicker: () -> Unit,
     onOpenParameterSheet: () -> Unit,
@@ -801,6 +804,7 @@ fun ChatWorkspaceScreen(
                         messages = messages,
                         conversationToolLogs = conversationToolLogs,
                         showMenuButton = false,
+                        onBackToHome = onBackToHome,
                         onOpenMenu = {},
                         onOpenModelPicker = onOpenModelPicker,
                         onOpenToolsSheet = { showToolsSheet = true },
@@ -900,6 +904,7 @@ fun ChatWorkspaceScreen(
                     messages = messages,
                     conversationToolLogs = conversationToolLogs,
                     showMenuButton = true,
+                    onBackToHome = onBackToHome,
                     onOpenMenu = { coroutineScope.launch { drawerState.open() } },
                     onOpenModelPicker = onOpenModelPicker,
                     onOpenNewComboDialog = { showChatComboBuilderDialog = true },
@@ -1026,6 +1031,7 @@ private fun MinimalChatCanvas(
     conversationToolLogs: List<ToolCallLogEntity>,
     showMenuButton: Boolean,
     onOpenMenu: () -> Unit,
+    onBackToHome: (() -> Unit)? = null,
     onOpenModelPicker: () -> Unit,
     onOpenNewComboDialog: () -> Unit = {},
     onOpenToolsSheet: () -> Unit,
@@ -1110,6 +1116,16 @@ private fun MinimalChatCanvas(
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.ime)
     ) {
+
+    // Round 17: foldable chrome - the top bar and status line collapse away
+    // so the messages get the room; a slim strip brings them back.
+    var chromeFolded by rememberSaveable { mutableStateOf(false) }
+        AnimatedVisibility(
+            visible = !chromeFolded,
+            enter = expandVertically(animationSpec = tween(220)) + fadeIn(animationSpec = tween(220)),
+            exit = shrinkVertically(animationSpec = tween(220)) + fadeOut(animationSpec = tween(220))
+        ) {
+            Column {
         // 1. Minimal Top Bar: Menu left, Model pill + Combo chip center, Overflow right
         Row(
             modifier = Modifier
@@ -1118,6 +1134,28 @@ private fun MinimalChatCanvas(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onBackToHome != null) {
+                    Surface(
+                        onClick = { onBackToHome() },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .size(34.dp)
+                            .testTag("chat_back_to_home_button")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = LucideIcons.ArrowLeft,
+                                contentDescription = "Back to Home",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
             if (showMenuButton) {
                 IconButton(
                     onClick = onOpenMenu,
@@ -1134,6 +1172,7 @@ private fun MinimalChatCanvas(
                 }
             } else {
                 Spacer(modifier = Modifier.size(40.dp))
+            }
             }
 
             // Center tappable model pill ("+ Combo" moved into the Tools sheet)
@@ -1194,8 +1233,23 @@ private fun MinimalChatCanvas(
             }
 
             // Right single overflow icon -> opens "Tools" bottom sheet
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { chromeFolded = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("chat_fold_chrome_button")
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.ChevronUp,
+                        contentDescription = "Fold bar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             IconButton(
                 onClick = onOpenToolsSheet,
+            }
                 modifier = Modifier
                     .size(40.dp)
                     .testTag("top_bar_tools_overflow_button")
@@ -1253,6 +1307,28 @@ private fun MinimalChatCanvas(
                         modifier = Modifier.size(12.dp)
                     )
                 }
+            }
+        }
+
+            }
+        }
+
+        if (chromeFolded) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { chromeFolded = false }
+                    .padding(vertical = 2.dp)
+                    .testTag("chat_chrome_unfold_strip"),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = LucideIcons.ChevronDown,
+                    contentDescription = "Show chat bar",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
 

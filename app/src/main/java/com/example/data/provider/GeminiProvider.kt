@@ -657,12 +657,17 @@ class GeminiProvider(
 }
 
 /**
- * Round 12: Gemini's function-declaration `parameters` accepts only a restricted
- * OpenAPI subset. Any other key — e.g. the `x-mcp-header` Composio embeds in its
- * MCP tool schemas — makes the whole request fail with HTTP 400 "Unknown name".
- * Rebuild the schema keeping only allowed keys, recursing into nested schemas
- * (properties values, items, anyOf/allOf). Scalars, enums and required lists
- * pass through untouched.
+ * Round 12 + 16: Gemini's function-declaration `parameters` accepts only a
+ * restricted OpenAPI subset, and its schema shapes are stricter than standard
+ * JSON Schema. Rebuild the schema keeping only allowed keys, recursing into
+ * nested schemas, and normalise the shapes Gemini rejects:
+ * - unknown keys (e.g. Composio's `x-mcp-header`, `$schema`, `title`) dropped;
+ * - `type` must be a single value from Gemini's enum: a type list collapses to
+ *   its first non-"null" entry, and "null" anywhere becomes `nullable = true`
+ *   (a bare {"type":"null"} branch inside anyOf/allOf is dropped instead);
+ * - `items` must be one schema: tuple arrays and `prefixItems` flatten to
+ *   their first element.
+ * Scalars, enums and required lists pass through untouched.
  */
 internal fun sanitizeGeminiSchema(node: Any?): Any? {
     val allowed = setOf(
@@ -674,31 +679,68 @@ internal fun sanitizeGeminiSchema(node: Any?): Any? {
     return when (node) {
         is JSONObject -> {
             val out = JSONObject()
+            var sawNullType = false
             val keys = node.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
-                if (key !in allowed) continue
                 val value = node.opt(key)
-                val cleaned: Any? = when (key) {
-                    "properties" -> {
+                when {
+                    key == "type" -> {
+                        val types = when (value) {
+                            is JSONArray -> (0 until value.length())
+                                .mapNotNull { value.optString(it).takeIf { t -> t.isNotBlank() } }
+                            is String -> listOf(value)
+                            else -> emptyList()
+                        }
+                        val primary = types.firstOrNull { it != "null" }
+                        if (primary != null) out.put("type", primary)
+                        if (types.contains("null")) sawNullType = true
+                    }
+                    key == "prefixItems" -> {
+                        if (!node.has("items")) {
+                            val arr = value as? JSONArray
+                            if (arr != null && arr.length() > 0) {
+                                out.put("items", sanitizeGeminiSchemaPosition(arr.opt(0)))
+                            }
+                        }
+                    }
+                    key !in allowed -> Unit
+                    key == "properties" -> {
                         val props = value as? JSONObject
                         if (props == null) {
-                            value
+                            out.put(key, value)
                         } else {
                             val cleanedProps = JSONObject()
                             val propKeys = props.keys()
                             while (propKeys.hasNext()) {
                                 val propName = propKeys.next()
-                                cleanedProps.put(propName, sanitizeGeminiSchema(props.opt(propName)))
+                                cleanedProps.put(propName, sanitizeGeminiSchemaPosition(props.opt(propName)))
                             }
-                            cleanedProps
+                            out.put(key, cleanedProps)
                         }
                     }
-                    "items", "anyOf", "allOf" -> sanitizeGeminiSchema(value)
-                    else -> value
+                    key == "items" -> out.put(key, sanitizeGeminiSchemaPosition(value))
+                    key == "anyOf" || key == "allOf" -> {
+                        val branches = value as? JSONArray
+                        if (branches == null) {
+                            out.put(key, value)
+                        } else {
+                            val cleaned = JSONArray()
+                            for (i in 0 until branches.length()) {
+                                val branch = branches.opt(i)
+                                if (isNullOnlySchema(branch)) {
+                                    sawNullType = true
+                                } else {
+                                    cleaned.put(sanitizeGeminiSchemaPosition(branch))
+                                }
+                            }
+                            if (cleaned.length() > 0) out.put(key, cleaned)
+                        }
+                    }
+                    else -> out.put(key, value)
                 }
-                out.put(key, cleaned)
             }
+            if (sawNullType && !out.has("nullable")) out.put("nullable", true)
             if (out.has("properties") && !out.has("type")) out.put("type", "object")
             out
         }
@@ -709,4 +751,17 @@ internal fun sanitizeGeminiSchema(node: Any?): Any? {
         }
         else -> node
     }
+}
+
+/** A schema in a single-schema position: a tuple array collapses to its first element. */
+private fun sanitizeGeminiSchemaPosition(node: Any?): Any? = when (node) {
+    is JSONArray -> if (node.length() > 0) sanitizeGeminiSchema(node.opt(0)) else JSONObject()
+    else -> sanitizeGeminiSchema(node)
+}
+
+/** True for a bare {"type":"null"} (optionally with a description) — an optional-marker, not a real schema. */
+private fun isNullOnlySchema(node: Any?): Boolean {
+    val obj = node as? JSONObject ?: return false
+    return obj.optString("type") == "null" &&
+        !obj.has("properties") && !obj.has("items") && !obj.has("anyOf") && !obj.has("allOf")
 }
