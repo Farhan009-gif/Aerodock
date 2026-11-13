@@ -3,7 +3,12 @@ package com.example.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import com.example.data.local.ChatMediaAttachment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,7 +72,14 @@ fun RunwayHomeScreen(
     enabledSkillsCount: Int,
     mcpToolsCount: Int,
     onOpenChat: () -> Unit,
-    onSendFromHome: (String) -> Unit,
+    onSendFromHome: () -> Unit,
+    draftText: String,
+    onDraftChange: (String) -> Unit,
+    attachedMedia: List<ChatMediaAttachment>,
+    onMediaPicked: (List<ChatMediaAttachment>) -> Unit,
+    onRemoveAttachment: (Int) -> Unit,
+    onOpenSkills: () -> Unit,
+    onToggleVoice: () -> Unit,
     onOpenCreate: () -> Unit,
     onOpenAutopilot: () -> Unit,
     onOpenConnect: () -> Unit,
@@ -76,7 +90,17 @@ fun RunwayHomeScreen(
     modifier: Modifier = Modifier
 ) {
     val isDarkTheme = runwayIsDarkTheme()
-    var homeInput by remember { mutableStateOf("") }
+    val homeContext = LocalContext.current
+    val mediaPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(5)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            onMediaPicked(uris.map { uri ->
+                val mime = homeContext.contentResolver.getType(uri) ?: "image/jpeg"
+                ChatMediaAttachment(uri = uri.toString(), mimeType = mime, isVideo = mime.startsWith("video"))
+            })
+        }
+    }
     val greeting = remember {
         when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
             in 5..11 -> "Good morning"
@@ -163,8 +187,8 @@ fun RunwayHomeScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     BasicTextField(
-                        value = homeInput,
-                        onValueChange = { homeInput = it },
+                        value = draftText,
+                        onValueChange = onDraftChange,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
@@ -173,7 +197,7 @@ fun RunwayHomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         decorationBox = { innerTextField ->
                             Box {
-                                if (homeInput.isEmpty()) {
+                                if (draftText.isEmpty()) {
                                     Text(
                                         text = "Ask anything…",
                                         style = MaterialTheme.typography.bodyLarge,
@@ -184,19 +208,62 @@ fun RunwayHomeScreen(
                             }
                         }
                     )
+                    if (attachedMedia.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
+                            attachedMedia.forEachIndexed { index, attachment ->
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (attachment.isVideo) LucideIcons.Video else LucideIcons.Image,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        Text(
+                                            text = attachment.fileName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            maxLines = 1
+                                        )
+                                        Icon(
+                                            imageVector = LucideIcons.X,
+                                            contentDescription = "Remove attachment",
+                                            modifier = Modifier
+                                                .size(13.dp)
+                                                .clickable { onRemoveAttachment(index) },
+                                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        HomeAskToolPill(icon = LucideIcons.Plus, label = "Attach", modifier = Modifier.clickable { onOpenChat() })
-                        HomeAskToolPill(icon = LucideIcons.Sparkles, label = "Skills", modifier = Modifier.clickable { onOpenChat() })
+                        HomeAskToolPill(icon = LucideIcons.Plus, label = "Attach", modifier = Modifier.clickable {
+                            mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        })
+                        HomeAskToolPill(icon = LucideIcons.Sparkles, label = "Skills", modifier = Modifier.clickable { onOpenSkills() })
                         Spacer(modifier = Modifier.weight(1f))
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                                .clickable { onOpenChat() },
+                                .clickable { onToggleVoice() },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -212,9 +279,8 @@ fun RunwayHomeScreen(
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primary)
                                 .clickable {
-                                    if (homeInput.isNotBlank()) {
-                                        onSendFromHome(homeInput)
-                                        homeInput = ""
+                                    if (draftText.isNotBlank() || attachedMedia.isNotEmpty()) {
+                                        onSendFromHome()
                                     } else {
                                         onOpenChat()
                                     }
