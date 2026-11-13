@@ -63,10 +63,27 @@ Kotlin · Jetpack Compose (Material 3) · Room · DataStore · Google Tink (Andr
 
 The Home-first redesign has shipped. Next up: shared project files inside Groups, then AI participating in group chats — plus deeper offline/local-model support so more of the workspace works with the internet off.
 
+## 👨‍💻 About the developer
+
+**Farhan** — a 9th-grade student developer from Bokaro, Jharkhand, India.
+
+I build Android apps for one simple reason: I couldn't afford the subscriptions, so I built the tools myself — and made them respect the person using them. Aerodock is my biggest project: a full AI workspace that runs on *your* keys and *your* servers, because I believe you shouldn't have to rent your own intelligence back from a cloud.
+
+Other things I've built:
+
+- **Orbis** — a virtual lab & study app for Class 9–10 science, with a 598-question NCERT bank
+- **Dayblock** — a private, offline diary app
+- **LaserGuard** — a laser security alarm for my school science exhibition
+
+Off the keyboard: football, and running the **RantRealm** YouTube channel — one strange true story at a time.
+
+- GitHub: [@Farhan009-gif](https://github.com/Farhan009-gif)
+- Instagram: [@farhan.now_](https://instagram.com/farhan.now_)
+
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
 
 ---
 
-Built by **Farhan** ([@farhan.now_](https://instagram.com/farhan.now_)) — a student developer in Bokaro, India. Aerodock is developed in the open; issues and ideas are welcome on GitHub.
+Aerodock is developed in the open; issues and ideas are welcome on GitHub.
