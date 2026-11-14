@@ -3881,6 +3881,10 @@ class OmniStudioViewModel(
             "AI you are, answer with that id. Skills, tools and documents around you " +
             "may name other models (Claude, GPT, and others) as examples, benchmarks " +
             "or options — those are references, never your identity." +
+            "\n\nTool-call hygiene: keep arguments valid JSON and keep large text " +
+            "payloads small — when writing a file or long content, send at most " +
+            "~2,000 characters per call where the tool allows it (write the first " +
+            "chunk, then extend it); very large single calls can fail to parse." +
             (previousWorkBrief(conv.id)?.let { "\n\n" + it } ?: "")
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
@@ -3972,7 +3976,7 @@ class OmniStudioViewModel(
         )
         val toolLookupByName = enabledToolTriples.associateBy { it.third.toolName }
 
-        // Smart Context Trimming: when input reaches ~60% of model's context window (default 32,000 if unknown),
+        // Smart Context Trimming: when input reaches ~60% of model's context window (default 8,192 if unknown),
         // summarise older messages keeping the last 6 turns using the selected model (< 800 tokens).
         // If summarising fails, send full history and show nothing extra.
         val isTrimmingEnabled = _uiState.value.contextTrimmingEnabledByChatId[conv.id] ?: true
@@ -4726,6 +4730,27 @@ class OmniStudioViewModel(
                     errOnAttempt.message?.contains("parse tool call", ignoreCase = true) == true
                 ) {
                     parseErrorRetries++
+                    // Change the request, don't just resend it: at low
+                    // temperature an identical retry regenerates nearly the
+                    // same unparseable call. The note tells the model to
+                    // split oversized payloads into chunks (2026-11-14:
+                    // a ~5,400-char file write still parse-failed at
+                    // temp 0.35, where resending the same request could
+                    // not help). Added at most once per turn.
+                    if (workingPayloadMessages.lastOrNull()?.content
+                            ?.startsWith("[System note: your previous tool call failed to parse") != true
+                    ) {
+                        workingPayloadMessages.add(
+                            ChatMessagePayload(
+                                role = "user",
+                                content = "[System note: your previous tool call failed to parse — " +
+                                    "its arguments were not valid JSON, which usually happens with very " +
+                                    "long file content. Retry the same step now, but split large content " +
+                                    "into chunks of at most ~2,000 characters per tool call: write the " +
+                                    "first chunk, then extend the file with follow-up calls.]"
+                            )
+                        )
+                    }
                     failoverSession.onRetrySameProvider()
                     dao.upsertMessage(
                         initialAssistantMsg.copy(

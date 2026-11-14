@@ -4,7 +4,7 @@ import kotlin.math.roundToInt
 
 /**
  * Smart Context Trimming:
- * - When input reaches about 60% of the model's context window (default 32,000 tokens if unknown),
+ * - When input reaches about 60% of the model's context window (default 8,192 tokens if unknown),
  *   summarises older messages while keeping the last 6 turns, using the selected model.
  * - Keeps the summary under 800 tokens.
  * - Summaries are INCREMENTAL: once a summary exists, later sends reuse it and only the
@@ -23,7 +23,12 @@ import kotlin.math.roundToInt
  */
 object SmartContextTrimmer {
 
-    const val DEFAULT_CONTEXT_WINDOW_TOKENS: Int = 32_000
+    // Unknown models are usually the user's own small local servers (4K-8K
+    // contexts). Assuming 32,000 let every request re-send up to ~19,200
+    // tokens before trimming, so long sessions snowballed (threads of
+    // 554K-893K tokens). 8,192 caps the re-send at ~4,915 tokens; a model's
+    // explicit context window, when known, still wins over this default.
+    const val DEFAULT_CONTEXT_WINDOW_TOKENS: Int = 8_192
     const val TRIMMING_THRESHOLD_RATIO: Double = 0.60
     const val KEEP_RECENT_TURNS: Int = 6
     const val MAX_SUMMARY_TOKENS: Int = 800
@@ -61,7 +66,7 @@ object SmartContextTrimmer {
     }
 
     /**
-     * Resolves a model's context window in tokens, defaulting to 32,000 if unknown.
+     * Resolves a model's context window in tokens, defaulting to 8,192 if unknown.
      */
     fun resolveContextWindowTokens(contextWindowTokens: Int?): Int {
         return if (contextWindowTokens != null && contextWindowTokens > 0) {
@@ -95,7 +100,7 @@ object SmartContextTrimmer {
     }
 
     /**
-     * Computes the 60% token threshold for a given context window (default 32,000 -> 19,200 tokens).
+     * Computes the 60% token threshold for a given context window (default 8,192 -> 4,915 tokens).
      */
     fun calculateTrimmingThresholdTokens(
         contextWindowTokens: Int? = DEFAULT_CONTEXT_WINDOW_TOKENS
@@ -106,7 +111,7 @@ object SmartContextTrimmer {
 
     /**
      * Returns true when [estimatedInputTokens] reaches at least 60% of [contextWindowTokens]
-     * (defaulting to 32,000 tokens if unknown or <= 0).
+     * (defaulting to 8,192 tokens if unknown or <= 0).
      */
     fun shouldTrimContext(
         estimatedInputTokens: Int,
