@@ -2711,6 +2711,31 @@ class OmniRepository(
         res
     }
 
+    /**
+     * Pre-dispatch argument check against the tool's own input schema.
+     * Null = the call may run. Otherwise the required arguments that are
+     * absent or blank — an EMPTY list means the arguments were not
+     * valid JSON at all.
+     */
+    private fun missingRequiredArgs(schemaJson: String, argumentsJson: String): List<String>? {
+        val required = runCatching {
+            val arr = org.json.JSONObject(schemaJson).optJSONArray("required")
+            if (arr == null) {
+                emptyList()
+            } else {
+                (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
+            }
+        }.getOrDefault(emptyList())
+        if (required.isEmpty()) return null
+        val args = runCatching { org.json.JSONObject(argumentsJson) }.getOrNull()
+            ?: return emptyList()
+        val missing = required.filter { key ->
+            !args.has(key) || args.isNull(key) ||
+                (args.opt(key) as? String)?.isBlank() == true
+        }
+        return missing.ifEmpty { null }
+    }
+
     suspend fun executeMcpToolAndLog(
         conversationId: String,
         messageId: String,
@@ -2719,23 +2744,39 @@ class OmniRepository(
         argumentsJson: String
     ): ToolCallLogEntity = withContext(Dispatchers.IO) {
         val startMs = System.currentTimeMillis()
-        val token = resolveMcpAuthToken(server)
-        val callRes = mcpClient.callTool(
-            server = server,
-            rawAuthToken = token,
-            toolName = tool.toolName,
-            argumentsJson = argumentsJson
-        )
-        val durationMs = (System.currentTimeMillis() - startMs).coerceAtLeast(1L)
-
-        val (outputText, isSuccess) = callRes.fold(
-            onSuccess = { result ->
-                result.outputText to !result.isError
-            },
-            onFailure = { err ->
-                "MCP Tool Error: ${err.message ?: "Execution failed"}" to false
+        // Pre-dispatch validation (2026-11-14): a hollow call — arguments
+        // lost, or required fields missing, which the model produces on
+        // long payloads — otherwise travels to the MCP server and dies
+        // as a dead-end validation banner. Bounce it here as an ordinary
+        // failed, logged result naming the missing fields, and the model
+        // repairs its own call on the next round.
+        val missingArgs = missingRequiredArgs(tool.inputSchemaJson, argumentsJson)
+        val (outputText, isSuccess) = if (missingArgs != null) {
+            val why = if (missingArgs.isEmpty()) {
+                "not valid JSON, so no arguments arrived."
+            } else {
+                "missing required argument(s): " + missingArgs.joinToString(", ") + "."
             }
-        )
+            "Call NOT executed — its arguments were $why " +
+                "Call ${tool.toolName} again with every required argument filled in." to false
+        } else {
+            val token = resolveMcpAuthToken(server)
+            val callRes = mcpClient.callTool(
+                server = server,
+                rawAuthToken = token,
+                toolName = tool.toolName,
+                argumentsJson = argumentsJson
+            )
+            callRes.fold(
+                onSuccess = { result ->
+                    result.outputText to !result.isError
+                },
+                onFailure = { err ->
+                    "MCP Tool Error: ${err.message ?: "Execution failed"}" to false
+                }
+            )
+        }
+        val durationMs = (System.currentTimeMillis() - startMs).coerceAtLeast(1L)
 
         val logEntity = ToolCallLogEntity(
             id = "tlog_${UUID.randomUUID().toString().take(10)}",

@@ -219,6 +219,17 @@ private fun liveContextBlock(liveToolsOffered: Boolean): String {
 }
 
 /**
+/** Heuristic for the narration nudge: reads like an announced next action. */
+private fun looksLikeIntentNarration(text: String): Boolean {
+    val t = text.trim().lowercase()
+    if (t.isEmpty() || t.length > 1_500) return false
+    if (t.endsWith(":")) return true
+    if ("let me know" in t) return false
+    return listOf("let me ", "i'll ", "i will ", "now let me", "let me first")
+        .any { it in t }
+}
+
+/**
  * Facts-only summary of one conversation's tool trajectory, read off its
  * persisted tool_call_logs: the writes that succeeded (with the file path
  * when the call carried one), the failures with their first error line,
@@ -3866,6 +3877,11 @@ class OmniStudioViewModel(
         } else {
             stableSystemPrefix
         }) + "\n\n" + liveContextBlock(liveToolsOffered = liveInfoTriples.isNotEmpty()) +
+            "\n\nModel identity: you are running as the model \"$currentModelId\", served " +
+            "by the provider the user configured in this app. If asked which model or " +
+            "AI you are, answer with that id. Skills, tools and documents around you " +
+            "may name other models (Claude, GPT, and others) as examples, benchmarks " +
+            "or options — those are references, never your identity." +
             (previousWorkBrief(conv.id)?.let { "\n\n" + it } ?: "")
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
@@ -4035,6 +4051,7 @@ class OmniStudioViewModel(
         val maxIterations = if (isUnlimited) Int.MAX_VALUE else maxIterationsSetting.coerceIn(1, 50)
         var lastToolCallSignature: String? = null
         var consecutiveIdenticalToolCalls = 0
+        var narrationNudged = false
         var iteration = 0
         val failoverSession = com.example.data.provider.FailoverStreamSession()
         val attemptedFailoverKeys = mutableSetOf("${currentProvider.id}:$currentModelId")
@@ -4587,6 +4604,7 @@ class OmniStudioViewModel(
             _uiState.update { it.copy(activeToolLoopStatus = turnCounter) }
             val turnText = StringBuilder()
             val turnToolCalls = mutableListOf<ModelToolCallRequest>()
+            var parseErrorRetries = 0
 
             while (true) {
                 if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
@@ -4697,6 +4715,28 @@ class OmniStudioViewModel(
                     }
                     failoverSession.commitCurrentAttempt()
                     break
+                }
+
+                // llama.cpp answers a malformed tool-call generation with
+                // HTTP 500 "Failed to parse tool call arguments as JSON"
+                // and no completion at all (seen repeatedly on 2026-11-14
+                // with long file payloads). That is one bad generation,
+                // not a dead provider — retry the same request (max 2)
+                // before failover classification or giving up.
+                if (parseErrorRetries < 2 &&
+                    errOnAttempt.message?.contains("parse tool call", ignoreCase = true) == true
+                ) {
+                    parseErrorRetries++
+                    failoverSession.onRetrySameProvider()
+                    dao.upsertMessage(
+                        initialAssistantMsg.copy(
+                            content = failoverSession.visibleText,
+                            providerInstanceId = currentProvider.id,
+                            modelId = currentModelId,
+                            isStreaming = true
+                        )
+                    )
+                    continue
                 }
 
                 // Do not fail over across models during multi-column Compare mode
@@ -4818,7 +4858,34 @@ class OmniStudioViewModel(
                 break
             }
 
-            if (streamError != null || turnToolCalls.isEmpty() || toolDefinitions.isEmpty()) {
+            if (streamError != null || toolDefinitions.isEmpty()) {
+                break
+            }
+
+            if (turnToolCalls.isEmpty()) {
+                // Narration nudge: a reply that announces an action but
+                // carries no tool call used to end the turn with nothing
+                // done ("Forking now!" — a few tokens, no call). Once
+                // per turn, hand it back instead of accepting the ending.
+                if (!narrationNudged && iteration < maxIterations &&
+                    looksLikeIntentNarration(turnText.toString())
+                ) {
+                    narrationNudged = true
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(role = "assistant", content = turnText.toString())
+                    )
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(
+                            role = "user",
+                            content = "[System note: your last message described an " +
+                                "action but included no tool call, so nothing has " +
+                                "been done yet. Either make the tool call now, or " +
+                                "state plainly that you are finished and summarise " +
+                                "only what earlier tool results prove.]"
+                        )
+                    )
+                    continue
+                }
                 break
             }
 
