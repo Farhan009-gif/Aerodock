@@ -218,7 +218,6 @@ private fun liveContextBlock(liveToolsOffered: Boolean): String {
     }
 }
 
-/**
 /** Heuristic for the narration nudge: reads like an announced next action. */
 private fun looksLikeIntentNarration(text: String): Boolean {
     val t = text.trim().lowercase()
