@@ -218,6 +218,48 @@ private fun liveContextBlock(liveToolsOffered: Boolean): String {
     }
 }
 
+/**
+ * Facts-only summary of one conversation's tool trajectory, read off its
+ * persisted tool_call_logs: the writes that succeeded (with the file path
+ * when the call carried one), the failures with their first error line,
+ * and the call count. Deliberately NOT a model-written summary — the log
+ * is what the tools actually did.
+ */
+private fun distillWorkBrief(
+    source: ConversationEntity,
+    goal: String?,
+    logs: List<ToolCallLogEntity>
+): String? {
+    if (logs.isEmpty()) return null
+    val writes = mutableListOf<String>()
+    val failures = mutableListOf<String>()
+    for (log in logs.sortedBy { it.createdAt }) {
+        if (log.isSuccess && log.isDestructiveOrWrite) {
+            val path = runCatching { org.json.JSONObject(log.argumentsJson).optString("path") }
+                .getOrNull()?.takeIf { it.isNotBlank() }
+            val entry = if (path != null) "${log.toolName} → $path" else log.toolName
+            if (entry !in writes && writes.size < 8) writes.add(entry)
+        }
+        if (!log.isSuccess && failures.size < 4) {
+            val firstLine = log.resultText.lineSequence().firstOrNull()?.trim().orEmpty().take(90)
+            val entry = if (firstLine.isBlank()) log.toolName else "${log.toolName} — $firstLine"
+            if (entry !in failures) failures.add(entry)
+        }
+    }
+    val date = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.ENGLISH)
+        .format(java.util.Date(source.updatedAt))
+    return buildString {
+        append("Previous work in this app — recorded from an earlier chat's tool ")
+        append("results (facts, not a transcript; if you need detail, use the tools, ")
+        append("not this summary):\n")
+        append("Chat \"").append(source.title).append("\" (").append(date).append("):")
+        if (!goal.isNullOrBlank()) append("\n- Goal: ").append(goal)
+        if (writes.isNotEmpty()) append("\n- Completed writes: ").append(writes.joinToString("; "))
+        if (failures.isNotEmpty()) append("\n- Failed attempts: ").append(failures.joinToString("; "))
+        append("\n- Tool calls made: ").append(logs.size)
+    }.take(1_200)
+}
+
 data class OmniUiState(
     val currentTab: WorkspaceTab = WorkspaceTab.CHAT,
     val onboardingCompleted: Boolean = true,
@@ -412,6 +454,11 @@ class OmniStudioViewModel(
 
     val generatedImages: StateFlow<List<GeneratedImageEntity>> = repository.generatedImagesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Cross-chat work memory: memoised auto-brief (source conversation id,
+    // its updatedAt, brief text) so the distill in previousWorkBrief runs
+    // once per source change, not on every turn.
+    private var workBriefCache: Triple<String, Long, String>? = null
 
     val videoJobs: StateFlow<List<VideoJobEntity>> = repository.videoJobsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -3711,6 +3758,36 @@ class OmniStudioViewModel(
             }
     }
 
+    /**
+     * Cross-chat work memory (2026-11-14). Aerodock chats share no
+     * history, so a new chat used to open knowing nothing about work
+     * already done in the app. This distils the most recent OTHER
+     * conversation's tool trajectory into a short brief that rides in
+     * the system prompt, after the live-context block (request-time
+     * context, never stored in the conversation). Memoised on the
+     * source conversation's updatedAt; null when no earlier chat has
+     * tool activity.
+     */
+    private suspend fun previousWorkBrief(currentConversationId: String): String? {
+        val logs = dao.getToolCallLogsOnce()
+        if (logs.isEmpty()) return null
+        val source = dao.getConversationsOnce()
+            .filter { it.id != currentConversationId }
+            .sortedByDescending { it.updatedAt }
+            .firstOrNull { conv -> logs.any { it.conversationId == conv.id } }
+            ?: return null
+        workBriefCache?.let { (id, updatedAt, text) ->
+            if (id == source.id && updatedAt == source.updatedAt) return text
+        }
+        val goal = dao.getMessagesOnce(source.id)
+            .firstOrNull { it.role.equals("USER", ignoreCase = true) }
+            ?.content?.replace(Regex("\\s+"), " ")?.trim()?.take(220)
+        val brief = distillWorkBrief(source, goal, logs.filter { it.conversationId == source.id })
+            ?: return null
+        workBriefCache = Triple(source.id, source.updatedAt, brief)
+        return brief
+    }
+
     private suspend fun executeModelStream(
         conv: ConversationEntity,
         provider: ProviderInstanceEntity,
@@ -3788,7 +3865,8 @@ class OmniStudioViewModel(
             stableSystemPrefix + "\n\n" + AGENT_ONLY_DISPATCHER_INSTRUCTION
         } else {
             stableSystemPrefix
-        }) + "\n\n" + liveContextBlock(liveToolsOffered = liveInfoTriples.isNotEmpty())
+        }) + "\n\n" + liveContextBlock(liveToolsOffered = liveInfoTriples.isNotEmpty()) +
+            (previousWorkBrief(conv.id)?.let { "\n\n" + it } ?: "")
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
         // Reset per-message web search counter at the start of each turn
