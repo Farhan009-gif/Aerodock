@@ -1090,6 +1090,7 @@ private fun OmniStudioRoot(
                                 onNewConversation = { viewModel.createNewConversation() },
                                 onContinueLatestConversation = viewModel::continueLatestConversation,
                                 onTogglePinConversation = viewModel::togglePinConversation,
+                                onToggleArchiveConversation = viewModel::toggleArchiveConversation,
                                 onRenameConversation = viewModel::renameConversation,
                                 onDuplicateConversation = viewModel::duplicateConversation,
                                 onDeleteConversation = viewModel::deleteConversation,

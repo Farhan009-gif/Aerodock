@@ -2679,6 +2679,16 @@ class OmniStudioViewModel(
         }
     }
 
+    fun toggleArchiveConversation(conversation: ConversationEntity) {
+        viewModelScope.launch {
+            val newArchived = !conversation.isArchived
+            dao.upsertConversation(conversation.copy(isArchived = newArchived, updatedAt = System.currentTimeMillis()))
+            _uiState.update {
+                it.copy(statusToast = if (newArchived) "Archived '${conversation.title}'" else "Unarchived '${conversation.title}'")
+            }
+        }
+    }
+
     fun renameConversation(conversation: ConversationEntity, newTitle: String) {
         val clean = newTitle.trim()
         if (clean.isEmpty()) return

@@ -67,6 +67,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -144,6 +146,7 @@ private sealed class ThreadDisplayItem {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatWorkspaceScreen(
     uiState: OmniUiState,
@@ -163,6 +166,7 @@ fun ChatWorkspaceScreen(
     onNewConversation: () -> Unit,
     onContinueLatestConversation: () -> Unit = {},
     onTogglePinConversation: (ConversationEntity) -> Unit,
+    onToggleArchiveConversation: (ConversationEntity) -> Unit = {},
     onRenameConversation: (ConversationEntity, String) -> Unit,
     onDuplicateConversation: (String) -> Unit = {},
     onDeleteConversation: (String) -> Unit,
@@ -748,8 +752,7 @@ fun ChatWorkspaceScreen(
         }
     }
 
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val coroutineScope = rememberCoroutineScope()
+    var showHistorySheet by rememberSaveable { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideTablet = maxWidth >= 840.dp
@@ -778,6 +781,7 @@ fun ChatWorkspaceScreen(
                         onNewConversation = onNewConversation,
                         onContinueLatestConversation = onContinueLatestConversation,
                         onTogglePinConversation = onTogglePinConversation,
+                        onToggleArchiveConversation = onToggleArchiveConversation,
                         onRenameConversation = { renameTarget = it },
                         onDuplicateConversation = onDuplicateConversation,
                         onMoveConversationToFolder = onMoveConversationToFolder,
@@ -842,13 +846,64 @@ fun ChatWorkspaceScreen(
                 }
             }
         } else {
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                drawerContent = {
-                    ModalDrawerSheet(
-                        drawerContainerColor = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.width(305.dp)
-                    ) {
+            MinimalChatCanvas(
+                uiState = uiState,
+                providers = providers,
+                models = models,
+                usageRecords = usageRecords,
+                activeConversation = activeConversation,
+                activeModelName = activeModelDescriptor?.modelId
+                    ?: activeConversation?.modelId
+                    ?: "gpt-4o",
+                isActiveModelCombo = isActiveModelCombo,
+                activeSkillsCount = activeSkillsCount,
+                enabledMcpToolsCount = enabledMcpToolsCount,
+                messages = messages,
+                conversationToolLogs = conversationToolLogs,
+                showMenuButton = true,
+                onBackToHome = onBackToHome,
+                onOpenMenu = { showHistorySheet = true },
+                onOpenModelPicker = onOpenModelPicker,
+                onOpenNewComboDialog = { showChatComboBuilderDialog = true },
+                onOpenToolsSheet = { showToolsSheet = true },
+                onOpenSkillsAndToolsSheet = onOpenSkillsAndToolsSheet,
+                onOpenAttachSheet = { showAttachSheet = true },
+                onDraftChange = onDraftChange,
+                onRemoveMediaAttachment = onRemoveMediaAttachment,
+                onClearMediaAttachments = onClearMediaAttachments,
+                onSendMessage = onSendMessage,
+                onStopGeneration = onStopGeneration,
+                onRegenerateLast = onRegenerateLast,
+                onStartEditMessage = onStartEditMessage,
+                onCancelEditMessage = onCancelEditMessage,
+                onApproveCleartextHostFromError = onApproveCleartextHostFromError,
+                onDismissError = onDismissError,
+                onCopiedToast = onCopiedToast,
+                onPushContentToGitHub = onPushContentToGitHub,
+                onOpenCompareTargetPicker = onOpenCompareTargetPicker,
+                onOpenProviderSettings = onOpenProviderSettings,
+                onMicClick = handleMicTap,
+                onApplyAttachmentPreset = onApplyAttachmentPreset,
+                onDismissFirstTimeFileNotice = onDismissFirstTimeFileNotice,
+                onAcceptCheaperModelSuggestion = onAcceptCheaperModelSuggestion,
+                onDismissCheaperModelSuggestion = onDismissCheaperModelSuggestion,
+                onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
+                onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
+                onCancelBackgroundSubagents = onCancelBackgroundSubagents,
+                onQueueMessage = onQueueMessage,
+                onRemoveQueuedMessage = onRemoveQueuedMessage,
+                onOpenWorkModeSheet = { showWorkModeSheet = true },
+                onRunCodeBlock = onRunCodeBlock,
+                onOpenHtmlPreview = onOpenHtmlPreview
+            )
+
+            if (showHistorySheet) {
+                ModalBottomSheet(
+                    onDismissRequest = { showHistorySheet = false },
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxHeight(0.92f)) {
                         RunwayChatHistoryDrawerContent(
                             conversations = conversations,
                             activeConversationId = activeConversation?.id,
@@ -863,17 +918,18 @@ fun ChatWorkspaceScreen(
                             onSelectFolderFilter = onSelectFolderFilter,
                             onSelectConversation = { id ->
                                 onSelectConversation(id)
-                                coroutineScope.launch { drawerState.close() }
+                                showHistorySheet = false
                             },
                             onNewConversation = {
                                 onNewConversation()
-                                coroutineScope.launch { drawerState.close() }
+                                showHistorySheet = false
                             },
                             onContinueLatestConversation = {
                                 onContinueLatestConversation()
-                                coroutineScope.launch { drawerState.close() }
+                                showHistorySheet = false
                             },
                             onTogglePinConversation = onTogglePinConversation,
+                            onToggleArchiveConversation = onToggleArchiveConversation,
                             onRenameConversation = { renameTarget = it },
                             onDuplicateConversation = onDuplicateConversation,
                             onMoveConversationToFolder = onMoveConversationToFolder,
@@ -883,63 +939,12 @@ fun ChatWorkspaceScreen(
                             onSaveFolder = onSaveFolder,
                             onDeleteFolder = onDeleteFolder,
                             onOpenConnectors = {
-                                coroutineScope.launch { drawerState.close() }
+                                showHistorySheet = false
                                 onOpenConnectors()
                             }
                         )
                     }
                 }
-            ) {
-                MinimalChatCanvas(
-                    uiState = uiState,
-                    providers = providers,
-                    models = models,
-                    usageRecords = usageRecords,
-                    activeConversation = activeConversation,
-                    activeModelName = activeModelDescriptor?.modelId
-                        ?: activeConversation?.modelId
-                        ?: "gpt-4o",
-                    isActiveModelCombo = isActiveModelCombo,
-                    activeSkillsCount = activeSkillsCount,
-                    enabledMcpToolsCount = enabledMcpToolsCount,
-                    messages = messages,
-                    conversationToolLogs = conversationToolLogs,
-                    showMenuButton = true,
-                    onBackToHome = onBackToHome,
-                    onOpenMenu = { coroutineScope.launch { drawerState.open() } },
-                    onOpenModelPicker = onOpenModelPicker,
-                    onOpenNewComboDialog = { showChatComboBuilderDialog = true },
-                    onOpenToolsSheet = { showToolsSheet = true },
-                    onOpenSkillsAndToolsSheet = onOpenSkillsAndToolsSheet,
-                    onOpenAttachSheet = { showAttachSheet = true },
-                    onDraftChange = onDraftChange,
-                    onRemoveMediaAttachment = onRemoveMediaAttachment,
-                    onClearMediaAttachments = onClearMediaAttachments,
-                    onSendMessage = onSendMessage,
-                    onStopGeneration = onStopGeneration,
-                    onRegenerateLast = onRegenerateLast,
-                    onStartEditMessage = onStartEditMessage,
-                    onCancelEditMessage = onCancelEditMessage,
-                    onApproveCleartextHostFromError = onApproveCleartextHostFromError,
-                    onDismissError = onDismissError,
-                    onCopiedToast = onCopiedToast,
-                    onPushContentToGitHub = onPushContentToGitHub,
-                    onOpenCompareTargetPicker = onOpenCompareTargetPicker,
-                    onOpenProviderSettings = onOpenProviderSettings,
-                    onMicClick = handleMicTap,
-                    onApplyAttachmentPreset = onApplyAttachmentPreset,
-                    onDismissFirstTimeFileNotice = onDismissFirstTimeFileNotice,
-                    onAcceptCheaperModelSuggestion = onAcceptCheaperModelSuggestion,
-                    onDismissCheaperModelSuggestion = onDismissCheaperModelSuggestion,
-                    onOverrideSpendingLimitOnce = onOverrideSpendingLimitOnce,
-                    onSetContextTrimmingEnabled = onSetContextTrimmingEnabled,
-                    onCancelBackgroundSubagents = onCancelBackgroundSubagents,
-                    onQueueMessage = onQueueMessage,
-                    onRemoveQueuedMessage = onRemoveQueuedMessage,
-                    onOpenWorkModeSheet = { showWorkModeSheet = true },
-                    onRunCodeBlock = onRunCodeBlock,
-                    onOpenHtmlPreview = onOpenHtmlPreview
-                )
             }
         }
     }
@@ -1175,14 +1180,16 @@ private fun MinimalChatCanvas(
             }
             }
 
-            // Conversation title (spec Part 3): 15sp bold on the left.
+            // Conversation title (spec Part 3): 15sp bold on the left; tap opens the history sheet.
             Text(
                 text = activeConversation?.title?.ifBlank { "Untitled conversation" } ?: "New chat",
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onOpenMenu() }
             )
 
             // Model chip on the right ("+ Combo" moved into the Tools sheet)

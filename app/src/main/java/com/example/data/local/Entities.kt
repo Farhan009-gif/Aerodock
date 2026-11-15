@@ -193,6 +193,7 @@ data class ConversationEntity(
     @PrimaryKey val id: String,
     val title: String,
     val isPinned: Boolean = false,
+    val isArchived: Boolean = false,
     val providerInstanceId: String,
     val modelId: String,
     val systemPrompt: String = "You are a helpful, precise AI assistant in Aerodock.",

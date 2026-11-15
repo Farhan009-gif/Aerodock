@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.local.ConversationEntity
 import com.example.data.local.RunwayConversationMetaEntity
 import com.example.data.local.RunwayDocumentEntity
@@ -124,6 +125,7 @@ fun RunwayChatHistoryDrawerContent(
     onNewConversation: () -> Unit,
     onContinueLatestConversation: () -> Unit,
     onTogglePinConversation: (ConversationEntity) -> Unit,
+    onToggleArchiveConversation: (ConversationEntity) -> Unit = {},
     onRenameConversation: (ConversationEntity) -> Unit,
     onDuplicateConversation: (String) -> Unit,
     onMoveConversationToFolder: (conversationId: String, folderId: String?) -> Unit,
@@ -141,6 +143,8 @@ fun RunwayChatHistoryDrawerContent(
     var filterHasCode by rememberSaveable { mutableStateOf(false) }
     var filterHasDocument by rememberSaveable { mutableStateOf(false) }
     var showModelFilterSheet by remember { mutableStateOf(false) }
+    // History segment: 0 = All, 1 = Pinned, 2 = Archived
+    var historySegment by rememberSaveable { mutableStateOf(0) }
 
     // Action sheet & Folder dialog states
     var actionTargetConversation by remember { mutableStateOf<ConversationEntity?>(null) }
@@ -184,6 +188,7 @@ fun RunwayChatHistoryDrawerContent(
         conversations,
         searchQuery,
         selectedFolderId,
+        historySegment,
         dateFilter,
         selectedModelFilter,
         filterHasImage,
@@ -205,6 +210,13 @@ fun RunwayChatHistoryDrawerContent(
         conversations.mapNotNull { conv ->
             val meta = metasByConvId[conv.id]
             val convNodes = nodesByConvId[conv.id].orEmpty()
+
+            // 0. Segment filter (All hides archived; Pinned = pinned & not archived; Archived = archived only)
+            when (historySegment) {
+                1 -> if (!conv.isPinned || conv.isArchived) return@mapNotNull null
+                2 -> if (!conv.isArchived) return@mapNotNull null
+                else -> if (conv.isArchived) return@mapNotNull null
+            }
 
             // 1. Folder filter
             if (selectedFolderId != null && meta?.folderId != selectedFolderId) {
@@ -293,22 +305,21 @@ fun RunwayChatHistoryDrawerContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 1. Header: Runway Logo + Wordmark | Continue & New buttons
+        // 1. Header: "Chats" title | Continue chip + orange new-chat button
+        // (Connectors moved out of the sheet — it lives in More > Settings and the Connect tab.)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                text = "Chats",
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground
+            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                RunwayLogoIcon(size = 28.dp)
-                RunwayWordmark()
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (conversations.isNotEmpty()) {
                     MinimalChip(
@@ -317,54 +328,23 @@ fun RunwayChatHistoryDrawerContent(
                         modifier = Modifier.testTag("drawer_continue_chat_button")
                     )
                 }
-                MinimalButton(
-                    text = "New",
-                    icon = LucideIcons.Plus,
+                Surface(
                     onClick = onNewConversation,
-                    modifier = Modifier.testTag("drawer_new_chat_button")
-                )
-            }
-        }
-
-        // Main menu quick link to Connectors screen
-        Surface(
-            onClick = onOpenConnectors,
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("drawer_open_connectors_button")
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("drawer_new_chat_button")
                 ) {
-                    Icon(
-                        imageVector = LucideIcons.Plug,
-                        contentDescription = "Connectors",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "Connectors",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = "New chat",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-                Icon(
-                    imageVector = LucideIcons.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
             }
         }
 
@@ -374,7 +354,7 @@ fun RunwayChatHistoryDrawerContent(
             onValueChange = onSearchChange,
             placeholder = {
                 Text(
-                    "Search titles & messages…",
+                    "Search chats",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -409,7 +389,17 @@ fun RunwayChatHistoryDrawerContent(
                 .testTag("history_full_text_search_input")
         )
 
-        // 3. Search Filter Chips Row (Date range, Model, Has-image, Has-code, Has-document)
+        // 3. Segmented control: All / Pinned / Archived
+        MinimalSegmentedControl(
+            options = listOf("All", "Pinned", "Archived"),
+            selectedIndex = historySegment,
+            onSelect = { historySegment = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("history_segment_control")
+        )
+
+        // 4. Search Filter Chips Row (Date range, Model, Has-image, Has-code, Has-document)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -582,7 +572,7 @@ fun RunwayChatHistoryDrawerContent(
                     }
                     Text(
                         text = "Undo",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clickable(onClick = onUndoDeleteConversation)
@@ -595,7 +585,7 @@ fun RunwayChatHistoryDrawerContent(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
-        // 6. Grouped Conversation List (Pinned / Today / Yesterday / Earlier)
+        // 6. Grouped Conversation List (Pinned / Today / Yesterday / Earlier) in one card
         if (groupedSections.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -604,49 +594,63 @@ fun RunwayChatHistoryDrawerContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (searchQuery.isNotBlank() || selectedFolderId != null) {
-                        "No conversations match your search or filters"
-                    } else {
-                        "No conversations yet"
+                    text = when {
+                        searchQuery.isNotBlank() || selectedFolderId != null ->
+                            "No conversations match your search or filters"
+                        historySegment == 2 -> "No archived conversations yet"
+                        else -> "No conversations yet"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         } else {
-            LazyColumn(
+            val lastListedConversationId = groupedSections.lastOrNull()?.second?.lastOrNull()?.first?.id
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("history_conversations_lazy_column"),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .fillMaxWidth()
             ) {
-                groupedSections.forEach { (sectionTitle, sectionItems) ->
-                    item(key = "section_$sectionTitle") {
-                        Text(
-                            text = sectionTitle,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            color = if (sectionTitle == "Pinned") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp, bottom = 2.dp, start = 4.dp)
-                        )
-                    }
+                LazyColumn(
+                    modifier = Modifier.testTag("history_conversations_lazy_column"),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) {
+                    groupedSections.forEach { (sectionTitle, sectionItems) ->
+                        item(key = "section_$sectionTitle") {
+                            Text(
+                                text = sectionTitle,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp, start = 16.dp, end = 16.dp)
+                            )
+                        }
 
-                    items(sectionItems, key = { it.first.id }) { (conv, matchedSnippet) ->
-                        val isSelected = conv.id == activeConversationId
-                        val folder = metasByConvId[conv.id]?.folderId?.let { foldersById[it] }
+                        items(sectionItems, key = { it.first.id }) { (conv, matchedSnippet) ->
+                            val isSelected = conv.id == activeConversationId
+                            val folder = metasByConvId[conv.id]?.folderId?.let { foldersById[it] }
 
-                        HistoryConversationRow(
-                            conversation = conv,
-                            folder = folder,
-                            isSelected = isSelected,
-                            searchQuery = searchQuery,
-                            matchedSnippet = matchedSnippet,
-                            onSelect = { onSelectConversation(conv.id) },
-                            onOpenActions = { actionTargetConversation = conv },
-                            onSwipePin = { onTogglePinConversation(conv) },
-                            onSwipeDelete = { onDeleteConversation(conv.id) },
-                            onRenameQuick = { onRenameConversation(conv) },
-                            onDeleteQuick = { onDeleteConversation(conv.id) }
-                        )
+                            Column {
+                                HistoryConversationRow(
+                                    conversation = conv,
+                                    folder = folder,
+                                    isSelected = isSelected,
+                                    searchQuery = searchQuery,
+                                    matchedSnippet = matchedSnippet,
+                                    onSelect = { onSelectConversation(conv.id) },
+                                    onOpenActions = { actionTargetConversation = conv },
+                                    onSwipePin = { onTogglePinConversation(conv) },
+                                    onSwipeDelete = { onDeleteConversation(conv.id) }
+                                )
+                                if (conv.id != lastListedConversationId) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -761,6 +765,16 @@ fun RunwayChatHistoryDrawerContent(
                     modifier = Modifier.weight(1f)
                 )
             }
+
+            MinimalButton(
+                text = if (targetConv.isArchived) "Unarchive" else "Archive",
+                filled = false,
+                onClick = {
+                    onToggleArchiveConversation(targetConv)
+                    actionTargetConversation = null
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
@@ -896,9 +910,7 @@ private fun HistoryConversationRow(
     onSelect: () -> Unit,
     onOpenActions: () -> Unit,
     onSwipePin: () -> Unit,
-    onSwipeDelete: () -> Unit,
-    onRenameQuick: () -> Unit,
-    onDeleteQuick: () -> Unit
+    onSwipeDelete: () -> Unit
 ) {
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     val accentColor = MaterialTheme.colorScheme.primary
@@ -910,17 +922,11 @@ private fun HistoryConversationRow(
         matchedSnippet?.let { highlightMatchAnnotatedString(it, searchQuery, accentColor) }
     }
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        border = if (isSelected) {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        },
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .offset { IntOffset(dragOffsetX.roundToInt(), 0) }
+            .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
             .pointerInput(conversation.id) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
@@ -936,116 +942,89 @@ private fun HistoryConversationRow(
                     }
                 )
             }
-            .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
                 onClick = onSelect,
                 onLongClick = onOpenActions
             )
             .testTag("history_conversation_row_${conversation.id}")
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (folder != null) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(parseHexColorSafe(folder.colorHex))
-                            )
-                        }
-                        Text(
-                            text = highlightedTitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (folder != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(parseHexColorSafe(folder.colorHex))
                         )
                     }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = conversation.modelId.substringAfterLast("/"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "·",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatHistoryDate(conversation.updatedAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
+                    Text(
+                        text = highlightedTitle,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        imageVector = LucideIcons.Edit2,
-                        contentDescription = "Rename",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .size(15.dp)
-                            .clickable(onClick = onRenameQuick)
+                    Text(
+                        text = conversation.modelId.substringAfterLast("/"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Icon(
-                        imageVector = LucideIcons.Trash2,
-                        contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .size(15.dp)
-                            .clickable(onClick = onDeleteQuick)
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Icon(
-                        imageVector = LucideIcons.MoreHorizontal,
-                        contentDescription = "More conversation actions",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clickable(onClick = onOpenActions)
-                            .testTag("history_conv_more_${conversation.id}")
+                    Text(
+                        text = formatHistoryDate(conversation.updatedAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
             }
 
-            // Highlighted message content snippet when searching
-            if (highlightedSnippet != null) {
-                Text(
-                    text = highlightedSnippet,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp)
-                )
-            }
+            Icon(
+                imageVector = LucideIcons.MoreHorizontal,
+                contentDescription = "More conversation actions",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable(onClick = onOpenActions)
+                    .testTag("history_conv_more_${conversation.id}")
+            )
+        }
+
+        // Highlighted message content snippet when searching
+        if (highlightedSnippet != null) {
+            Text(
+                text = highlightedSnippet,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+            )
         }
     }
 }
@@ -1179,7 +1158,7 @@ private fun highlightMatchAnnotatedString(text: String, rawQuery: String, accent
             withStyle(
                 SpanStyle(
                     color = accentColor,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     background = accentColor.copy(alpha = 0.16f)
                 )
             ) {

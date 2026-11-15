@@ -33,7 +33,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RunwayParameterPresetEntity::class,
         RunwayUsageLogEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class OmniDatabase : RoomDatabase() {
@@ -271,6 +271,13 @@ abstract class OmniDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Conversation archive flag for the history sheet's Archived segment.
+                db.execSQL("ALTER TABLE `conversations` ADD COLUMN `isArchived` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): OmniDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -278,7 +285,7 @@ abstract class OmniDatabase : RoomDatabase() {
                     OmniDatabase::class.java,
                     "omniai_studio.db"
                 )
-                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     // WARNING: fallbackToDestructiveMigration() MUST NOT be used for schema changes
                     // that need to preserve existing user data. Always provide an explicit Migration.
                     // Future Migration Checklist:
