@@ -244,7 +244,7 @@ fun VideoStudioScreen(
             .background(MaterialTheme.colorScheme.background)
             .testTag("video_studio_screen"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Model Selector Pill at the Top
         item {
@@ -262,7 +262,6 @@ fun VideoStudioScreen(
                         onClick = { showVideoModelPicker = true },
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .testTag("video_model_selector_chip")
@@ -274,7 +273,7 @@ fun VideoStudioScreen(
                         ) {
                             Text(
                                 text = activeModelId.substringAfterLast("/"),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -319,13 +318,18 @@ fun VideoStudioScreen(
         item {
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Describe the video",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                     OutlinedTextField(
                         value = uiState.videoPrompt,
                         onValueChange = onPromptChange,
                         placeholder = {
                             Text(
                                 text = "Describe the video scene and motion...",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
@@ -333,12 +337,12 @@ fun VideoStudioScreen(
                         maxLines = 5,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedContainerColor = MaterialTheme.colorScheme.background,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.background
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
                         ),
-                        shape = RoundedCornerShape(12.dp),
-                        textStyle = MaterialTheme.typography.bodyMedium,
+                        shape = RoundedCornerShape(16.dp),
+                        textStyle = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("video_prompt_input")
@@ -408,7 +412,13 @@ fun VideoStudioScreen(
                                     onValueChange = onNegativePromptChange,
                                     placeholder = { Text("Negative prompt (optional)", style = MaterialTheme.typography.labelSmall) },
                                     singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    ),
+                                    shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("video_negative_prompt_input")
@@ -464,7 +474,9 @@ fun VideoStudioScreen(
                         icon = LucideIcons.Video,
                         filled = true,
                         modifier = Modifier.fillMaxWidth(),
-                        testTag = "submit_video_job_button"
+                        testTag = "submit_video_job_button",
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        verticalPadding = 14.dp
                     )
                 }
             }
@@ -506,7 +518,7 @@ fun VideoStudioScreen(
             items(rows) { rowPair ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     rowPair.forEach { job ->
                         Box(
@@ -515,7 +527,6 @@ fun VideoStudioScreen(
                                 .aspectRatio(1f)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
                                 .clickable { onInspectJob(job) }
                                 .padding(12.dp)
                                 .testTag("video_job_card_${job.id}")
@@ -1011,7 +1022,7 @@ private fun VideoErrorBanner(
             ) {
                 Text(
                     text = error.title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                     color = CoralError
                 )
                 IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {

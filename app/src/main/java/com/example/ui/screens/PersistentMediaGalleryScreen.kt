@@ -46,6 +46,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -291,7 +293,7 @@ fun PersistentMediaGalleryScreen(
             .background(MaterialTheme.colorScheme.background)
             .testTag("persistent_media_gallery_screen"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Summary Telemetry Bar & Layout Mode Switcher
         item {
@@ -306,12 +308,12 @@ fun PersistentMediaGalleryScreen(
                             Text(
                                 text = "Persistent Media Library",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "${generatedImages.size} Images · ${videoJobs.size} Videos · $totalFavorites Favorites · Est. $${String.format(Locale.US, "%.2f", totalSpendUsd)}",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -360,7 +362,13 @@ fun PersistentMediaGalleryScreen(
                             }
                         },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("gallery_search_input")
@@ -378,8 +386,20 @@ fun PersistentMediaGalleryScreen(
                                 selected = selectedFilter == filter,
                                 onClick = { selectedFilter = filter },
                                 label = { Text(filter.label, maxLines = 1) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selectedFilter == filter,
+                                    borderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    selectedBorderColor = MaterialTheme.colorScheme.primary
+                                ),
                                 modifier = Modifier
-                                    .heightIn(min = 48.dp)
+                                    .heightIn(min = 36.dp)
                                     .testTag("gallery_filter_${filter.name.lowercase()}")
                             )
                         }
@@ -398,7 +418,19 @@ fun PersistentMediaGalleryScreen(
                                 selected = selectedAspectRatio == ratio,
                                 onClick = { selectedAspectRatio = ratio },
                                 label = { Text(if (ratio == "All") "All Ratios" else ratio, maxLines = 1) },
-                                modifier = Modifier.heightIn(min = 48.dp)
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selectedAspectRatio == ratio,
+                                    borderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    selectedBorderColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.heightIn(min = 36.dp)
                             )
                         }
 
@@ -407,7 +439,19 @@ fun PersistentMediaGalleryScreen(
                                 selected = selectedSort == sortOpt,
                                 onClick = { selectedSort = sortOpt },
                                 label = { Text(sortOpt.label, maxLines = 1) },
-                                modifier = Modifier.heightIn(min = 48.dp)
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selectedSort == sortOpt,
+                                    borderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    selectedBorderColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.heightIn(min = 36.dp)
                             )
                         }
                     }
@@ -435,7 +479,7 @@ fun PersistentMediaGalleryScreen(
                         Text(
                             text = "No matching generated images or videos found",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = "Generated images and videos are automatically saved to persistent storage with full generation metadata.",
@@ -458,8 +502,8 @@ fun PersistentMediaGalleryScreen(
                         Text(
                             text = dateHeader,
                             style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "${itemsForDate.size} item(s)",
@@ -518,7 +562,6 @@ private fun PersistentMediaGridCard(
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .clickable(onClick = onClick)
@@ -574,7 +617,7 @@ private fun PersistentMediaGridCard(
 
                 // Top-left Modality Badge
                 Surface(
-                    color = if (item.isVideo) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -621,7 +664,7 @@ private fun PersistentMediaGridCard(
                 Text(
                     text = item.prompt,
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -656,7 +699,6 @@ private fun PersistentMediaDetailedMetadataCard(
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -715,7 +757,7 @@ private fun PersistentMediaDetailedMetadataCard(
                         Text(
                             text = "${item.providerDisplayName} · ${item.modelId.substringAfterLast("/")}",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -910,7 +952,7 @@ private fun MediaMetadataInspectorSheet(
                     Text(
                         text = "Generation Parameters & Metadata",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold
                     )
                 }
                 IconButton(onClick = onDismiss) {
@@ -1017,7 +1059,7 @@ private fun MediaMetadataInspectorSheet(
                             Text(
                                 text = value,
                                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                fontWeight = FontWeight.Medium,
+                                fontWeight = FontWeight.Normal,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,

@@ -237,7 +237,7 @@ fun ImageStudioScreen(
             .background(MaterialTheme.colorScheme.background)
             .testTag("image_studio_screen"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Model Selector Pill at the Top
         item {
@@ -255,7 +255,6 @@ fun ImageStudioScreen(
                         onClick = { showImageModelPicker = true },
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier.testTag("image_model_selector_chip")
                     ) {
                         Row(
@@ -265,7 +264,7 @@ fun ImageStudioScreen(
                         ) {
                             Text(
                                 text = activeModelId.substringAfterLast("/"),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -311,13 +310,18 @@ fun ImageStudioScreen(
         item {
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Describe the image",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                     OutlinedTextField(
                         value = uiState.imagePrompt,
                         onValueChange = onPromptChange,
                         placeholder = {
                             Text(
                                 text = "Describe the image...",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
@@ -325,12 +329,12 @@ fun ImageStudioScreen(
                         maxLines = 5,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedContainerColor = MaterialTheme.colorScheme.background,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.background
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
                         ),
-                        shape = RoundedCornerShape(12.dp),
-                        textStyle = MaterialTheme.typography.bodyMedium,
+                        shape = RoundedCornerShape(16.dp),
+                        textStyle = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("image_prompt_input")
@@ -382,7 +386,13 @@ fun ImageStudioScreen(
                                     onValueChange = onNegativePromptChange,
                                     placeholder = { Text("Negative prompt (optional)", style = MaterialTheme.typography.labelSmall) },
                                     singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    ),
+                                    shape = RoundedCornerShape(16.dp),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("image_negative_prompt_input")
@@ -400,7 +410,13 @@ fun ImageStudioScreen(
                                         onValueChange = onUpdateSeedText,
                                         placeholder = { Text("Seed (random)", style = MaterialTheme.typography.labelSmall) },
                                         singleLine = true,
-                                        shape = RoundedCornerShape(10.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                                        ),
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier
                                             .weight(1f)
                                             .testTag("image_seed_input")
@@ -508,7 +524,9 @@ fun ImageStudioScreen(
                             icon = LucideIcons.Sparkles,
                             filled = true,
                             modifier = Modifier.fillMaxWidth(),
-                            testTag = "generate_image_button"
+                            testTag = "generate_image_button",
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                            verticalPadding = 14.dp
                         )
                     }
                 }
@@ -562,7 +580,7 @@ fun ImageStudioScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("local_image_gallery_grid"),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     rowPair.forEach { img ->
                         val imageModel = remember(img.imageUri) {
@@ -574,7 +592,6 @@ fun ImageStudioScreen(
                                 .aspectRatio(1f)
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
                                 .clickable { onInspectImage(img) }
                                 .testTag("gallery_card_${img.id}")
                         ) {
@@ -962,7 +979,7 @@ private fun ImageErrorBanner(
             ) {
                 Text(
                     text = error.title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                     color = CoralError
                 )
                 IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {

@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -800,7 +801,9 @@ fun MinimalButton(
     isPrimary: Boolean = true,
     filled: Boolean = isPrimary,
     enabled: Boolean = true,
-    testTag: String? = null
+    testTag: String? = null,
+    textStyle: TextStyle? = null,
+    verticalPadding: Dp = 10.dp
 ) {
     val bgColor = when {
         !enabled -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -828,7 +831,7 @@ fun MinimalButton(
         modifier = finalModifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = verticalPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -843,7 +846,7 @@ fun MinimalButton(
             }
             Text(
                 text = text,
-                style = MaterialTheme.typography.bodyMedium,
+                style = textStyle ?: MaterialTheme.typography.bodyMedium,
                 color = contentColor,
                 maxLines = 1,
                 softWrap = false,
