@@ -1112,6 +1112,7 @@ fun OmniAgentCommandCenterSheet(
     onToggleLlmPlanner: (Boolean) -> Unit,
     onUndoLastCommand: () -> Unit,
     onClearHistory: () -> Unit,
+    onMarkRecordDone: (String) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1144,7 +1145,8 @@ fun OmniAgentCommandCenterSheet(
             onToggleLlmPlanner = onToggleLlmPlanner,
             onSetSafetyRiskyPrompt = {},
             onUndoLastCommand = onUndoLastCommand,
-            onClearHistory = onClearHistory
+            onClearHistory = onClearHistory,
+            onMarkRecordDone = onMarkRecordDone
         )
     }
 }

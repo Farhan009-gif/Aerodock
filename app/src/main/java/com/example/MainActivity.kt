@@ -582,6 +582,7 @@ private fun OmniStudioRoot(
             onToggleLlmPlanner = viewModel::setAgentUseLlmPlanner,
             onUndoLastCommand = viewModel::undoLastAgentCommand,
             onClearHistory = viewModel::clearAgentHistory,
+            onMarkRecordDone = viewModel::markAgentRecordCompleted,
             onDismiss = { viewModel.setAgentSheetOpen(false) }
         )
     }
