@@ -23,6 +23,10 @@ val SoftDarkAccent = Color(0xFFFF7A45)
 val SoftDarkToolTint = Color(0xFF14201A)
 val SoftDarkStatusOn = Color(0xFF7FD39A)
 val SoftDarkError = Color(0xFFFF6B6B)
+val SoftDarkVideoRouteBg = Color(0xFF2A1D18)
+val SoftDarkVideoRouteBorder = Color(0xFF4A2C1E)
+val VideoRouteBgLight = Color(0xFFFBE9DD)
+val VideoRouteBorderLight = Color(0xFFE3B48C)
 
 val AerodockSoftDarkColorScheme = darkColorScheme(
     primary = SoftDarkAccent,
@@ -66,19 +70,25 @@ val AerodockSoftDarkColorScheme = darkColorScheme(
 data class AerodockExtraColors(
     val toolTint: Color,
     val statusOnText: Color,
-    val tabDivider: Color
+    val tabDivider: Color,
+    val videoRouteBg: Color,
+    val videoRouteBorder: Color
 )
 
 val AerodockSoftDarkExtraColors = AerodockExtraColors(
     toolTint = SoftDarkToolTint,
     statusOnText = SoftDarkStatusOn,
-    tabDivider = SoftDarkTabDivider
+    tabDivider = SoftDarkTabDivider,
+    videoRouteBg = SoftDarkVideoRouteBg,
+    videoRouteBorder = SoftDarkVideoRouteBorder
 )
 
 val AerodockLightExtraColors = AerodockExtraColors(
     toolTint = SageTint,
     statusOnText = Sage,
-    tabDivider = CardBorderLight
+    tabDivider = CardBorderLight,
+    videoRouteBg = VideoRouteBgLight,
+    videoRouteBorder = VideoRouteBorderLight
 )
 
 val LocalAerodockExtraColors = staticCompositionLocalOf { AerodockSoftDarkExtraColors }

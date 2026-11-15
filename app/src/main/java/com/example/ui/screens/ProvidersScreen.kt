@@ -938,39 +938,47 @@ private fun OmniRouteGatewayCombosCard(
         if (selectedModalityTab == "ALL") combos
         else combos.filter { it.modality.equals(selectedModalityTab, ignoreCase = true) }
     }
+    val roundRobinCount = remember(combos) {
+        combos.count { it.strategy.equals("ROUND_ROBIN", ignoreCase = true) }
+    }
 
     MinimalCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("omniroute_gateway_combos_card")
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Gateway summary: status dot, name, address
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    MinimalStatusDot(isConnected = isListening)
-                    Column {
-                        Text(
-                            text = "OmniRoute Gateway · Video & Custom Combos",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "http://localhost:$port/v1 · ${combos.size} combos · $videoModelsCount video models",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                MinimalStatusDot(isConnected = isListening)
+                Column {
+                    Text(
+                        text = "OmniRoute Gateway",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "http://localhost:$port/v1",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
+            // Stats grid: Routes / Video models / Round robin in surface-variant tiles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                GatewayStatTile(label = "Routes", value = combos.size.toString(), modifier = Modifier.weight(1f))
+                GatewayStatTile(label = "Video models", value = videoModelsCount.toString(), modifier = Modifier.weight(1f))
+                GatewayStatTile(label = "Round robin", value = roundRobinCount.toString(), modifier = Modifier.weight(1f))
+            }
+
+            // Filter pills: All / Chat / Video / Image (selected is orange)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -978,21 +986,20 @@ private fun OmniRouteGatewayCombosCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf("ALL", "VIDEO", "CHAT", "IMAGE").forEach { tab ->
+                listOf(
+                    "ALL" to "All",
+                    "CHAT" to "Chat",
+                    "VIDEO" to "Video",
+                    "IMAGE" to "Image"
+                ).forEach { (tab, label) ->
                     MinimalChip(
-                        label = tab,
+                        label = label,
                         selected = selectedModalityTab == tab,
                         onClick = { selectedModalityTab = tab },
                         testTag = "omniroute_combo_filter_$tab"
                     )
                 }
                 Spacer(modifier = Modifier.width(4.dp))
-                MinimalButton(
-                    text = "+ New Combo",
-                    onClick = onNewCombo,
-                    filled = true,
-                    testTag = "omniroute_new_combo_button"
-                )
                 MinimalButton(
                     text = "+ Custom Model",
                     onClick = onAddCustomModel,
@@ -1003,108 +1010,213 @@ private fun OmniRouteGatewayCombosCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
 
+            // Route cards
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 filteredCombos.forEach { combo ->
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.background,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEditCombo(combo) }
-                            .testTag("omniroute_combo_item_${combo.id}")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = combo.displayName,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = when (combo.modality.uppercase()) {
-                                            "VIDEO" -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                                            "IMAGE" -> EmeraldSuccess.copy(alpha = 0.14f)
-                                            else -> MaterialTheme.colorScheme.surfaceVariant
-                                        }
-                                    ) {
-                                        Text(
-                                            text = "${combo.modality} · ${combo.strategy}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = when (combo.modality.uppercase()) {
-                                                "VIDEO" -> MaterialTheme.colorScheme.primary
-                                                "IMAGE" -> EmeraldSuccess
-                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "${combo.id} → ${combo.targetModels.joinToString(" → ")}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                    GatewayRouteCard(
+                        combo = combo,
+                        onEditCombo = onEditCombo,
+                        onDeleteCombo = onDeleteCombo
+                    )
+                }
+            }
 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                IconButton(
-                                    onClick = { onEditCombo(combo) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = LucideIcons.Edit,
-                                        contentDescription = "Edit Combo",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                                if (!combo.isBuiltIn) {
-                                    IconButton(
-                                        onClick = { onDeleteCombo(combo.id) },
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .testTag("delete_combo_${combo.id}")
-                                    ) {
-                                        Icon(
-                                            imageVector = LucideIcons.Trash,
-                                            contentDescription = "Delete Combo",
-                                            tint = CoralError,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
+            // Add route: full-width orange pill at the bottom
+            MinimalButton(
+                text = "Add route",
+                onClick = onNewCombo,
+                filled = true,
+                modifier = Modifier.fillMaxWidth(),
+                testTag = "omniroute_new_combo_button"
+            )
+        }
+    }
+}
+
+@Composable
+private fun GatewayStatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun GatewayRouteCard(
+    combo: OmniRouteComboDefinition,
+    onEditCombo: (OmniRouteComboDefinition) -> Unit,
+    onDeleteCombo: (String) -> Unit
+) {
+    val extraColors = LocalAerodockExtraColors.current
+    val isVideo = combo.modality.equals("VIDEO", ignoreCase = true)
+    val strategyLabel = when (combo.strategy.uppercase()) {
+        "ROUND_ROBIN" -> "Round robin"
+        "FASTEST" -> "Fastest"
+        else -> "Fallback"
+    }
+    val modalityLabel = combo.modality.lowercase().replaceFirstChar { it.uppercase() }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (isVideo) extraColors.videoRouteBg else MaterialTheme.colorScheme.background,
+        border = BorderStroke(
+            1.dp,
+            if (isVideo) extraColors.videoRouteBorder else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onEditCombo(combo) }
+            .testTag("omniroute_combo_item_${combo.id}")
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // 32dp icon tile
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isVideo) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = when {
+                                isVideo -> LucideIcons.Video
+                                combo.modality.equals("IMAGE", ignoreCase = true) -> LucideIcons.Image
+                                else -> LucideIcons.Bot
+                            },
+                            contentDescription = null,
+                            tint = if (isVideo) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = combo.displayName,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "$strategyLabel · $modalityLabel",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (!combo.isBuiltIn) {
+                    IconButton(
+                        onClick = { onDeleteCombo(combo.id) },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("delete_combo_${combo.id}")
+                    ) {
+                        Icon(
+                            imageVector = LucideIcons.Trash,
+                            contentDescription = "Delete Combo",
+                            tint = CoralError,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = LucideIcons.ChevronRight,
+                    contentDescription = "Edit route",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            // Fallback chain as pills: combo -> arrow -> target model
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                GatewayChainPill(text = combo.id, isVideo = isVideo)
+                combo.targetModels.forEach { target ->
+                    Text(
+                        text = "→",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (isVideo) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    GatewayChainPill(text = target.substringAfterLast("/"), isVideo = isVideo)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GatewayChainPill(
+    text: String,
+    isVideo: Boolean
+) {
+    Surface(
+        shape = CircleShape,
+        color = if (isVideo) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isVideo) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+        )
     }
 }
 
