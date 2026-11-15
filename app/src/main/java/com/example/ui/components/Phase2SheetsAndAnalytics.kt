@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -80,6 +82,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.ModelDescriptorEntity
@@ -92,6 +96,7 @@ import com.example.ui.theme.CoralError
 
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.viewmodel.CompareTargetModel
+import java.util.Calendar
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -721,21 +726,35 @@ fun UsageAnalyticsScreen(
         ) + zeroSpendProviders
     }
 
-    val chartPoints = remember(usageRecords, latencySamples) {
-        when {
-            usageRecords.size >= 2 -> usageRecords.take(20).reversed().map {
-                (it.promptTokens + it.completionTokens).toFloat().coerceAtLeast(10f)
-            }
-            latencySamples.size >= 2 -> latencySamples.takeLast(20).map {
-                it.latencyMs.toFloat().coerceAtLeast(10f)
-            }
-            else -> listOf(120f, 180f, 145f, 230f, 195f, 310f, 260f, 290f)
+    // Daily token totals for the last 7 days (oldest first, today last) + weekday labels
+    val (dailyTotals, dailyDayLabels) = remember(usageRecords) {
+        val dayMs = 86_400_000L
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
+        val todayStart = cal.timeInMillis
+        val dayNames = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
+        val totals = ArrayList<Long>(7)
+        val labels = ArrayList<String>(7)
+        for (daysAgo in 6 downTo 0) {
+            val dayStart = todayStart - daysAgo * dayMs
+            totals.add(
+                usageRecords
+                    .filter { it.createdAt in dayStart until dayStart + dayMs }
+                    .sumOf { (it.promptTokens + it.completionTokens).toLong() }
+            )
+            cal.timeInMillis = dayStart
+            labels.add(dayNames[cal.get(Calendar.DAY_OF_WEEK) - 1])
+        }
+        totals to labels
     }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
             .fillMaxSize()
             .testTag("usage_analytics_screen")
@@ -749,7 +768,7 @@ fun UsageAnalyticsScreen(
             ) {
                 Text(
                     text = "Usage",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -839,12 +858,12 @@ fun UsageAnalyticsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Spend by Provider",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Exact token usage and estimated spend for each AI provider",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -890,15 +909,15 @@ fun UsageAnalyticsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (usageRecords.size >= 2) "Token activity" else "Response latency (ms)",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Token activity",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = fastestProvider?.let {
                                     "Fastest: ${it.providerName} · ${it.latestLatencyMs}ms"
-                                } ?: "Real-time telemetry across active providers",
-                                style = MaterialTheme.typography.labelSmall,
+                                } ?: "Tokens per day · last 7 days",
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -915,82 +934,44 @@ fun UsageAnalyticsScreen(
                         }
                     }
 
-                    val gridColor = MaterialTheme.colorScheme.outline
-                    val accentColor = MaterialTheme.colorScheme.primary
-                    Canvas(
+                    // Daily bar chart (Part 3): 7 bars, 6dp radius, today in accent
+                    val maxDailyTokens = (dailyTotals.maxOrNull() ?: 0L).coerceAtLeast(1L)
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp)
-                            .padding(vertical = 8.dp)
+                            .height(72.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom
                     ) {
-                        val w = size.width
-                        val h = size.height
-                        val maxVal = (chartPoints.maxOrNull() ?: 1f).coerceAtLeast(1f)
-                        val minVal = (chartPoints.minOrNull() ?: 0f).coerceAtMost(maxVal - 1f)
-                        val range = (maxVal - minVal).coerceAtLeast(1f)
-
-                        // Subtle horizontal baseline grid
-                        listOf(0.2f, 0.5f, 0.85f).forEach { frac ->
-                            drawLine(
-                                color = gridColor,
-                                start = Offset(0f, h * frac),
-                                end = Offset(w, h * frac),
-                                strokeWidth = 1.dp.toPx()
-                            )
-                        }
-
-                        val stepX = if (chartPoints.size > 1) w / (chartPoints.size - 1) else w
-                        val coords = chartPoints.mapIndexed { idx, value ->
-                            val norm = (value - minVal) / range
-                            val x = idx * stepX
-                            val y = h - (norm * (h * 0.75f)) - (h * 0.1f)
-                            Offset(x, y)
-                        }
-
-                        if (coords.size >= 2) {
-                            val linePath = androidx.compose.ui.graphics.Path().apply {
-                                moveTo(coords.first().x, coords.first().y)
-                                for (i in 1 until coords.size) {
-                                    val prev = coords[i - 1]
-                                    val curr = coords[i]
-                                    val midX = (prev.x + curr.x) / 2f
-                                    cubicTo(midX, prev.y, midX, curr.y, curr.x, curr.y)
-                                }
-                            }
-
-                            val fillPath = androidx.compose.ui.graphics.Path().apply {
-                                addPath(linePath)
-                                lineTo(coords.last().x, h)
-                                lineTo(coords.first().x, h)
-                                close()
-                            }
-
-                            drawPath(
-                                path = fillPath,
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        accentColor.copy(alpha = 0.22f),
-                                        accentColor.copy(alpha = 0.0f)
+                        dailyTotals.forEachIndexed { idx, dayTotal ->
+                            val fraction = (dayTotal.toFloat() / maxDailyTokens.toFloat()).coerceIn(0.04f, 1f)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(fraction)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(
+                                        if (idx == dailyTotals.lastIndex) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        }
                                     )
-                                )
                             )
-
-                            drawPath(
-                                path = linePath,
-                                color = accentColor,
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                                    width = 2.dp.toPx(),
-                                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                                )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        dailyDayLabels.forEach { dayLabel ->
+                            Text(
+                                text = dayLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f)
                             )
-
-                            coords.forEach { pt ->
-                                drawCircle(
-                                    color = accentColor,
-                                    radius = 3.dp.toPx(),
-                                    center = pt
-                                )
-                            }
                         }
                     }
                 }
@@ -1005,7 +986,7 @@ private fun ProviderSpendRowCard(
     spendCurrency: String,
     usdToInrRate: Double
 ) {
-    val accentColor = MaterialTheme.colorScheme.primary
+    val extraColors = LocalAerodockExtraColors.current
     val primaryCostText = remember(item.costUsd, spendCurrency, usdToInrRate) {
         formatUsageCurrency(item.costUsd, spendCurrency, usdToInrRate)
     }
@@ -1020,11 +1001,6 @@ private fun ProviderSpendRowCard(
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(
-            1.dp,
-            if (item.requestsCount > 0) accentColor.copy(alpha = 0.4f)
-            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-        ),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("provider_spend_item_${item.providerKey}")
@@ -1050,12 +1026,12 @@ private fun ProviderSpendRowCard(
                     ) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = accentColor.copy(alpha = 0.16f)
+                            color = MaterialTheme.colorScheme.background
                         ) {
                             Text(
                                 text = item.badgeShort,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = accentColor,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 softWrap = false,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1063,7 +1039,7 @@ private fun ProviderSpendRowCard(
                         }
                         Text(
                             text = item.providerDisplayName,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1072,7 +1048,7 @@ private fun ProviderSpendRowCard(
                     }
                     Text(
                         text = "${String.format(Locale.US, "%,d", item.requestsCount)} reqs · ${String.format(Locale.US, "%,d", item.totalTokens)} tokens (In: ${String.format(Locale.US, "%,d", item.promptTokens)} · Out: ${String.format(Locale.US, "%,d", item.completionTokens)})",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -1084,11 +1060,11 @@ private fun ProviderSpendRowCard(
                     Text(
                         text = primaryCostText,
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = if (item.costUsd > 0.0) EmeraldConnected else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (item.costUsd == 0.0) extraColors.statusOnText else MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "≈ $secondaryCostText · $sharePercentText",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -1108,7 +1084,7 @@ private fun ProviderSpendRowCard(
                     ) {}
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .fillMaxWidth(item.shareOfTotalCost.coerceIn(0.03f, 1f))
                             .height(5.dp)
@@ -1129,7 +1105,7 @@ private fun ProviderSpendRowCard(
                         ) {
                             Text(
                                 text = mod.modelId,
-                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFontFamily),
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -1139,7 +1115,7 @@ private fun ProviderSpendRowCard(
                             )
                             Text(
                                 text = "${String.format(Locale.US, "%,d", mod.requestsCount)} req · ${String.format(Locale.US, "%,d", mod.totalTokens)} tok · $modCostText",
-                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFontFamily),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -1158,7 +1134,7 @@ internal fun UsageKpiCard(
     modifier: Modifier = Modifier
 ) {
     val valueTextStyle = when {
-        value.length <= 8 -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+        value.length <= 10 -> MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
         value.length <= 13 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
         else -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
     }
@@ -1170,7 +1146,7 @@ internal fun UsageKpiCard(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
@@ -1182,7 +1158,7 @@ internal fun UsageKpiCard(
             if (!subtitle.isNullOrBlank()) {
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     softWrap = true
                 )

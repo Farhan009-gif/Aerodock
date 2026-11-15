@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +63,7 @@ import com.example.data.local.UsageRecordEntity
 import com.example.data.provider.ProviderSpendingLimitEvaluator
 import com.example.ui.theme.CoralError
 import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.LocalAerodockExtraColors
 
 import com.example.ui.viewmodel.ProvidersUiState
 import com.example.ui.viewmodel.ProvidersViewModel
@@ -249,7 +251,13 @@ fun ProvidersScreen(
                         label = { Text("Monthly limit (USD)") },
                         placeholder = { Text("5.00") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("provider_monthly_limit_input_${targetProv.id}")
@@ -316,12 +324,12 @@ fun ProvidersScreen(
                 Column {
                     Text(
                         text = "Keys & Gateway",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         text = "${uiState.vaultSecurityStatus.encryptedKeyCount} encrypted · AES-256-GCM",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .clickable(onClick = viewModel::openVaultDetailsDialog)
@@ -420,6 +428,7 @@ private fun ProviderCardItem(
     onEditMonthlyLimit: () -> Unit = {}
 ) {
     val hasKey = !maskedKey.isNullOrBlank()
+    val extraColors = LocalAerodockExtraColors.current
     val safeMaskedDisplay = remember(maskedKey) {
         if (maskedKey.isNullOrBlank()) {
             "••••••••••••"
@@ -452,24 +461,41 @@ private fun ProviderCardItem(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = LucideIcons.Key,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(17.dp)
                         )
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = provider.displayName,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = provider.displayName,
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = if (provider.isEnabled) extraColors.toolTint else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = if (provider.isEnabled) "Active" else "Off",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (provider.isEnabled) extraColors.statusOnText else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(2.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -477,7 +503,7 @@ private fun ProviderCardItem(
                         ) {
                             Text(
                                 text = if (hasKey) safeMaskedDisplay else "No key set",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = if (hasKey) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
                             when (health) {
@@ -485,7 +511,7 @@ private fun ProviderCardItem(
                                     Text(
                                         text = "· ${health.latencyMs}ms",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 is ProviderHealth.Unhealthy -> {
@@ -536,7 +562,7 @@ private fun ProviderCardItem(
                         ) {
                             Text(
                                 text = if (isBusyTesting) "..." else "Test",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -573,8 +599,8 @@ private fun ProviderCardItem(
                     )
                     Text(
                         text = if (monthlyLimitUsd != null && monthlyLimitUsd > 0.0) "Edit limit" else "Set limit",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.testTag("provider_set_limit_button_${provider.id}")
                     )
                 }
@@ -933,7 +959,7 @@ private fun OmniRouteGatewayCombosCard(
                     Column {
                         Text(
                             text = "OmniRoute Gateway · Video & Custom Combos",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -1005,7 +1031,7 @@ private fun OmniRouteGatewayCombosCard(
                                 ) {
                                     Text(
                                         text = combo.displayName,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -1524,7 +1550,7 @@ private fun ProviderFailoverSettingsCard(
                         )
                         Text(
                             text = "Failover",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -1578,7 +1604,7 @@ private fun ProviderFailoverSettingsCard(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "${index + 1}. $resolvedProviderName",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis

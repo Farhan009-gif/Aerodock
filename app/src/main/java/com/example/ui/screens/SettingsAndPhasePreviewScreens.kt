@@ -195,7 +195,7 @@ fun MinimalSettingsAndThemeScreen(
             .background(MaterialTheme.colorScheme.background)
             .testTag("minimal_settings_screen"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Row(
@@ -212,7 +212,7 @@ fun MinimalSettingsAndThemeScreen(
                 }
                 Text(
                     text = "Settings",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -236,7 +236,7 @@ fun MinimalSettingsAndThemeScreen(
                             Icon(
                                 imageVector = if (isLightMode) LucideIcons.Sun else LucideIcons.Moon,
                                 contentDescription = "Theme",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column {
@@ -247,7 +247,7 @@ fun MinimalSettingsAndThemeScreen(
                                 )
                                 Text(
                                     text = if (isLightMode) "Concept A light active" else "Concept A dark active",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -271,10 +271,14 @@ fun MinimalSettingsAndThemeScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         MinimalSegmentedControl(
-                            options = listOf("Light", "Dark"),
-                            selectedIndex = if (isLightMode) 0 else 1,
+                            options = listOf("Dark", "Light", "System"),
+                            selectedIndex = when {
+                                uiState.themeMode.equals("LIGHT", ignoreCase = true) -> 1
+                                uiState.themeMode.equals("SYSTEM", ignoreCase = true) -> 2
+                                else -> 0
+                            },
                             onSelect = { idx ->
-                                onSetThemeMode(if (idx == 0) "LIGHT" else "DARK")
+                                onSetThemeMode(listOf("DARK", "LIGHT", "SYSTEM")[idx])
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -294,7 +298,7 @@ fun MinimalSettingsAndThemeScreen(
                         )
                         Text(
                             text = "Buttons, selections and your chat bubbles follow the accent colour.",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(
@@ -336,8 +340,8 @@ fun MinimalSettingsAndThemeScreen(
                                     }
                                     Text(
                                         text = palette.displayName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isSelected) {
                                             MaterialTheme.colorScheme.onSurface
                                         } else {
@@ -371,7 +375,7 @@ fun MinimalSettingsAndThemeScreen(
                             )
                             Text(
                                 text = "Speak assistant responses aloud using TextToSpeech",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -397,7 +401,7 @@ fun MinimalSettingsAndThemeScreen(
                             )
                             Text(
                                 text = "Send chat messages with keyboard return key",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -423,7 +427,7 @@ fun MinimalSettingsAndThemeScreen(
                             )
                             Text(
                                 text = "Require authentication on launch",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -449,7 +453,7 @@ fun MinimalSettingsAndThemeScreen(
                             )
                             Text(
                                 text = "Display usage cost in USD or INR",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -490,18 +494,18 @@ fun MinimalSettingsAndThemeScreen(
                         Icon(
                             imageVector = LucideIcons.Plug,
                             contentDescription = "Connectors",
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
                         Column {
                             Text(
                                 text = "Connectors",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Manage MCP connectors, GitHub preset, and Always / Ask / Never tool rules",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -535,12 +539,12 @@ fun MinimalSettingsAndThemeScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Web search (web_search)",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "DuckDuckGo search (no key, HTTPS only, 10m cache, 2 KB cap)",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -562,12 +566,12 @@ fun MinimalSettingsAndThemeScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "News headlines (news_headlines)",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Saved HTTPS RSS feeds only (no key, 15m cache, 2 KB cap)",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -583,16 +587,15 @@ fun MinimalSettingsAndThemeScreen(
                     // 4. Saved HTTPS RSS News Feeds list with Add and Remove buttons
                     Text(
                         text = "News RSS feeds (${uiState.liveInfoRssFeeds.size} HTTPS feeds)",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         uiState.liveInfoRssFeeds.forEach { feed ->
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.background,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("live_info_feed_item_${feed.id}")
@@ -607,14 +610,14 @@ fun MinimalSettingsAndThemeScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = feed.name,
-                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = feed.url,
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -638,6 +641,13 @@ fun MinimalSettingsAndThemeScreen(
                         label = { Text("Feed name") },
                         placeholder = { Text("e.g., Ars Technica") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("live_info_new_feed_name_input")
@@ -652,6 +662,13 @@ fun MinimalSettingsAndThemeScreen(
                         label = { Text("HTTPS RSS feed URL") },
                         placeholder = { Text("https://example.com/rss.xml") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("live_info_new_feed_url_input")
@@ -660,7 +677,7 @@ fun MinimalSettingsAndThemeScreen(
                     if (feedUrlValidationError != null) {
                         Text(
                             text = feedUrlValidationError.orEmpty(),
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = CoralError,
                             modifier = Modifier.testTag("live_info_feed_url_error")
                         )
@@ -714,18 +731,18 @@ fun MinimalSettingsAndThemeScreen(
                             Icon(
                                 imageVector = LucideIcons.Code,
                                 contentDescription = "Java Remote Runner",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column {
                                 Text(
                                     text = "Remote Java Runner",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = "Java runs on a remote server (5s timeout, 10 KB output cap). HTML, CSS, and JS run locally in a locked-down WebView.",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -739,6 +756,13 @@ fun MinimalSettingsAndThemeScreen(
                         label = { Text("Runner URL (https://...)") },
                         placeholder = { Text("https://runner.example.com/execute") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("java_runner_url_input")
@@ -759,6 +783,13 @@ fun MinimalSettingsAndThemeScreen(
                         placeholder = { Text("Leave blank to keep existing key") },
                         visualTransformation = PasswordVisualTransformation(),
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("java_runner_key_input")
@@ -849,7 +880,7 @@ fun MinimalSettingsAndThemeScreen(
                             )
                             Text(
                                 text = "${mig.migratedConversationsCount} chats · ${mig.migratedMessageNodesCount} tree nodes · ${mig.seededPromptsCount} prompts · ${mig.seededPresetsCount} presets",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -860,7 +891,7 @@ fun MinimalSettingsAndThemeScreen(
                             MinimalStatusDot(isConnected = mig.isVerified)
                             Text(
                                 text = if (mig.isVerified) "Verified" else "Migrating",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -885,13 +916,35 @@ fun MinimalSettingsAndThemeScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    MinimalButton(
-                        text = "Clear workspace data",
+                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+
+                    // Danger zone (Part 3): clear-all in the error color
+                    Surface(
                         onClick = onClearAllData,
-                        icon = LucideIcons.Trash,
-                        filled = false,
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
                         modifier = Modifier.fillMaxWidth()
-                    )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = LucideIcons.Trash,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Clear all data",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
         }
