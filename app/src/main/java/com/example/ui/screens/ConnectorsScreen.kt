@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -69,6 +70,7 @@ import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CoralError
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAerodockExtraColors
 
 /**
  * Pending confirmation state when a user tries to set a write or delete tool
@@ -173,7 +175,7 @@ fun ConnectorsScreen(
                     Text(
                         text = "Allow write or delete without asking?",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold
                     )
                 }
             },
@@ -321,7 +323,7 @@ fun ConnectorsScreen(
                     .padding(innerPadding)
                     .testTag("connectors_lazy_column"),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // 1. "Connector discovery" card with toggle and required text
                 item(key = "connector_discovery_card") {
@@ -343,14 +345,14 @@ fun ConnectorsScreen(
                                 ) {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
                                         modifier = Modifier.size(38.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = LucideIcons.Compass,
                                                 contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
@@ -359,7 +361,7 @@ fun ConnectorsScreen(
                                         Text(
                                             text = "Connector discovery",
                                             style = MaterialTheme.typography.titleSmall.copy(
-                                                fontWeight = FontWeight.SemiBold
+                                                fontWeight = FontWeight.Bold
                                             ),
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
@@ -395,8 +397,8 @@ fun ConnectorsScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(MaterialTheme.colorScheme.background)
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
@@ -416,7 +418,7 @@ fun ConnectorsScreen(
                                                     Text(
                                                         text = preset.name,
                                                         style = MaterialTheme.typography.bodyMedium.copy(
-                                                            fontWeight = FontWeight.Medium
+                                                            fontWeight = FontWeight.Normal
                                                         ),
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     )
@@ -466,7 +468,7 @@ fun ConnectorsScreen(
                         MinimalSectionHeader(title = "Connected connectors")
                         Text(
                             text = "${mcpServers.count { it.isEnabled }} active",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -490,7 +492,7 @@ fun ConnectorsScreen(
                                 )
                                 Text(
                                     text = "No connectors added yet",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
@@ -500,7 +502,7 @@ fun ConnectorsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 MinimalButton(
-                                    text = "Add Connector",
+                                    text = "Add connector",
                                     icon = LucideIcons.Plus,
                                     onClick = {
                                         initialPresetForAdd = null
@@ -519,6 +521,22 @@ fun ConnectorsScreen(
                             toolCount = toolCount,
                             isBusy = busyServerId == server.id,
                             onClick = { onSelectConnector(server.id) }
+                        )
+                    }
+                }
+
+                // 3. Full-width outline Add connector pill (Part 3); the empty state has its own filled one
+                if (mcpServers.isNotEmpty()) {
+                    item(key = "add_connector_button") {
+                        MinimalButton(
+                            text = "Add connector",
+                            icon = LucideIcons.Plus,
+                            onClick = {
+                                initialPresetForAdd = null
+                                showAddConnectorDialog = true
+                            },
+                            filled = false,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -566,7 +584,7 @@ private fun ConnectorsTopBar(
                     }
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -605,6 +623,7 @@ private fun ConnectorListRow(
 ) {
     val isGitHub = server.name.contains("github", ignoreCase = true) ||
         server.url.contains("githubcopilot.com", ignoreCase = true)
+    val extraColors = LocalAerodockExtraColors.current
 
     MinimalCard(
         modifier = Modifier
@@ -626,7 +645,7 @@ private fun ConnectorListRow(
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (server.isEnabled) {
-                        MaterialTheme.colorScheme.primaryContainer
+                        extraColors.toolTint
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
@@ -636,7 +655,7 @@ private fun ConnectorListRow(
                         Icon(
                             imageVector = if (isGitHub) LucideIcons.GitBranch else LucideIcons.Server,
                             contentDescription = server.name,
-                            tint = if (server.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (server.isEnabled) extraColors.statusOnText else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -649,16 +668,26 @@ private fun ConnectorListRow(
                     ) {
                         Text(
                             text = server.name,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        MinimalStatusDot(isConnected = server.isEnabled)
+                        Surface(
+                            shape = CircleShape,
+                            color = if (server.isEnabled) extraColors.toolTint else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = if (server.isEnabled) "On" else "Off",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (server.isEnabled) extraColors.statusOnText else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                     Text(
                         text = "${server.transportEnum().label} · ${server.url}",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -740,7 +769,13 @@ private fun ConnectorDetailView(
                         placeholder = { Text("Bearer token / PAT") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
-                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("connector_detail_token_input")
@@ -800,7 +835,7 @@ private fun ConnectorDetailView(
                 .fillMaxSize()
                 .padding(innerPadding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 1. Connection & Test Connection Card
             item(key = "connector_connection_card") {
@@ -820,7 +855,7 @@ private fun ConnectorDetailView(
                                     Text(
                                         text = if (server.isEnabled) "Connected" else "Disconnected",
                                         style = MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = FontWeight.SemiBold
+                                            fontWeight = FontWeight.Bold
                                         ),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
@@ -970,7 +1005,7 @@ private fun ConnectorDetailView(
                                 Text(
                                     text = "Set all tools",
                                     style = MaterialTheme.typography.titleSmall.copy(
-                                        fontWeight = FontWeight.SemiBold
+                                        fontWeight = FontWeight.Bold
                                     ),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1029,7 +1064,7 @@ private fun ConnectorDetailView(
                         ) {
                             Text(
                                 text = "No tools discovered yet",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
@@ -1092,7 +1127,7 @@ private fun ConnectorToolPolicyCard(
                             text = tool.toolName,
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             ),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
@@ -1139,11 +1174,11 @@ private fun ApprovalChoiceSegmentedRow(
             val activeColor = choiceColor(choice)
             Surface(
                 onClick = { onSelectChoice(choice) },
-                shape = RoundedCornerShape(10.dp),
-                color = if (isSelected) activeColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.background,
+                shape = RoundedCornerShape(50),
+                color = if (isSelected) activeColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(
                     width = 1.dp,
-                    color = if (isSelected) activeColor else MaterialTheme.colorScheme.outline
+                    color = if (isSelected) activeColor else MaterialTheme.colorScheme.surfaceVariant
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -1157,7 +1192,7 @@ private fun ApprovalChoiceSegmentedRow(
                     Text(
                         text = choice.label,
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         ),
                         color = if (isSelected) activeColor else MaterialTheme.colorScheme.onSurface
                     )
@@ -1225,7 +1260,7 @@ private fun AddMcpConnectorDialog(
         title = {
             Text(
                 text = "Add Connector",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
             )
         },
         text = {
