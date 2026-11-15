@@ -461,7 +461,7 @@ fun RunwayRichMarkdownRenderer(
                             RunwayInlineRichText(
                                 text = block.text,
                                 isStreaming = isStreaming,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
                                 color = MaterialTheme.colorScheme.onSurface,
                                 onOpenImage = { alt, url -> fullScreenImageTarget = alt to url }
                             )
@@ -494,7 +494,7 @@ fun RunwayRichMarkdownRenderer(
                                             RunwayInlineRichText(
                                                 text = item.text,
                                                 isStreaming = isStreaming,
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 onOpenImage = { alt, url -> fullScreenImageTarget = alt to url }
                                             )
@@ -515,7 +515,7 @@ fun RunwayRichMarkdownRenderer(
                                     ) {
                                         Text(
                                             text = item.numberLabel,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.width(24.dp)
                                         )
@@ -523,7 +523,7 @@ fun RunwayRichMarkdownRenderer(
                                             RunwayInlineRichText(
                                                 text = item.text,
                                                 isStreaming = isStreaming,
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
                                                 color = MaterialTheme.colorScheme.onSurface,
                                                 onOpenImage = { alt, url -> fullScreenImageTarget = alt to url }
                                             )
@@ -568,7 +568,8 @@ fun RunwayRichMarkdownRenderer(
                                             RunwayInlineRichText(
                                                 text = item.text,
                                                 isStreaming = isStreaming,
-                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                style = MaterialTheme.typography.bodyLarge.copy(
+                                                    lineHeight = 24.sp,
                                                     textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
                                                 ),
                                                 color = if (item.isChecked) {
@@ -657,12 +658,12 @@ fun RunwayRichMarkdownRenderer(
 private fun RunwayMarkdownHeading(level: Int, text: String) {
     val style = when (level) {
         1, 2 -> MaterialTheme.typography.titleMedium.copy(
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.Bold,
             lineHeight = 26.sp
         )
-        else -> MaterialTheme.typography.bodyMedium.copy(
-            fontWeight = FontWeight.Medium,
-            lineHeight = 22.sp
+        else -> MaterialTheme.typography.bodyLarge.copy(
+            fontWeight = FontWeight.Bold,
+            lineHeight = 24.sp
         )
     }
     Column(

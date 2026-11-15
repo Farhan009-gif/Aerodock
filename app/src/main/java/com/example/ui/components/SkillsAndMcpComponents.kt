@@ -101,6 +101,8 @@ import com.example.ui.theme.CoralError
 
 import com.example.ui.theme.EmeraldConnected
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LocalAerodockExtraColors
+import com.example.ui.theme.runwayIsDarkTheme
 import com.example.ui.viewmodel.OmniUiState
 import com.example.ui.viewmodel.PendingToolApprovalRequest
 import com.example.ui.viewmodel.ToolApprovalDecision
@@ -1673,7 +1675,11 @@ fun ToolCallApprovalDialog(
     ModalBottomSheet(
         onDismissRequest = { onDecision(ToolApprovalDecision.DENY) },
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = if (runwayIsDarkTheme()) {
+            LocalAerodockExtraColors.current.toolTint
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
@@ -1709,7 +1715,7 @@ fun ToolCallApprovalDialog(
                         }
                     )
                     Text(
-                        text = if (isCodeExecution) "Run Code Confirmation" else "Approve MCP Tool Execution?",
+                        text = if (isCodeExecution) "Run Code Confirmation" else "Allow ${request.tool.toolName} for this chat?",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -1925,6 +1931,7 @@ fun ToolCallApprovalDialog(
                             else -> CoralError
                         }
                     ),
+                    shape = RoundedCornerShape(50),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
@@ -1949,6 +1956,7 @@ fun ToolCallApprovalDialog(
                 ) {
                     OutlinedButton(
                         onClick = { onDecision(ToolApprovalDecision.DENY) },
+                        shape = RoundedCornerShape(50),
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
@@ -1967,6 +1975,7 @@ fun ToolCallApprovalDialog(
                         OutlinedButton(
                             onClick = { onDecision(ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY) },
                             enabled = request.tool.isReadOnlyHint,
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()

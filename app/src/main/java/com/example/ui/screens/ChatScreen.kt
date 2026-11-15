@@ -97,6 +97,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.local.ChatMediaAttachment
 import com.example.data.local.ConversationEntity
@@ -1130,9 +1131,9 @@ private fun MinimalChatCanvas(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 2.dp),
+                .padding(horizontal = 16.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onBackToHome != null) {
@@ -1140,7 +1141,6 @@ private fun MinimalChatCanvas(
                         onClick = { onBackToHome() },
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier
                             .size(34.dp)
                             .testTag("chat_back_to_home_button")
@@ -1175,7 +1175,17 @@ private fun MinimalChatCanvas(
             }
             }
 
-            // Center tappable model pill ("+ Combo" moved into the Tools sheet)
+            // Conversation title (spec Part 3): 15sp bold on the left.
+            Text(
+                text = activeConversation?.title?.ifBlank { "Untitled conversation" } ?: "New chat",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Model chip on the right ("+ Combo" moved into the Tools sheet)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1183,11 +1193,11 @@ private fun MinimalChatCanvas(
                 Surface(
                     onClick = onOpenModelPicker,
                     shape = RoundedCornerShape(50),
-                    color = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerHigh else accentBubble.fill,
-                    border = BorderStroke(1.dp, if (isDarkTheme) MaterialTheme.colorScheme.outline else accentBubble.fill),
+                    color = if (isDarkTheme) MaterialTheme.colorScheme.surface else accentBubble.fill,
+                    border = if (isDarkTheme) null else BorderStroke(1.dp, accentBubble.fill),
                     modifier = Modifier
                         .heightIn(min = 34.dp)
-                        .widthIn(max = 210.dp)
+                        .widthIn(max = 160.dp)
                         .testTag("top_bar_model_selector_pill")
                 ) {
                     Row(
@@ -1203,7 +1213,7 @@ private fun MinimalChatCanvas(
                         )
                         Text(
                             text = activeModelName.substringAfterLast("/"),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
                             color = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else CreamOnDark,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1235,19 +1245,6 @@ private fun MinimalChatCanvas(
             // Right single overflow icon -> opens "Tools" bottom sheet
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
-                    onClick = { chromeFolded = true },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .testTag("chat_fold_chrome_button")
-                ) {
-                    Icon(
-                        imageVector = LucideIcons.ChevronUp,
-                        contentDescription = "Fold bar",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(
                     onClick = onOpenToolsSheet,
                     modifier = Modifier
                         .size(40.dp)
@@ -1263,11 +1260,15 @@ private fun MinimalChatCanvas(
             }
         }
 
-        // 3. Quiet Status Line under the top bar: "2 skills · 0 tools ready" + work-mode chip
-        Row(
+        // 3. Quiet Status Line under the top bar: "2 skills · 0 tools ready" + work-mode chip.
+        // The fold control sits at this row's right end (the spec top bar holds title + chip only).
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 4.dp),
+                .padding(bottom = 4.dp)
+        ) {
+        Row(
+            modifier = Modifier.align(Alignment.Center),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1308,6 +1309,21 @@ private fun MinimalChatCanvas(
                     )
                 }
             }
+        }
+        IconButton(
+            onClick = { chromeFolded = true },
+            modifier = Modifier
+                .size(32.dp)
+                .align(Alignment.CenterEnd)
+                .testTag("chat_fold_chrome_button")
+        ) {
+            Icon(
+                imageVector = LucideIcons.ChevronUp,
+                contentDescription = "Fold bar",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
         }
 
             }
@@ -1352,7 +1368,7 @@ private fun MinimalChatCanvas(
                 )
                 Text(
                     text = "Configure",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Normal),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.clickable(onClick = onOpenCompareTargetPicker)
                 )
@@ -1414,7 +1430,7 @@ private fun MinimalChatCanvas(
                             } else {
                                 spendingEvaluation.warningMessage ?: spendingEvaluation.progressText
                             },
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Normal),
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
@@ -1433,7 +1449,7 @@ private fun MinimalChatCanvas(
                             if (isBlocked && spendingEvaluation.canOverrideOnce) {
                                 Text(
                                     text = "Override once",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable(onClick = onOverrideSpendingLimitOnce)
@@ -1443,7 +1459,7 @@ private fun MinimalChatCanvas(
                             }
                             Text(
                                 text = "Settings",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .clickable(onClick = onOpenProviderSettings)
@@ -1476,7 +1492,7 @@ private fun MinimalChatCanvas(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = cheaperSuggestion.bannerText,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -1530,7 +1546,7 @@ private fun MinimalChatCanvas(
                     ) {
                         Text(
                             text = err.title,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                             color = CoralError,
                             modifier = Modifier
                                 .weight(1f)
@@ -1568,7 +1584,7 @@ private fun MinimalChatCanvas(
                         val detailsText = err.details.ifBlank { "${err.category.name}: ${err.title}" }
                         Text(
                             text = if (showErrorDetails) "Hide Details" else "Details",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
                                 .clickable { showErrorDetails = !showErrorDetails }
@@ -1579,7 +1595,7 @@ private fun MinimalChatCanvas(
                             if (err.unapprovedHost != null) {
                                 Text(
                                     text = "Approve",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable { onApproveCleartextHostFromError(err.unapprovedHost) }
@@ -1592,7 +1608,7 @@ private fun MinimalChatCanvas(
                             ) {
                                 Text(
                                     text = "Open Providers",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .clickable(onClick = onOpenProviderSettings)
@@ -1639,7 +1655,7 @@ private fun MinimalChatCanvas(
                 LazyColumn(
                     state = listState,
                     reverseLayout = true,
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     modifier = Modifier
                         .fillMaxSize()
@@ -1781,7 +1797,7 @@ private fun MinimalChatCanvas(
                         text = uiState.activeToolLoopStatus,
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1923,7 +1939,7 @@ private fun MinimalChatCanvas(
                         text = "◌ ${runningBackgroundJobs.size} subagent(s) working in background",
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -1932,7 +1948,7 @@ private fun MinimalChatCanvas(
                         text = "Cancel",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable {
                             onCancelBackgroundSubagents(activeConversation.id)
                         }
@@ -1968,7 +1984,7 @@ private fun MinimalChatCanvas(
                         text = "Queued",
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold
                     )
                     queuedForConversation.forEach { queued ->
                         Surface(
@@ -2173,7 +2189,7 @@ private fun AssistantResponderHeader(
         }
         Text(
             text = identity.modelDisplayName,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -2194,12 +2210,12 @@ private fun AssistantResponderHeader(
         }
         Surface(
             shape = RoundedCornerShape(4.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {
             Text(
                 text = identity.providerDisplayName,
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis,
@@ -2209,7 +2225,7 @@ private fun AssistantResponderHeader(
         if (message.isStreaming) {
             Surface(
                 shape = RoundedCornerShape(4.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -2219,12 +2235,12 @@ private fun AssistantResponderHeader(
                     CircularProgressIndicator(
                         modifier = Modifier.size(9.dp),
                         strokeWidth = 1.5.dp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = "Responding…",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         softWrap = false
                     )
@@ -2265,6 +2281,7 @@ private fun MinimalChatMessageItem(
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
     val accentBubble = LocalRunwayAccentBubble.current
+    val isDarkTheme = runwayIsDarkTheme()
     val resolvedSources = remember(toolLogs, liveInfoSources) {
         val fromLogs = com.example.data.mcp.LiveInfoToolsService.extractSourcesFromToolLogs(toolLogs)
         (liveInfoSources + fromLogs).distinctBy { it.link }
@@ -2291,18 +2308,25 @@ private fun MinimalChatMessageItem(
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         if (isUser) {
-            // User bubble: deep shade of the active theme accent, filled
-            // in BOTH modes (Concept A) — cream text on top.
+            // User bubble (spec Part 3): accent-tinted fill (#2E2E2E in dark via
+            // the theme local), 22dp radius with a 6dp tail on the bottom-right,
+            // at most 80% of the screen width.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             Surface(
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(
+                    topStart = 22.dp,
+                    topEnd = 22.dp,
+                    bottomStart = 22.dp,
+                    bottomEnd = 6.dp
+                ),
                 color = accentBubble.fill,
-                border = BorderStroke(1.dp, accentBubble.fill),
                 modifier = Modifier
-                    .widthIn(max = 310.dp)
+                    .align(Alignment.CenterEnd)
+                    .widthIn(max = maxWidth * 0.8f)
                     .clickable(onClick = onEditUserMessage)
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (attachments.isNotEmpty()) {
@@ -2376,23 +2400,19 @@ private fun MinimalChatMessageItem(
                     if (message.content.isNotBlank()) {
                         Text(
                             text = message.content,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = CreamOnDark
+                            style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
+                            color = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else CreamOnDark
                         )
                     }
                 }
+            }
             }
         } else {
             // AI responses: full-width card in BOTH modes (Concept A) —
             // white card on cream in light, #151920 card with a subtle
             // light outline on near-black in dark.
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp))
-                    .padding(14.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Top header showing which AI model and provider is responding to the request
@@ -2471,7 +2491,7 @@ private fun MinimalChatMessageItem(
                                 text = activeToolLoopStatus,
                                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -2480,9 +2500,8 @@ private fun MinimalChatMessageItem(
                 // Sources used in the reply (from web_search and news_headlines), with titles and links
                 if (resolvedSources.isNotEmpty()) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp)
@@ -2504,7 +2523,7 @@ private fun MinimalChatMessageItem(
                                 )
                                 Text(
                                     text = "Sources (${resolvedSources.size})",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -2533,7 +2552,7 @@ private fun MinimalChatMessageItem(
                                                 append(" (${src.publishDate})")
                                             }
                                         },
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Normal),
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
@@ -2594,7 +2613,7 @@ private fun MinimalChatMessageItem(
                     }
                     Text(
                         text = footerText,
-                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonospaceFontFamily),
+                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = MonospaceFontFamily),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .padding(top = 2.dp)
@@ -2706,7 +2725,7 @@ private fun MinimalComparisonRow(
                             )
                             Text(
                                 text = identity.modelDisplayName,
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -2941,9 +2960,8 @@ private fun MinimalFloatingComposerBar(
 
         // Single rounded floating field
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(percent = 50),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
         ) {
             Row(
@@ -2954,22 +2972,26 @@ private fun MinimalFloatingComposerBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // "+" button on the left
-                IconButton(
+                Surface(
                     onClick = {
                         composerFocusManager.clearFocus(force = true)
                         composerKeyboard?.hide()
                         onOpenAttachOptions()
                     },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(36.dp)
                         .testTag("composer_plus_button")
                 ) {
-                    Icon(
-                        imageVector = LucideIcons.Plus,
-                        contentDescription = "Add attachment or enhance",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = LucideIcons.Plus,
+                            contentDescription = "Add attachment or enhance",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 // Clean text input
@@ -2983,14 +3005,14 @@ private fun MinimalFloatingComposerBar(
                     if (draft.isEmpty()) {
                         Text(
                             text = if (isVoiceListening) "Listening…" else "Message…",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = if (isVoiceListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     BasicTextField(
                         value = draft,
                         onValueChange = onDraftChange,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -3017,22 +3039,26 @@ private fun MinimalFloatingComposerBar(
                 }
 
                 // Mic button in the composer (SpeechRecognizer; asks RECORD_AUDIO permission on first tap)
-                IconButton(
+                Surface(
                     onClick = {
                         composerFocusManager.clearFocus(force = true)
                         composerKeyboard?.hide()
                         onMicClick()
                     },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(36.dp)
                         .testTag("composer_mic_button")
                 ) {
-                    Icon(
-                        imageVector = LucideIcons.Mic,
-                        contentDescription = if (isVoiceListening) "Stop voice input" else "Voice input",
-                        tint = if (isVoiceListening) CoralError else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = LucideIcons.Mic,
+                            contentDescription = if (isVoiceListening) "Stop voice input" else "Voice input",
+                            tint = if (isVoiceListening) CoralError else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 // Queue-send button: only while streaming (when the accent button is
@@ -3041,18 +3067,22 @@ private fun MinimalFloatingComposerBar(
                     attachments.isEmpty() &&
                     queuedCount < com.example.ui.viewmodel.MAX_QUEUED_MESSAGES_PER_CONVERSATION
                 if (canQueue) {
-                    IconButton(
+                    Surface(
                         onClick = { onQueue?.invoke() },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(36.dp)
                             .testTag("composer_queue_button")
                     ) {
-                        Icon(
-                            imageVector = LucideIcons.ArrowUp,
-                            contentDescription = "Queue message to send when the reply finishes",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = LucideIcons.ArrowUp,
+                                contentDescription = "Queue message to send when the reply finishes",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
@@ -3072,7 +3102,7 @@ private fun MinimalFloatingComposerBar(
                     shape = CircleShape,
                     color = if (isStreaming || canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(40.dp)
                         .testTag("chat_send_button")
                 ) {
                     Box(contentAlignment = Alignment.Center) {
