@@ -1383,7 +1383,8 @@ private fun OmniStudioRoot(
                                     )
                                 },
                                 onUndoLastCommand = viewModel::undoLastAgentCommand,
-                                onClearHistory = viewModel::clearAgentHistory
+                                onClearHistory = viewModel::clearAgentHistory,
+                                onMarkRecordDone = viewModel::markAgentRecordCompleted
                             )
                         }
 

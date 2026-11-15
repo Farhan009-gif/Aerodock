@@ -114,7 +114,8 @@ data class OmniAgentExecutionRecord(
     val agentSummary: String,
     val usedLlmPlanner: Boolean = false,
     val totalDurationMs: Long = 0L,
-    val timestampMs: Long = System.currentTimeMillis()
+    val timestampMs: Long = System.currentTimeMillis(),
+    val isCompleted: Boolean = false
 )
 
 /**
@@ -236,6 +237,16 @@ class OmniAutopilotEngine(
 
     fun clearExecutionHistory() {
         _state.update { it.copy(executionHistory = emptyList()) }
+    }
+
+    fun markExecutionRecordCompleted(recordId: String) {
+        _state.update {
+            it.copy(
+                executionHistory = it.executionHistory.map { rec ->
+                    if (rec.id == recordId) rec.copy(isCompleted = true) else rec
+                }
+            )
+        }
     }
 
     /**

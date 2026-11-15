@@ -42,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -74,6 +75,7 @@ import com.example.data.local.McpServerEntity
 import com.example.data.local.McpToolEntity
 import com.example.data.local.SkillEntity
 
+import com.example.ui.theme.LocalAerodockExtraColors
 import com.example.ui.viewmodel.OmniUiState
 
 /**
@@ -102,11 +104,15 @@ fun OmniAutopilotScreen(
     onSetSafetyRiskyPrompt: (Boolean) -> Unit,
     onUndoLastCommand: () -> Unit,
     onClearHistory: () -> Unit,
+    onMarkRecordDone: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isHistoryExpanded by rememberSaveable { mutableStateOf(true) }
     var confirmBeforeRun by rememberSaveable { mutableStateOf(false) }
     var pendingConfirmCommand by rememberSaveable { mutableStateOf<String?>(null) }
+    var showAllSections by rememberSaveable { mutableStateOf(false) }
+    var showAllSteps by rememberSaveable { mutableStateOf(false) }
+    var expandedStepId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val isDaemonRunning = remember(studioUiState.localhostServerStatus) {
         studioUiState.localhostServerStatus.isListening
@@ -151,25 +157,79 @@ fun OmniAutopilotScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Title Header
+        // Title header: "Autopilot" + provider line; Preview (planner) pill and the
+        // confirm-before-run switch on the right; daemon status line with its toggle below.
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Autopilot",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                MinimalChip(
-                    label = if (agentState.useAiLlmPlanner) "Hybrid Planner" else "Instant 0ms",
-                    selected = agentState.useAiLlmPlanner,
-                    onClick = { onToggleLlmPlanner(!agentState.useAiLlmPlanner) },
-                    icon = LucideIcons.Bot,
-                    testTag = "omni_agent_llm_planner_switch"
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "Autopilot",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "$activeProviderName · $activeModelName",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        MinimalChip(
+                            label = if (agentState.useAiLlmPlanner) "Hybrid Planner" else "Instant 0ms",
+                            selected = agentState.useAiLlmPlanner,
+                            onClick = { onToggleLlmPlanner(!agentState.useAiLlmPlanner) },
+                            icon = LucideIcons.Bot,
+                            testTag = "omni_agent_llm_planner_switch"
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            MinimalToggle(
+                                checked = confirmBeforeRun,
+                                onCheckedChange = { confirmBeforeRun = it },
+                                testTag = "safety_confirm_before_run_toggle"
+                            )
+                            Text(
+                                text = "Confirm",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        MinimalStatusDot(isConnected = isDaemonRunning)
+                        Text(
+                            text = if (isDaemonRunning) "Daemon running · localhost:20128" else "Daemon stopped · localhost:20128",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    MinimalToggle(
+                        checked = isDaemonRunning,
+                        onCheckedChange = onToggleDaemon,
+                        testTag = "autopilot_daemon_toggle"
+                    )
+                }
             }
         }
 
@@ -187,7 +247,7 @@ fun OmniAutopilotScreen(
                         },
                         placeholder = {
                             Text(
-                                text = "Tell Aerodock what to do...",
+                                text = "Tell Aerodock what to do…",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -341,194 +401,175 @@ fun OmniAutopilotScreen(
             }
         }
 
-        // 2. Status Card: Daemon running or stopped (toggle), connected provider, and current task
-        item {
-            MinimalCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("autopilot_status_card")
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+        // 3. Active task card: the live run (or the latest record) with a 6dp progress
+        // bar, at most 3 steps (descriptions on tap), Re-run and Mark done.
+        val activeRecord = agentState.executionHistory.firstOrNull()
+        if (agentState.isExecuting || activeRecord != null) {
+            item {
+                val isLive = agentState.isExecuting
+                val extraColors = LocalAerodockExtraColors.current
+                val taskSteps = if (isLive) agentState.liveStepsInProgress else activeRecord?.steps.orEmpty()
+                val taskName = if (isLive) {
+                    agentState.liveStatusBanner ?: "Executing command..."
+                } else {
+                    activeRecord?.command ?: ""
+                }
+                val statusLabel = when {
+                    isLive -> "Running"
+                    activeRecord?.isCompleted == true -> "Done"
+                    taskSteps.any { !it.isSuccess } -> "Finished with errors"
+                    else -> "Completed"
+                }
+                val statusIsDone = statusLabel == "Done" || statusLabel == "Completed"
+                MinimalCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("autopilot_active_task_card")
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
                         ) {
-                            MinimalStatusDot(isConnected = isDaemonRunning)
-                            Column {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
                                 Text(
-                                    text = if (isDaemonRunning) "Daemon running" else "Daemon stopped",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    text = taskName,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "localhost:20128",
+                                    text = if (isLive) {
+                                        "${taskSteps.size} step(s) so far"
+                                    } else {
+                                        "${taskSteps.firstOrNull()?.category ?: "General"} · ${taskSteps.size} step(s) · ${activeRecord?.totalDurationMs ?: 0L}ms"
+                                    },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
-                        MinimalToggle(
-                            checked = isDaemonRunning,
-                            onCheckedChange = onToggleDaemon,
-                            testTag = "autopilot_daemon_toggle"
-                        )
-                    }
-
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Connected provider",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "$activeProviderName · $activeModelName",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = if (statusIsDone) extraColors.toolTint else MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = statusLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (statusIsDone) extraColors.statusOnText else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Current task",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (isLive) {
+                            LinearProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = when {
-                                    agentState.isExecuting -> "Executing command..."
-                                    !agentState.liveStatusBanner.isNullOrBlank() -> agentState.liveStatusBanner
-                                    agentState.executionHistory.isNotEmpty() -> agentState.executionHistory.first().command
-                                    else -> "Idle · Ready"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (agentState.isExecuting) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                        } else {
+                            LinearProgressIndicator(
+                                progress = { 1f },
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
                             )
                         }
-                    }
-                }
-            }
-        }
 
-        // 2b. Autopilot Smart Workflow Automation System (Context Recommendations, Templates, Progressive Guide, Smart Scheduler, Custom Rules, and Feedback Telemetry)
-        item {
-            AutopilotSmartWorkflowSection(
-                activeCommandText = agentState.commandInput,
-                activeProviderName = activeProviderName,
-                enabledSkillsCount = skills.count { it.isEnabled },
-                enabledMcpToolsCount = mcpTools.count { it.isEnabled },
-                onDispatchAutomationCommand = { cmd ->
-                    onCommandInputChange(cmd)
-                    triggerRun(cmd)
-                }
-            )
-        }
+                        val visibleSteps = if (showAllSteps) taskSteps else taskSteps.take(3)
+                        visibleSteps.forEach { step ->
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            expandedStepId = if (expandedStepId == step.id) null else step.id
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (step.isSuccess) extraColors.toolTint else MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = if (step.isSuccess) LucideIcons.Check else LucideIcons.Close,
+                                                contentDescription = if (step.isSuccess) "Completed" else "Failed",
+                                                tint = if (step.isSuccess) extraColors.statusOnText else MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = step.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = "${step.durationMs}ms",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (expandedStepId == step.id) {
+                                    Text(
+                                        text = step.detail,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = 30.dp, top = 4.dp)
+                                    )
+                                }
+                            }
+                        }
 
-        // 3. "Live actions" list: each action shows an icon, a one-line description, the time taken (e.g. 8172ms), a status check, and an Undo button.
-        item {
-            MinimalSectionHeader(
-                title = "Live actions",
-                trailing = if (agentState.lastUndoSnapshot != null) {
-                    {
-                        Text(
-                            text = "Undo last",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clickable(onClick = onUndoLastCommand)
-                                .padding(4.dp)
-                        )
-                    }
-                } else null
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+                        if (taskSteps.size > 3) {
+                            Text(
+                                text = if (showAllSteps) "Show fewer steps" else "Show all steps",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clickable { showAllSteps = !showAllSteps }
+                                    .padding(vertical = 2.dp)
+                                    .testTag("autopilot_show_all_steps")
+                            )
+                        }
 
-            val latestRecord = agentState.executionHistory.firstOrNull()
-            MinimalCard(modifier = Modifier.fillMaxWidth()) {
-                if (latestRecord == null || latestRecord.steps.isEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = LucideIcons.Bolt,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "No live actions run in this session yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    val perStepMs = (latestRecord.totalDurationMs / latestRecord.steps.size.coerceAtLeast(1)).coerceAtLeast(1L)
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        latestRecord.steps.forEachIndexed { idx, step ->
+                        if (!isLive && activeRecord != null) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = LucideIcons.Terminal,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
+                                MinimalButton(
+                                    text = "Re-run",
+                                    filled = false,
+                                    onClick = { onExecuteCommand(activeRecord.command) },
+                                    modifier = Modifier.weight(1f),
+                                    testTag = "autopilot_active_rerun_button"
                                 )
-                                Text(
-                                    text = "${step.title}: ${step.detail}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = "${perStepMs}ms",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Icon(
-                                    imageVector = LucideIcons.Check,
-                                    contentDescription = "Completed",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                if (idx == 0 && agentState.lastUndoSnapshot != null) {
-                                    Text(
-                                        text = "Undo",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable(onClick = onUndoLastCommand)
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                if (!activeRecord.isCompleted) {
+                                    MinimalButton(
+                                        text = "Mark done",
+                                        filled = false,
+                                        onClick = { onMarkRecordDone(activeRecord.id) },
+                                        modifier = Modifier.weight(1f),
+                                        testTag = "autopilot_active_mark_done_button"
                                     )
                                 }
                             }
@@ -538,8 +579,132 @@ fun OmniAutopilotScreen(
             }
         }
 
-        // 4. "Quick actions": 4 to 6 minimal tiles (e.g. Start OmniRoute Daemon, Launch app, Run skill, Run MCP tool)
+        // 4. Suggestions: at most two macro presets, each with an orange Apply button
+        if (agentState.macroPresets.isNotEmpty()) {
+            item {
+                MinimalSectionHeader(title = "Suggestions")
+                Spacer(modifier = Modifier.height(8.dp))
+                MinimalCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        agentState.macroPresets.take(2).forEach { preset ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = preset.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = preset.subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Apply",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { onExecuteCommand(preset.command) }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        .testTag("autopilot_suggestion_apply_${preset.id}")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Live actions: one row with the last action and an Undo button
         item {
+            MinimalSectionHeader(title = "Live actions")
+            Spacer(modifier = Modifier.height(8.dp))
+            val lastStep = agentState.liveStepsInProgress.lastOrNull()
+                ?: agentState.executionHistory.firstOrNull()?.steps?.lastOrNull()
+            MinimalCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.Bolt,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (lastStep == null) {
+                            "No live actions run in this session yet."
+                        } else {
+                            "${lastStep.title}: ${lastStep.detail}"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (lastStep == null) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (lastStep != null) {
+                        Text(
+                            text = "${lastStep.durationMs}ms",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (agentState.lastUndoSnapshot != null) {
+                        Text(
+                            text = "Undo",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable(onClick = onUndoLastCommand)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .testTag("autopilot_live_undo_button")
+                        )
+                    }
+                }
+            }
+        }
+
+        // 6. Show all toggle: everything else (Smart Workflow, Quick actions, History,
+        // Skills and MCP tools, Safety) lives behind it.
+        item {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (showAllSections) "Show less" else "Show all",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { showAllSections = !showAllSections }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .testTag("autopilot_show_all_toggle")
+                )
+            }
+        }
+
+        // 4. "Quick actions": 4 to 6 minimal tiles (e.g. Start OmniRoute Daemon, Launch app, Run skill, Run MCP tool)
+        if (showAllSections) item {
             MinimalSectionHeader(title = "Quick actions")
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -618,7 +783,7 @@ fun OmniAutopilotScreen(
         }
 
         // 5. "History": a collapsible list of past runs with a Re-run button
-        item {
+        if (showAllSections) item {
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -696,7 +861,7 @@ fun OmniAutopilotScreen(
         }
 
         // 6. "Skills and MCP tools": a compact list with on/off toggles, token count, and the max-tools setting
-        item {
+        if (showAllSections) item {
             val totalSkillTokens = remember(skills) {
                 skills.filter { it.isEnabled }.sumOf { (it.rawMarkdown.length / 4).coerceAtLeast(12) }
             }
@@ -806,39 +971,13 @@ fun OmniAutopilotScreen(
             }
         }
 
-        // 7. Safety: a confirm-before-run toggle, and an "Always ask for risky actions" option
-        item {
+        // 7. Safety: "Always ask for risky actions" (confirm-before-run lives in the header)
+        if (showAllSections) item {
             MinimalSectionHeader(title = "Safety")
             Spacer(modifier = Modifier.height(8.dp))
 
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Confirm before run",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Preview parsed actions before applying changes",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        MinimalToggle(
-                            checked = confirmBeforeRun,
-                            onCheckedChange = { confirmBeforeRun = it },
-                            testTag = "safety_confirm_before_run_toggle"
-                        )
-                    }
-
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -865,6 +1004,20 @@ fun OmniAutopilotScreen(
                 }
             }
         }
+        // 11. Autopilot Smart Workflow Automation System (behind Show all)
+        if (showAllSections) item {
+            AutopilotSmartWorkflowSection(
+                activeCommandText = agentState.commandInput,
+                activeProviderName = activeProviderName,
+                enabledSkillsCount = skills.count { it.isEnabled },
+                enabledMcpToolsCount = mcpTools.count { it.isEnabled },
+                onDispatchAutomationCommand = { cmd ->
+                    onCommandInputChange(cmd)
+                    triggerRun(cmd)
+                }
+            )
+        }
+
     }
 }
 
@@ -1072,7 +1225,8 @@ private fun AgentExecutionRecordCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${record.steps.size} action(s) · ${record.totalDurationMs}ms",
+                    text = "${record.steps.size} action(s) · ${record.totalDurationMs}ms" +
+                        if (record.isCompleted) " · Done" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1080,7 +1234,7 @@ private fun AgentExecutionRecordCard(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Re-run",
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clip(CircleShape)

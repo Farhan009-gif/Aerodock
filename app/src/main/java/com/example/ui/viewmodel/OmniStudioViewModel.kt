@@ -6570,6 +6570,10 @@ class OmniStudioViewModel(
         autopilotEngine.clearExecutionHistory()
     }
 
+    fun markAgentRecordCompleted(recordId: String) {
+        autopilotEngine.markExecutionRecordCompleted(recordId)
+    }
+
     fun previewAgentActions(rawCommand: String): List<com.example.data.agent.OmniAgentAction> {
         return autopilotEngine.parseNaturalLanguageCommand(rawCommand)
     }
