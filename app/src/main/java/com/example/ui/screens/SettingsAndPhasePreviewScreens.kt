@@ -157,6 +157,75 @@ fun SettingsWorkspaceScreen(
 /**
  * Clean, minimal Settings & Theme panel used inside the More tab.
  */
+/**
+ * The Settings preview accent colours (Step 5): the six picker dots, the
+ * summary dot and the preview bubble use these; the theme palettes in
+ * Color.kt keep their own values and behaviour.
+ */
+private fun settingsAccentPreviewColor(paletteId: String): androidx.compose.ui.graphics.Color =
+    when (paletteId.uppercase()) {
+        "OCEAN" -> androidx.compose.ui.graphics.Color(0xFF8FBFE8)
+        "INDIGO" -> androidx.compose.ui.graphics.Color(0xFFA8B0F0)
+        "VIOLET" -> androidx.compose.ui.graphics.Color(0xFFC8B4F5)
+        "AMBER" -> androidx.compose.ui.graphics.Color(0xFFE8B04A)
+        "ROSE" -> androidx.compose.ui.graphics.Color(0xFFF0A0BD)
+        else -> androidx.compose.ui.graphics.Color(0xFF8FB08A) // SAGE
+    }
+
+@Composable
+private fun SettingsToggleRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        MinimalToggle(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            testTag = testTag
+        )
+    }
+}
+
 @Composable
 fun MinimalSettingsAndThemeScreen(
     uiState: OmniUiState,
@@ -197,73 +266,78 @@ fun MinimalSettingsAndThemeScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Summary card: app name, mode · accent · currency, current accent dot
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            val summaryPalette = RunwayAccentPalettes.firstOrNull {
+                it.id.equals(uiState.themeAccent, ignoreCase = true)
+            } ?: RunwayAccentPalettes.first()
+            val modeLabel = when {
+                uiState.themeMode.equals("LIGHT", ignoreCase = true) -> "Light"
+                uiState.themeMode.equals("SYSTEM", ignoreCase = true) -> "System"
+                else -> "Dark"
+            }
+            MinimalCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("settings_summary_card")
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    com.example.ui.components.RunwayLogoIcon(size = 32.dp)
-                    com.example.ui.components.RunwayWordmark()
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Aerodock",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "$modeLabel · ${summaryPalette.displayName} · ${uiState.spendCurrency}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        shape = CircleShape,
+                        color = settingsAccentPreviewColor(summaryPalette.id),
+                        modifier = Modifier.size(14.dp)
+                    ) {}
                 }
-                Text(
-                    text = "Settings",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
-        // Theme Card
+        // Appearance Card: icon tile header, Mode segmented control, accent picker
         item {
-            MinimalSectionHeader(title = "Appearance")
-            Spacer(modifier = Modifier.height(8.dp))
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isLightMode) LucideIcons.Sun else LucideIcons.Moon,
-                                contentDescription = "Theme",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = "Light theme",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (isLightMode) "Concept A light active" else "Concept A dark active",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isLightMode) LucideIcons.Sun else LucideIcons.Moon,
+                                    contentDescription = "Appearance",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
-                        MinimalToggle(
-                            checked = isLightMode,
-                            onCheckedChange = { light ->
-                                onSetThemeMode(if (light) "LIGHT" else "DARK")
-                            },
-                            testTag = "theme_mode_toggle"
+                        Text(
+                            text = "Appearance",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
-
-                    // Explicit Light / Dark mode switch (Concept A light <-> near-black dark)
+                    // Mode: Dark / Light / System (the old Light-theme switch is
+                    // gone; this segmented control is the one mode control)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = "Mode",
@@ -288,8 +362,10 @@ fun MinimalSettingsAndThemeScreen(
 
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
 
-                    // Theme accent picker (Round 3): recolours the accent
-                    // family app-wide; surfaces stay Concept A in both modes.
+                    // Accent picker: six preview-colour dots, the selected one
+                    // ringed; the preview bubble names the selection. Selection
+                    // still goes through onSetThemeAccent (Light scheme only;
+                    // Dark stays the fixed Soft Dark orange scheme).
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "Accent",
@@ -314,7 +390,7 @@ fun MinimalSettingsAndThemeScreen(
                                     Surface(
                                         onClick = { onSetThemeAccent(palette.id) },
                                         shape = CircleShape,
-                                        color = if (isLightMode) palette.lightPrimary else palette.darkPrimary,
+                                        color = settingsAccentPreviewColor(palette.id),
                                         border = if (isSelected) {
                                             BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface)
                                         } else {
@@ -332,7 +408,7 @@ fun MinimalSettingsAndThemeScreen(
                                                 Icon(
                                                     imageVector = LucideIcons.Check,
                                                     contentDescription = palette.displayName,
-                                                    tint = if (isLightMode) palette.lightOnPrimary else palette.darkOnPrimary,
+                                                    tint = androidx.compose.ui.graphics.Color(0xFF1A1A1A),
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                             }
@@ -351,104 +427,95 @@ fun MinimalSettingsAndThemeScreen(
                                 }
                             }
                         }
+
+                        val selectedPalette = RunwayAccentPalettes.firstOrNull {
+                            it.id.equals(uiState.themeAccent, ignoreCase = true)
+                        } ?: RunwayAccentPalettes.first()
+                        Surface(
+                            shape = RoundedCornerShape(22.dp),
+                            color = settingsAccentPreviewColor(selectedPalette.id),
+                            modifier = Modifier.testTag("theme_accent_preview_bubble")
+                        ) {
+                            Text(
+                                text = "Preview with ${selectedPalette.displayName}",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = androidx.compose.ui.graphics.Color(0xFF1A1A1A),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Preferences Card
+        // Preferences Card: icon tile + bold title + muted description + switch
         item {
             MinimalSectionHeader(title = "Preferences")
             Spacer(modifier = Modifier.height(8.dp))
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Read replies aloud",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Speak assistant responses aloud using TextToSpeech",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        MinimalToggle(
-                            checked = uiState.readRepliesAloud,
-                            onCheckedChange = onSetReadRepliesAloud,
-                            testTag = "read_replies_aloud_toggle"
-                        )
-                    }
+                    SettingsToggleRow(
+                        icon = androidx.compose.material.icons.Icons.Default.Send,
+                        title = "Enter to send",
+                        description = "Send chat messages with keyboard return key",
+                        checked = uiState.enterToSendEnabled,
+                        onCheckedChange = onSetEnterToSend,
+                        testTag = "enter_to_send_toggle"
+                    )
 
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Enter to send",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Send chat messages with keyboard return key",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        MinimalToggle(
-                            checked = uiState.enterToSendEnabled,
-                            onCheckedChange = onSetEnterToSend,
-                            testTag = "enter_to_send_toggle"
-                        )
-                    }
+                    SettingsToggleRow(
+                        icon = androidx.compose.material.icons.Icons.Default.VolumeUp,
+                        title = "Read replies aloud",
+                        description = "Speak assistant responses aloud using TextToSpeech",
+                        checked = uiState.readRepliesAloud,
+                        onCheckedChange = onSetReadRepliesAloud,
+                        testTag = "read_replies_aloud_toggle"
+                    )
 
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
 
+                    SettingsToggleRow(
+                        icon = androidx.compose.material.icons.Icons.Default.Fingerprint,
+                        title = "Biometric vault lock",
+                        description = "Require authentication on launch",
+                        checked = uiState.biometricGateEnabled,
+                        onCheckedChange = onSetBiometricGate,
+                        testTag = "biometric_gate_toggle"
+                    )
+                }
+            }
+        }
+
+        // Currency Card: icon tile + USD / INR segmented control
+        item {
+            MinimalSectionHeader(title = "Currency")
+            Spacer(modifier = Modifier.height(8.dp))
+            MinimalCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Biometric vault lock",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Require authentication on launch",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.AttachMoney,
+                                    contentDescription = "Currency",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
-                        MinimalToggle(
-                            checked = uiState.biometricGateEnabled,
-                            onCheckedChange = onSetBiometricGate,
-                            testTag = "biometric_gate_toggle"
-                        )
-                    }
-
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column {
                             Text(
                                 text = "Currency",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
@@ -457,16 +524,15 @@ fun MinimalSettingsAndThemeScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("USD", "INR").forEach { curr ->
-                                MinimalChip(
-                                    label = curr,
-                                    selected = uiState.spendCurrency == curr,
-                                    onClick = { onSetSpendCurrency(curr) }
-                                )
-                            }
-                        }
                     }
+                    MinimalSegmentedControl(
+                        options = listOf("USD", "INR"),
+                        selectedIndex = if (uiState.spendCurrency == "INR") 1 else 0,
+                        onSelect = { idx -> onSetSpendCurrency(listOf("USD", "INR")[idx]) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("spend_currency_segmented_control")
+                    )
                 }
             }
         }
@@ -916,35 +982,6 @@ fun MinimalSettingsAndThemeScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
-
-                    // Danger zone (Part 3): clear-all in the error color
-                    Surface(
-                        onClick = onClearAllData,
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = LucideIcons.Trash,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Clear all data",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -993,6 +1030,38 @@ fun MinimalSettingsAndThemeScreen(
                 }
             }
         }
+
+        // Danger zone: clear-data action at the very bottom, existing
+        // confirmation flow unchanged (onClearAllData)
+        item {
+            Surface(
+                onClick = onClearAllData,
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = LucideIcons.Trash,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Clear all data",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
     }
 }
 
