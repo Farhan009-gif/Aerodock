@@ -25,6 +25,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -455,7 +460,7 @@ fun MinimalSettingsAndThemeScreen(
             MinimalCard(modifier = Modifier.fillMaxWidth()) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SettingsToggleRow(
-                        icon = androidx.compose.material.icons.Icons.Default.Send,
+                        icon = Icons.Default.Send,
                         title = "Enter to send",
                         description = "Send chat messages with keyboard return key",
                         checked = uiState.enterToSendEnabled,
@@ -466,7 +471,7 @@ fun MinimalSettingsAndThemeScreen(
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
 
                     SettingsToggleRow(
-                        icon = androidx.compose.material.icons.Icons.Default.VolumeUp,
+                        icon = Icons.Default.VolumeUp,
                         title = "Read replies aloud",
                         description = "Speak assistant responses aloud using TextToSpeech",
                         checked = uiState.readRepliesAloud,
@@ -477,7 +482,7 @@ fun MinimalSettingsAndThemeScreen(
                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
 
                     SettingsToggleRow(
-                        icon = androidx.compose.material.icons.Icons.Default.Fingerprint,
+                        icon = Icons.Default.Fingerprint,
                         title = "Biometric vault lock",
                         description = "Require authentication on launch",
                         checked = uiState.biometricGateEnabled,
@@ -505,7 +510,7 @@ fun MinimalSettingsAndThemeScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.AttachMoney,
+                                    imageVector = Icons.Default.AttachMoney,
                                     contentDescription = "Currency",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(16.dp)
