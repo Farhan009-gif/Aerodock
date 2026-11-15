@@ -116,10 +116,14 @@ fun OmniAIStudioTheme(
             val context = LocalContext.current
             if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        // Redesign: Dark is the fixed Soft Dark scheme (one orange accent).
-        // The Settings accent picker no longer recolours Dark; it still
-        // drives the Light scheme below.
-        useDarkTheme -> AerodockSoftDarkColorScheme
+        // Round 2 follow-up (Farhan's call, 2026-11-15): the selected accent
+        // replaces the Soft Dark orange everywhere — Dark now takes the
+        // palette's dark primary/on-primary, same as Light below.
+        useDarkTheme -> AerodockSoftDarkColorScheme.copy(
+            primary = accentPalette.darkPrimary,
+            onPrimary = accentPalette.darkOnPrimary,
+            inversePrimary = accentPalette.darkPrimary
+        )
         else -> RunwayLightColorScheme.copy(
             primary = accentPalette.lightPrimary,
             onPrimary = accentPalette.lightOnPrimary,
@@ -135,8 +139,9 @@ fun OmniAIStudioTheme(
 
     CompositionLocalProvider(
         LocalRunwayAccentBubble provides if (useDarkTheme) {
-            // Soft Dark spec: user bubbles are the surface-variant gray.
-            RunwayAccentBubble(fill = SoftDarkSurfaceVariant, dot = SoftDarkAccent)
+            // Soft Dark: user bubbles stay surface-variant gray; the dot
+            // follows the selected accent like everything else.
+            RunwayAccentBubble(fill = SoftDarkSurfaceVariant, dot = accentPalette.darkPrimary)
         } else {
             RunwayAccentBubble(
                 fill = accentPalette.userBubble,
