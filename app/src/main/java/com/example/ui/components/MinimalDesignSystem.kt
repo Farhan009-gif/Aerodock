@@ -87,6 +87,16 @@ object LucideIcons {
         )
     }
 
+    val House: ImageVector by lazy {
+        lucideIcon("LucideHouse") {
+            strokePath {
+                moveTo(3f, 10.5f); lineTo(12f, 3f); lineTo(21f, 10.5f)
+                moveTo(5f, 9.5f); lineTo(5f, 21f); lineTo(19f, 21f); lineTo(19f, 9.5f)
+                moveTo(9.5f, 21f); lineTo(9.5f, 13f); lineTo(14.5f, 13f); lineTo(14.5f, 21f)
+            }
+        }
+    }
+
     val Menu: ImageVector by lazy {
         lucideIcon("LucideMenu") {
             strokePath {

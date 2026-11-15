@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -79,6 +80,8 @@ import com.example.data.repository.OmniRepository
 import com.example.data.security.BiometricAuthHelper
 import com.example.data.security.TinkSecretVault
 import com.example.groups.GroupsRoot
+import com.example.ui.components.AerodockDotTabBar
+import com.example.ui.components.AerodockTabItems
 import com.example.ui.components.CleartextHostWarningDialog
 import com.example.ui.components.CompareTargetsBottomSheet
 import com.example.ui.components.ConversationSkillsAndToolsSheet
@@ -861,7 +864,28 @@ private fun OmniStudioRoot(
 
         Scaffold(
             contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = MaterialTheme.colorScheme.background,
+            bottomBar = {
+                // Redesign Step 3: the dot tab bar. Hidden while the keyboard
+                // is up so it never crowds the chat composer. Home is the
+                // existing homeVisible state; the other five tabs reuse
+                // switchToBottomTab unchanged (bar index shifted by one).
+                val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                if (!imeVisible) {
+                    AerodockDotTabBar(
+                        items = AerodockTabItems,
+                        selectedIndex = if (homeVisible) 0 else currentPrimaryTab.index + 1,
+                        onSelect = { idx ->
+                            if (idx == 0) {
+                                viewModel.setCompareModeEnabled(false)
+                                homeVisible = true
+                            } else {
+                                switchToBottomTab(RunwayBottomTab.entries[idx - 1])
+                            }
+                        }
+                    )
+                }
+            }
         ) { innerPadding ->
             Column(
                 modifier = Modifier
