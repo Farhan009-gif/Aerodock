@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,11 +49,10 @@ import com.example.data.local.ChatMediaAttachment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.local.ConversationEntity
 import com.example.data.local.ModelDescriptorEntity
 import com.example.ui.components.LucideIcons
-import com.example.ui.components.RunwayLogoIcon
-import com.example.ui.components.RunwayWordmark
 import com.example.ui.theme.CreamOnDark
 import com.example.ui.theme.DeepForest
 import com.example.ui.theme.runwayIsDarkTheme
@@ -143,47 +143,25 @@ fun RunwayHomeScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .testTag("runway_home_screen"),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Wordmark row + avatar
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RunwayLogoIcon(size = 28.dp)
-                Spacer(modifier = Modifier.width(8.dp))
-                RunwayWordmark()
-                Spacer(modifier = Modifier.weight(1f))
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(if (isDarkTheme) MaterialTheme.colorScheme.surfaceVariant else DeepForest),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "P",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else CreamOnDark
-                    )
-                }
-            }
-        }
-
-        // Greeting
+        // Greeting (spec Part 3): small muted greeting, then the 24sp bold question.
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "$greeting,\nParker",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = greeting,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Your AI workspace — private by default.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "What should we work on?",
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = 24.sp,
+                        lineHeight = 30.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
@@ -193,7 +171,6 @@ fun RunwayHomeScreen(
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("home_ask_anything_card")
@@ -215,7 +192,7 @@ fun RunwayHomeScreen(
                             Box {
                                 if (draftText.isEmpty()) {
                                     Text(
-                                        text = "Ask anything…",
+                                        text = "Ask me anything",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -278,6 +255,7 @@ fun RunwayHomeScreen(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
+                                .background(if (isDarkTheme) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
                                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                                 .clickable { handleMicTap() },
                             contentAlignment = Alignment.Center
@@ -291,7 +269,7 @@ fun RunwayHomeScreen(
                         }
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primary)
                                 .clickable {
@@ -307,7 +285,7 @@ fun RunwayHomeScreen(
                                 imageVector = LucideIcons.ArrowUp,
                                 contentDescription = "Send",
                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(17.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -336,42 +314,6 @@ fun RunwayHomeScreen(
             }
         }
 
-        // Jump back in
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HomeSectionLabel(text = "Jump back in", modifier = Modifier.weight(1f))
-                    Text(
-                        text = "See all",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .clickable(onClick = onOpenChat)
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
-                }
-                if (recentConversations.isEmpty()) {
-                    HomeRecentCard(
-                        title = "No conversations yet",
-                        subtitle = "Tap Ask anything to start your first chat",
-                        onClick = onOpenChat
-                    )
-                } else {
-                    recentConversations.forEach { conversation ->
-                        HomeRecentCard(
-                            title = conversation.title.ifBlank { "Untitled conversation" },
-                            subtitle = "${conversation.modelId.substringAfterLast("/")} · ${homeTimeAgo(conversation.updatedAt)}",
-                            onClick = { onOpenConversation(conversation) }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-            }
-        }
-
         // Studios & tools grid (2x2) + More row
         item {
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -389,7 +331,7 @@ fun RunwayHomeScreen(
                     )
                     HomeTile(
                         icon = LucideIcons.Image,
-                        title = "Create studio",
+                        title = "Create",
                         subtitle = "Image & video",
                         lightIconBg = Color(0xFFF6EBDD),
                         lightIconTint = Color(0xFFB4762E),
@@ -424,9 +366,8 @@ fun RunwayHomeScreen(
                 // re-add this Home card to bring it back.
                 Surface(
                     onClick = onOpenMore,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(22.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("home_more_row")
@@ -446,7 +387,7 @@ fun RunwayHomeScreen(
                             Icon(
                                 imageVector = LucideIcons.MoreHorizontal,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -473,6 +414,87 @@ fun RunwayHomeScreen(
             }
         }
 
+        // Recent chats (spec Part 3): one card, rows divided, title left, time right.
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HomeSectionLabel(text = "Jump back in", modifier = Modifier.weight(1f))
+                    Text(
+                        text = "See all",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable(onClick = onOpenChat)
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column {
+                        if (recentConversations.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = onOpenChat)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = "No conversations yet",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Tap Ask anything to start your first chat",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            recentConversations.forEachIndexed { index, conversation ->
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        thickness = 1.dp,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenConversation(conversation) }
+                                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(
+                                        text = conversation.title.ifBlank { "Untitled conversation" },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = homeTimeAgo(conversation.updatedAt),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Privacy footer
         item {
             Row(
@@ -490,7 +512,7 @@ fun RunwayHomeScreen(
                 )
                 Text(
                     text = "Private mode",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
@@ -506,7 +528,7 @@ fun RunwayHomeScreen(
 @Composable
 private fun HomeSectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text.uppercase(),
+        text = text,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(start = 4.dp)
@@ -515,6 +537,17 @@ private fun HomeSectionLabel(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun HomeAskToolPill(icon: ImageVector, label: String, modifier: Modifier = Modifier) {
+    val isDarkTheme = runwayIsDarkTheme()
+    val contentTint = if (isDarkTheme) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val textColor = if (isDarkTheme) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
     Surface(
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -528,13 +561,13 @@ private fun HomeAskToolPill(icon: ImageVector, label: String, modifier: Modifier
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = contentTint,
                 modifier = Modifier.size(13.dp)
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.primary
+                style = MaterialTheme.typography.bodySmall,
+                color = textColor
             )
         }
     }
@@ -586,68 +619,10 @@ private fun HomeModelChip(
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                 color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun HomeRecentCard(
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 15.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = LucideIcons.Chat,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(
-                imageVector = LucideIcons.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
             )
         }
     }
@@ -666,9 +641,8 @@ private fun HomeTile(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier
     ) {
         Column(
@@ -685,7 +659,7 @@ private fun HomeTile(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isDarkTheme) MaterialTheme.colorScheme.primary else lightIconTint,
+                    tint = if (isDarkTheme) MaterialTheme.colorScheme.onSurface else lightIconTint,
                     modifier = Modifier.size(18.dp)
                 )
             }
