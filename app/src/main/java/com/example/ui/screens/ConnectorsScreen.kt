@@ -516,10 +516,27 @@ fun ConnectorsScreen(
                 } else {
                     items(mcpServers, key = { it.id }) { server ->
                         val toolCount = mcpTools.count { it.serverId == server.id }
+                        val serverTools = mcpTools.filter { it.serverId == server.id }
+                        val rowDefaultChoice = connectorDefaultPolicies[server.id]
+                            ?: ConnectorApprovalPolicy.mapLegacyServerModeToChoice(server.approvalModeEnum())
                         ConnectorListRow(
                             server = server,
                             toolCount = toolCount,
                             isBusy = busyServerId == server.id,
+                            defaultChoice = if (server.isEnabled) rowDefaultChoice else null,
+                            onSelectDefaultChoice = { choice ->
+                                if (ConnectorApprovalPolicy.requiresConfirmationForSetAllTools(serverTools, choice)) {
+                                    val writeCount = serverTools.count {
+                                        ConnectorApprovalPolicy.isWriteOrDeleteTool(it)
+                                    }
+                                    pendingWriteConfirmation = PendingWriteToolConfirmation.SetAllToolsInConnector(
+                                        server = server,
+                                        writeToolsCount = writeCount
+                                    )
+                                } else {
+                                    onSetAllToolsChoice(server, choice, false)
+                                }
+                            },
                             onClick = { onSelectConnector(server.id) }
                         )
                     }
@@ -619,6 +636,8 @@ private fun ConnectorListRow(
     server: McpServerEntity,
     toolCount: Int,
     isBusy: Boolean,
+    defaultChoice: ToolApprovalChoice? = null,
+    onSelectDefaultChoice: (ToolApprovalChoice) -> Unit = {},
     onClick: () -> Unit
 ) {
     val isGitHub = server.name.contains("github", ignoreCase = true) ||
@@ -631,6 +650,7 @@ private fun ConnectorListRow(
             .clickable(onClick = onClick)
             .testTag("connector_row_${server.id}")
     ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -686,7 +706,7 @@ private fun ConnectorListRow(
                         }
                     }
                     Text(
-                        text = "${server.transportEnum().label} · ${server.url}",
+                        text = "$toolCount ${if (toolCount == 1) "tool" else "tools"} · ${server.transportEnum().label}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -709,11 +729,6 @@ private fun ConnectorListRow(
                         modifier = Modifier.size(16.dp)
                     )
                 }
-                BadgePill(
-                    text = "$toolCount ${if (toolCount == 1) "tool" else "tools"}",
-                    color = if (toolCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("connector_tool_badge_${server.id}")
-                )
                 Icon(
                     imageVector = LucideIcons.ChevronRight,
                     contentDescription = "Open connector details",
@@ -721,6 +736,16 @@ private fun ConnectorListRow(
                     modifier = Modifier.size(16.dp)
                 )
             }
+        }
+
+        // Approval pills (Always / Ask / Never) on connected connectors
+        if (defaultChoice != null) {
+            ApprovalChoiceSegmentedRow(
+                selectedChoice = defaultChoice,
+                onSelectChoice = onSelectDefaultChoice,
+                testTagPrefix = "connector_default_${server.id}"
+            )
+        }
         }
     }
 }

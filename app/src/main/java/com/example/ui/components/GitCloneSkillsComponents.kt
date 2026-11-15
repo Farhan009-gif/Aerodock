@@ -384,16 +384,12 @@ fun ClonedReposSection(
     onToggleSkillEnabled: (skill: SkillEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shape = RoundedCornerShape(16.dp),
+    MinimalCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag("cloned_repos_section")
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Header
@@ -427,27 +423,19 @@ fun ClonedReposSection(
                     }
                 }
 
-                Button(
+                MinimalButton(
+                    text = "Clone",
+                    icon = Icons.Default.Code,
                     onClick = onCloneNewRepo,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    filled = true,
                     modifier = Modifier.testTag("clone_new_repo_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Code,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Clone", style = MaterialTheme.typography.labelMedium)
-                }
+                )
             }
 
             if (clonedRepos.isEmpty()) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -458,7 +446,7 @@ fun ClonedReposSection(
                         Text(
                             text = "No GitHub repositories cloned yet",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = "Clone any public or private GitHub repository to automatically parse its agent skills (SKILL.md) and use them directly in conversations.",
@@ -466,13 +454,12 @@ fun ClonedReposSection(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 8.dp)
                         )
-                        OutlinedButton(
+                        MinimalButton(
+                            text = "Clone a GitHub Repo",
                             onClick = onCloneNewRepo,
-                            shape = RoundedCornerShape(10.dp),
+                            filled = false,
                             modifier = Modifier.testTag("empty_state_clone_repo_btn")
-                        ) {
-                            Text("Clone a GitHub Repo")
-                        }
+                        )
                     }
                 }
             } else {
@@ -541,10 +528,9 @@ fun ClonedRepoCard(
         )
     }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(14.dp),
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("cloned_repo_card_${repo.id}")
@@ -645,7 +631,7 @@ fun ClonedRepoCard(
                                     Text(
                                         text = skill.name,
                                         style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
+                                        fontWeight = FontWeight.Bold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -658,14 +644,10 @@ fun ClonedRepoCard(
                                     )
                                 }
                             }
-                            Switch(
+                            MinimalToggle(
                                 checked = skill.isEnabled,
                                 onCheckedChange = { onToggleSkillEnabled(skill) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                                ),
-                                modifier = Modifier.size(36.dp).testTag("toggle_skill_${skill.id}")
+                                testTag = "toggle_skill_${skill.id}"
                             )
                         }
                     }
@@ -695,28 +677,22 @@ fun ClonedRepoCard(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     // Activate in Chat
-                    OutlinedButton(
+                    MinimalButton(
+                        text = "Use in Chat",
+                        icon = Icons.Default.PlayArrow,
                         onClick = onActivateSkillsInChat,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        filled = false,
                         modifier = Modifier.testTag("activate_repo_skills_${repo.id}")
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Use in Chat", style = MaterialTheme.typography.labelSmall)
-                    }
+                    )
 
                     // Explore Files
-                    OutlinedButton(
+                    MinimalButton(
+                        text = "Files",
+                        icon = Icons.Default.Folder,
                         onClick = onExploreFiles,
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        filled = false,
                         modifier = Modifier.testTag("explore_repo_files_${repo.id}")
-                    ) {
-                        Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Files", style = MaterialTheme.typography.labelSmall)
-                    }
+                    )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -1398,9 +1398,10 @@ fun IntegrationsWorkspaceScreen(
         // 3. MCP Servers List
         mcpServers.forEach { server ->
             item(key = "mcp_${server.id}") {
+                val toolCount = mcpTools.count { it.serverId == server.id }
                 ConnectServiceRow(
                     name = server.name,
-                    subtitle = server.url,
+                    subtitle = "$toolCount ${if (toolCount == 1) "tool" else "tools"} · ${server.transportEnum().label}",
                     isConnected = server.isEnabled,
                     onAction = { onToggleMcpServerEnabled(server) },
                     testTag = "connect_service_mcp_${server.id}"
@@ -1419,6 +1420,19 @@ fun IntegrationsWorkspaceScreen(
                     testTag = "connect_service_skill_${skill.id}"
                 )
             }
+        }
+
+        // Bottom "+ Add connector" outline pill: opens the connector directory
+        item {
+            MinimalButton(
+                text = "Add connector",
+                icon = LucideIcons.Plus,
+                onClick = onOpenConnectors,
+                filled = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("connect_tab_add_connector_pill")
+            )
         }
 
         // Expandable full Skills & MCP / Integrations manager if user taps "Manage skills"
