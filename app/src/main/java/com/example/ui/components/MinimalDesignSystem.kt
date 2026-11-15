@@ -1181,70 +1181,168 @@ fun MinimalStatusDot(
     )
 }
 
+
 /**
- * Aerodock logo rendered natively at 512x512:
- * - Background: rounded square (~22% corner radius, rx=112 at 512), solid #0B0D10
- * - Mark: an aeroplane taking off over a runway strip (Material flight_takeoff
- *   glyph), filled with the theme accent
+ * Gentle climb logo: an orange plane climbing over a swoosh trail on the
+ * #1A1A1A tile. Built from the approved logo artwork (the climb angle is
+ * part of the artwork itself). The colours are the logo's own brand
+ * colours and intentionally do not follow the theme accent.
+ */
+val GentleClimbLogo: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "GentleClimbLogo",
+        defaultWidth = 512.dp,
+        defaultHeight = 512.dp,
+        viewportWidth = 512f,
+        viewportHeight = 512f
+    ).apply {
+        // Tile
+        path(fill = SolidColor(Color(0xFF1A1A1A))) {
+            moveTo(112f, 0f)
+            lineTo(400f, 0f)
+            arcTo(112f, 112f, 0f, false, true, 512f, 112f)
+            lineTo(512f, 400f)
+            arcTo(112f, 112f, 0f, false, true, 400f, 512f)
+            lineTo(112f, 512f)
+            arcTo(112f, 112f, 0f, false, true, 0f, 400f)
+            lineTo(0f, 112f)
+            arcTo(112f, 112f, 0f, false, true, 112f, 0f)
+            close()
+        }
+        // Plane
+        group(translationX = 178f, translationY = 164f) {
+            path(fill = SolidColor(Color(0xFFFF7A45))) {
+                moveTo(0f, 0f)
+                lineTo(6f, 0f)
+                lineTo(25f, 10f)
+                lineTo(45f, 20f)
+                lineTo(64f, 30f)
+                lineTo(108f, 52f)
+                lineTo(113f, 53f)
+                lineTo(150f, 41f)
+                lineTo(214f, 41f)
+                lineTo(232f, 42f)
+                lineTo(227f, 47f)
+                lineTo(213f, 57f)
+                lineTo(194f, 71f)
+                lineTo(178f, 83f)
+                lineTo(168f, 90f)
+                lineTo(157f, 94f)
+                lineTo(127f, 104f)
+                lineTo(119f, 120f)
+                lineTo(107f, 143f)
+                lineTo(93f, 171f)
+                lineTo(83f, 190f)
+                lineTo(72f, 211f)
+                lineTo(36f, 223f)
+                lineTo(31f, 224f)
+                lineTo(33f, 212f)
+                lineTo(46f, 156f)
+                lineTo(47f, 153f)
+                lineTo(34f, 161f)
+                lineTo(22f, 167f)
+                lineTo(6f, 175f)
+                lineTo(-13f, 183f)
+                lineTo(-34f, 190f)
+                lineTo(-64f, 197f)
+                lineTo(-91f, 201f)
+                lineTo(-119f, 203f)
+                lineTo(-138f, 203f)
+                lineTo(-143f, 199f)
+                lineTo(-144f, 192f)
+                lineTo(-140f, 187f)
+                lineTo(-138f, 186f)
+                lineTo(-101f, 184f)
+                lineTo(-77f, 181f)
+                lineTo(-48f, 175f)
+                lineTo(-28f, 169f)
+                lineTo(-6f, 161f)
+                lineTo(19f, 149f)
+                lineTo(40f, 136f)
+                lineTo(48f, 130f)
+                lineTo(31f, 135f)
+                lineTo(-30f, 155f)
+                lineTo(-56f, 163f)
+                lineTo(-65f, 162f)
+                lineTo(-72f, 156f)
+                lineTo(-80f, 132f)
+                lineTo(-80f, 122f)
+                lineTo(-76f, 116f)
+                lineTo(-71f, 113f)
+                lineTo(-69f, 113f)
+                lineTo(-78f, 102f)
+                lineTo(-88f, 91f)
+                lineTo(-97f, 80f)
+                lineTo(-108f, 68f)
+                lineTo(-111f, 63f)
+                lineTo(-81f, 53f)
+                lineTo(-77f, 53f)
+                lineTo(-68f, 64f)
+                lineTo(-56f, 77f)
+                lineTo(-47f, 88f)
+                lineTo(-36f, 100f)
+                lineTo(-29f, 99f)
+                lineTo(21f, 83f)
+                lineTo(33f, 79f)
+                lineTo(36f, 79f)
+                lineTo(30f, 72f)
+                lineTo(19f, 63f)
+                lineTo(8f, 53f)
+                lineTo(0f, 46f)
+                lineTo(-14f, 34f)
+                lineTo(-24f, 25f)
+                lineTo(-35f, 16f)
+                lineTo(-37f, 12f)
+                close()
+                moveTo(50f, 128f)
+                close()
+            }
+        }
+        // Trail
+        group(translationX = 229f, translationY = 291f) {
+            path(fill = SolidColor(Color(0xFF8D4A2F))) {
+                moveTo(0f, 0f)
+                lineTo(2f, 0f)
+                lineTo(1f, 8f)
+                lineTo(-3f, 28f)
+                lineTo(-4f, 26f)
+                lineTo(-17f, 34f)
+                lineTo(-29f, 40f)
+                lineTo(-45f, 48f)
+                lineTo(-64f, 56f)
+                lineTo(-85f, 63f)
+                lineTo(-115f, 70f)
+                lineTo(-142f, 74f)
+                lineTo(-170f, 76f)
+                lineTo(-189f, 76f)
+                lineTo(-194f, 72f)
+                lineTo(-195f, 65f)
+                lineTo(-191f, 60f)
+                lineTo(-189f, 59f)
+                lineTo(-152f, 57f)
+                lineTo(-128f, 54f)
+                lineTo(-99f, 48f)
+                lineTo(-79f, 42f)
+                lineTo(-57f, 34f)
+                lineTo(-32f, 22f)
+                lineTo(-11f, 9f)
+                lineTo(-1f, 2f)
+                close()
+            }
+        }
+    }.build()
+}
+
+/**
+ * The in-app Aerodock logo: renders [GentleClimbLogo] at the requested size.
  */
 @Composable
 fun RunwayLogoIcon(
     modifier: Modifier = Modifier,
     size: Dp = 36.dp
 ) {
-    val logoAccent = MaterialTheme.colorScheme.primary
-    val runwayVector = androidx.compose.runtime.remember(logoAccent) {
-        ImageVector.Builder(
-            name = "AerodockLogo512",
-            defaultWidth = 512.dp,
-            defaultHeight = 512.dp,
-            viewportWidth = 512f,
-            viewportHeight = 512f
-        ).apply {
-            path(
-                fill = SolidColor(Color(0xFF0B0D10)),
-                stroke = null
-            ) {
-                moveTo(112f, 0f)
-                lineTo(400f, 0f)
-                arcTo(112f, 112f, 0f, false, true, 512f, 112f)
-                lineTo(512f, 400f)
-                arcTo(112f, 112f, 0f, false, true, 400f, 512f)
-                lineTo(112f, 512f)
-                arcTo(112f, 112f, 0f, false, true, 0f, 400f)
-                lineTo(0f, 112f)
-                arcTo(112f, 112f, 0f, false, true, 112f, 0f)
-                close()
-            }
-            path(
-                fill = SolidColor(logoAccent),
-                stroke = null
-            ) {
-                moveTo(109.8f, 363.5f)
-                    lineTo(404.2f, 363.5f)
-                    lineTo(404.2f, 394.5f)
-                    lineTo(109.8f, 394.5f)
-                    lineTo(109.8f, 363.5f)
-                    close()
-                    moveTo(413.1f, 218.4f)
-                    curveTo(409.8f, 206.0f, 397.0f, 198.6f, 384.6f, 202.0f)
-                    lineTo(302.3f, 224.0f)
-                    lineTo(195.3f, 124.3f)
-                    lineTo(165.4f, 132.2f)
-                    lineTo(229.6f, 243.4f)
-                    lineTo(152.5f, 264.0f)
-                    lineTo(122.0f, 240.1f)
-                    lineTo(99.5f, 246.2f)
-                    lineTo(139.7f, 315.8f)
-                    curveTo(139.7f, 315.8f, 250.0f, 286.3f, 396.5f, 247.1f)
-                    curveTo(409.1f, 243.5f, 416.3f, 230.8f, 413.1f, 218.4f)
-                    close()
-            }
-        }.build()
-    }
-
     Icon(
-        imageVector = runwayVector,
+        imageVector = GentleClimbLogo,
         contentDescription = "Aerodock",
         tint = Color.Unspecified,
         modifier = modifier.size(size)
