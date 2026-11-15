@@ -52,8 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-import com.example.ui.theme.StatusGrayDot
-import com.example.ui.theme.StatusGreenDot
+import com.example.ui.theme.LocalAerodockExtraColors
 
 /**
  * Consistent 1.5px thin-line Lucide-style vector icon set.
@@ -740,7 +739,7 @@ fun MinimalSectionHeader(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -763,16 +762,16 @@ fun MinimalCard(
 ) {
     val cardModifier = if (onClick != null) {
         modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(containerColor)
-            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(22.dp))
             .clickable(onClick = onClick)
             .padding(contentPadding)
     } else {
         modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(containerColor)
-            .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(22.dp))
             .padding(contentPadding)
     }
 
@@ -855,7 +854,7 @@ fun MinimalChip(
     testTag: String? = null
 ) {
     // Concept A: a selected chip is a FILLED accent pill in both modes.
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val border = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
     val textColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     val iconTint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -1092,7 +1091,7 @@ fun MinimalToast(
                 if (canUndo && onUndo != null) {
                     Text(
                         text = "Undo",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clickable(onClick = onUndo)
@@ -1143,7 +1142,7 @@ fun MinimalSegmentedControl(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                     ),
                     color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -1160,11 +1159,12 @@ fun MinimalStatusDot(
     isConnected: Boolean = isOnline,
     size: Dp = 8.dp
 ) {
+    val onColor = LocalAerodockExtraColors.current.statusOnText
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(if (isConnected) StatusGreenDot else StatusGrayDot)
+            .background(if (isConnected) onColor else MaterialTheme.colorScheme.onSurfaceVariant)
     )
 }
 

@@ -10,7 +10,8 @@ import com.example.R
 
 val InterFontFamily = FontFamily(
     Font(R.font.inter, FontWeight.Normal),
-    Font(R.font.inter, FontWeight.Medium)
+    Font(R.font.inter, FontWeight.Medium),
+    Font(R.font.inter, FontWeight.Bold)
 )
 
 val MonospaceFontFamily = FontFamily.Monospace
@@ -26,7 +27,7 @@ val PlusJakartaFontFamily = InterFontFamily
 //   token/cost numbers use the monospace family at call sites.
 private val GreetingStyle = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
+    fontWeight = FontWeight.Bold,
     fontSize = 26.sp,
     lineHeight = 32.sp,
     letterSpacing = (-0.4).sp
@@ -34,7 +35,7 @@ private val GreetingStyle = TextStyle(
 
 private val ScreenTitleStyle = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
+    fontWeight = FontWeight.Bold,
     fontSize = 22.sp,
     lineHeight = 28.sp,
     letterSpacing = (-0.3).sp
@@ -42,7 +43,7 @@ private val ScreenTitleStyle = TextStyle(
 
 private val Title20Style = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
+    fontWeight = FontWeight.Bold,
     fontSize = 20.sp,
     lineHeight = 26.sp,
     letterSpacing = (-0.2).sp
@@ -50,7 +51,7 @@ private val Title20Style = TextStyle(
 
 private val CardTitleStyle = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
+    fontWeight = FontWeight.Bold,
     fontSize = 17.sp,
     lineHeight = 23.sp,
     letterSpacing = (-0.1).sp
@@ -58,7 +59,7 @@ private val CardTitleStyle = TextStyle(
 
 private val TitleSmallStyle = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold,
+    fontWeight = FontWeight.Bold,
     fontSize = 15.sp,
     lineHeight = 21.sp,
     letterSpacing = 0.sp
@@ -90,7 +91,7 @@ private val Body13Style = TextStyle(
 
 private val LabelMediumStyle = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Medium,
+    fontWeight = FontWeight.Normal,
     fontSize = 12.sp,
     lineHeight = 16.sp,
     letterSpacing = 0.3.sp
@@ -98,7 +99,7 @@ private val LabelMediumStyle = TextStyle(
 
 private val LabelSmallStyle = TextStyle(
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.Medium,
+    fontWeight = FontWeight.Normal,
     fontSize = 11.sp,
     lineHeight = 15.sp,
     letterSpacing = 0.6.sp
@@ -117,7 +118,7 @@ val Typography = Typography(
     bodyLarge = Body15Style,
     bodyMedium = Body14Style,
     bodySmall = Body13Style,
-    labelLarge = Body14Style.copy(fontWeight = FontWeight.Medium),
+    labelLarge = Body14Style,
     labelMedium = LabelMediumStyle,
     labelSmall = LabelSmallStyle
 )
