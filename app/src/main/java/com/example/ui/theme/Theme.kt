@@ -5,7 +5,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -59,39 +58,6 @@ private val RunwayShapes = Shapes(
     medium = RoundedCornerShape(16.dp),
     large = RoundedCornerShape(22.dp),
     extraLarge = RoundedCornerShape(24.dp)
-)
-
-private val RunwayDarkColorScheme = darkColorScheme(
-    primary = SageDark,
-    onPrimary = SageDarkOnPrimary,
-    primaryContainer = SageDarkDim,
-    onPrimaryContainer = SageDarkOnContainer,
-    secondary = SageDark,
-    onSecondary = SageDarkOnPrimary,
-    secondaryContainer = DarkElevatedSurface,
-    onSecondaryContainer = TextPrimary,
-    tertiary = EmeraldSuccess,
-    onTertiary = Color.White,
-    background = DarkBackground,
-    onBackground = TextPrimary,
-    surface = DarkSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = DarkElevatedSurface,
-    onSurfaceVariant = TextSecondary,
-    surfaceDim = DarkBackground,
-    surfaceBright = Color(0xFF2E3641),
-    surfaceContainerLowest = Color(0xFF07080A),
-    surfaceContainerLow = Color(0xFF10131A),
-    surfaceContainer = DarkSurface,
-    surfaceContainerHigh = DarkElevatedSurface,
-    surfaceContainerHighest = Color(0xFF262D37),
-    inverseSurface = TextPrimary,
-    inverseOnSurface = DarkBackground,
-    inversePrimary = SageDark,
-    outline = DarkDivider,
-    outlineVariant = DarkDivider,
-    error = CoralError,
-    onError = Color.White
 )
 
 private val RunwayLightColorScheme = lightColorScheme(
@@ -150,15 +116,10 @@ fun OmniAIStudioTheme(
             val context = LocalContext.current
             if (useDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        useDarkTheme -> RunwayDarkColorScheme.copy(
-            primary = accentPalette.darkPrimary,
-            onPrimary = accentPalette.darkOnPrimary,
-            primaryContainer = accentPalette.darkContainer,
-            onPrimaryContainer = accentPalette.darkOnContainer,
-            secondary = accentPalette.darkPrimary,
-            onSecondary = accentPalette.darkOnPrimary,
-            inversePrimary = accentPalette.darkPrimary
-        )
+        // Redesign: Dark is the fixed Soft Dark scheme (one orange accent).
+        // The Settings accent picker no longer recolours Dark; it still
+        // drives the Light scheme below.
+        useDarkTheme -> AerodockSoftDarkColorScheme
         else -> RunwayLightColorScheme.copy(
             primary = accentPalette.lightPrimary,
             onPrimary = accentPalette.lightOnPrimary,
@@ -173,10 +134,20 @@ fun OmniAIStudioTheme(
     }
 
     CompositionLocalProvider(
-        LocalRunwayAccentBubble provides RunwayAccentBubble(
-            fill = accentPalette.userBubble,
-            dot = accentPalette.userBubbleDot
-        )
+        LocalRunwayAccentBubble provides if (useDarkTheme) {
+            // Soft Dark spec: user bubbles are the surface-variant gray.
+            RunwayAccentBubble(fill = SoftDarkSurfaceVariant, dot = SoftDarkAccent)
+        } else {
+            RunwayAccentBubble(
+                fill = accentPalette.userBubble,
+                dot = accentPalette.userBubbleDot
+            )
+        },
+        LocalAerodockExtraColors provides if (useDarkTheme) {
+            AerodockSoftDarkExtraColors
+        } else {
+            AerodockLightExtraColors
+        }
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
