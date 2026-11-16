@@ -142,7 +142,7 @@ class OpenAICompatibleProvider(
                             parsedModels
                         }
                     }
-                    return@runCatching models
+                    return@runCatching enrichWithServerContext(provider, apiKey, models)
                 } catch (e: Throwable) {
                     lastException = e
                     val isRouteMismatch = (e as? ProviderErrorException)?.providerError is ProviderError.Route ||
@@ -166,6 +166,55 @@ class OpenAICompatibleProvider(
                 )
             )
         }
+    }
+
+    /**
+     * llama.cpp serves one model per server and reports the context it is
+     * actually serving at GET /props (default_generation_settings.n_ctx) —
+     * the truth for a self-hosted model, whatever its name suggests. Fills
+     * that value into any fetched descriptor the /models payload itself did
+     * not already give a window to. Best-effort: cloud endpoints 404 the
+     * probe, and any failure leaves the descriptors untouched.
+     */
+    private fun enrichWithServerContext(
+        provider: ProviderInstanceEntity,
+        apiKey: String,
+        models: List<ModelDescriptorEntity>
+    ): List<ModelDescriptorEntity> {
+        if (models.all { it.serverContextWindow > 0 }) return models
+        val serverCtx = probeServerContextWindow(provider, apiKey)
+        if (serverCtx <= 0) return models
+        return models.map { model ->
+            if (model.serverContextWindow > 0) model else model.copy(serverContextWindow = serverCtx)
+        }
+    }
+
+    private fun probeServerContextWindow(
+        provider: ProviderInstanceEntity,
+        apiKey: String
+    ): Int {
+        return runCatching {
+            val root = EndpointUrlNormalizer.normalizeOpenAiBaseUrl(provider.baseUrl)
+                .removeSuffix("/v1")
+                .trimEnd('/')
+            val requestBuilder = Request.Builder()
+                .url("$root/props")
+                .get()
+                .header("Accept", "application/json")
+            if (apiKey.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer ${apiKey.trim()}")
+            }
+            val probeClient = okHttpClient.newBuilder()
+                .callTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            probeClient.newCall(requestBuilder.build()).execute().use { response ->
+                if (!response.isSuccessful) return@use 0
+                val json = JSONObject(response.body?.string().orEmpty())
+                json.optJSONObject("default_generation_settings")?.optInt("n_ctx", 0)
+                    ?.takeIf { it > 0 }
+                    ?: json.optInt("n_ctx", 0)
+            }
+        }.getOrDefault(0)
     }
 
     internal fun parseModelsJson(
@@ -238,13 +287,24 @@ class OpenAICompatibleProvider(
                 else -> null
             }
 
+            // Self-hosted servers state the context they actually serve:
+            // llama.cpp puts it in meta.n_ctx, vLLM in max_model_len, some
+            // gateways in context_length. Whatever the server says beats
+            // every name-based guess, so it is stored on the descriptor.
+            val serverCtx = obj.optJSONObject("meta")?.optInt("n_ctx", 0)?.takeIf { it > 0 }
+                ?: obj.optInt("max_model_len", 0).takeIf { it > 0 }
+                ?: obj.optInt("context_length", 0).takeIf { it > 0 }
+                ?: obj.optInt("n_ctx", 0).takeIf { it > 0 }
+                ?: 0
+
             result.add(
                 ModelCapabilityRegistry.buildDescriptor(
                     providerInstanceId = providerInstanceId,
                     rawModelId = modelId,
                     displayNameOverride = displayName,
                     explicitCombo = isCombo,
-                    explicitCapabilities = explicitCaps
+                    explicitCapabilities = explicitCaps,
+                    serverContextWindowTokens = serverCtx
                 )
             )
         }

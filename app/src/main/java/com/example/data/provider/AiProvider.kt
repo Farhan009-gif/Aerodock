@@ -337,7 +337,8 @@ object ModelCapabilityRegistry {
         displayNameOverride: String? = null,
         explicitCombo: Boolean = false,
         preserveFavorite: Boolean = false,
-        explicitCapabilities: Set<CapabilityTag>? = null
+        explicitCapabilities: Set<CapabilityTag>? = null,
+        serverContextWindowTokens: Int = 0
     ): ModelDescriptorEntity {
         val lower = rawModelId.lowercase()
         val registeredCombo = EmbeddedOmniRouteServer.findCombo(rawModelId)
@@ -429,7 +430,8 @@ object ModelCapabilityRegistry {
             isCombo = isCombo,
             isFavorite = preserveFavorite,
             inputCostPer1k = inCost,
-            outputCostPer1k = outCost
+            outputCostPer1k = outCost,
+            serverContextWindow = serverContextWindowTokens
         )
     }
 

@@ -177,10 +177,18 @@ data class ModelDescriptorEntity(
     val isCombo: Boolean = false,
     val isFavorite: Boolean = false,
     val inputCostPer1k: Double = 0.0015,
-    val outputCostPer1k: Double = 0.0060
+    val outputCostPer1k: Double = 0.0060,
+    // Context window the server itself reported for this model at fetch time
+    // (llama.cpp /v1/models meta or /props, vLLM max_model_len). 0 = the
+    // server never said; the model-id table in the getter is the fallback.
+    val serverContextWindow: Int = 0
 ) {
     val contextWindow: Int
-        get() = com.example.data.provider.SmartContextTrimmer.resolveContextWindowTokens(modelId)
+        get() = if (serverContextWindow > 0) {
+            serverContextWindow
+        } else {
+            com.example.data.provider.SmartContextTrimmer.resolveContextWindowTokens(modelId)
+        }
 
     fun capabilitySet(): Set<CapabilityTag> =
         capabilitiesCsv.split(",")
