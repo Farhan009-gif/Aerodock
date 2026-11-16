@@ -4112,9 +4112,7 @@ class OmniStudioViewModel(
         val failoverSession = com.example.data.provider.FailoverStreamSession()
         val attemptedFailoverKeys = mutableSetOf("${currentProvider.id}:$currentModelId")
         val retriedContextOverflowOnProvider = mutableSetOf<String>()
-        var reportedPromptTokens = 0
-        var reportedCompletionTokens = 0
-        var reportedCachedInputTokens = 0
+        val attemptUsages = mutableListOf<com.example.data.provider.ModelPriceTable.AttemptUsage>()
         var streamError: NormalizedAiError? = null
 
         // Immutable snapshot of everything one subagent run needs, captured at spawn time.
@@ -4746,9 +4744,16 @@ class OmniStudioViewModel(
 
                 val errOnAttempt = streamError
                 if (errOnAttempt == null) {
-                    reportedPromptTokens += attemptPromptTokens
-                    reportedCompletionTokens += attemptCompletionTokens
-                    reportedCachedInputTokens += attemptCachedInputTokens
+                    // Fold this attempt's usage into the turn's attempt list.
+                    // resolveTurnUsage derives the displayed input from the
+                    // FINAL attempt (summing inputs across attempts re-counts
+                    // the re-sent history once per tool round) and the cost
+                    // from each attempt's own usage.
+                    attemptUsages += com.example.data.provider.ModelPriceTable.AttemptUsage(
+                        inputTokens = attemptPromptTokens,
+                        outputTokens = attemptCompletionTokens,
+                        cachedInputTokens = attemptCachedInputTokens
+                    )
                     // Free routes sometimes print tool calls as <tool_call> text
                     // instead of structured calls; recover any that name an offered
                     // tool before this attempt's text is committed as final.
@@ -5397,11 +5402,9 @@ class OmniStudioViewModel(
         }
         val turnUsage = com.example.data.provider.ModelPriceTable.resolveTurnUsage(
             modelId = currentModelId,
-            reportedInputTokens = reportedPromptTokens,
-            reportedOutputTokens = reportedCompletionTokens,
+            attemptUsages = attemptUsages,
             fallbackInputText = promptFallbackText,
-            fallbackOutputText = finalContent,
-            reportedCachedInputTokens = reportedCachedInputTokens
+            fallbackOutputText = finalContent
         )
         val pTokens = turnUsage.inputTokens
         val cTokens = turnUsage.outputTokens

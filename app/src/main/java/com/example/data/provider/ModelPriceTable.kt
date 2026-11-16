@@ -496,28 +496,112 @@ object ModelPriceTable {
     }
 
     /**
-     * Estimates token count from text (~4 characters per token) when a provider
-     * does not return token usage metadata.
+     * Estimates token count from text when a provider does not return usage
+     * metadata. The old flat chars/4 rule badly undercounted code and JSON
+     * (every brace, quote and colon is roughly a token of its own), so this
+     * scans by character class instead, approximating BPE behaviour:
+     * letter runs ~4 chars per token, digit runs ~3 per token (BPE splits
+     * numbers into 1-3 digit chunks), each punctuation/symbol/CJK character
+     * ~1 token, and whitespace mostly merges with the following word.
+     * Expect roughly +/-10-15% on English and code; it is an estimate, and
+     * the UI flags counts that came from here.
      */
     fun estimateTokensFromText(text: String): Int {
         if (text.isBlank()) return 0
-        return ((text.trim().length + 3) / 4).coerceAtLeast(1)
+        var tokens = 0
+        var i = 0
+        val n = text.length
+        while (i < n) {
+            val c = text[i]
+            when {
+                c.isLetter() -> {
+                    var j = i + 1
+                    while (j < n && text[j].isLetter()) j++
+                    tokens += maxOf(1, (j - i + 2) / 4)
+                    i = j
+                }
+                c.isDigit() -> {
+                    var j = i + 1
+                    while (j < n && text[j].isDigit()) j++
+                    tokens += maxOf(1, (j - i + 2) / 3)
+                    i = j
+                }
+                c.isWhitespace() -> {
+                    var j = i + 1
+                    var hasNewline = c == '\n'
+                    while (j < n && text[j].isWhitespace()) {
+                        if (text[j] == '\n') hasNewline = true
+                        j++
+                    }
+                    val len = j - i
+                    tokens += if (hasNewline) maxOf(1, (len + 2) / 3) else (len - 1) / 4
+                    i = j
+                }
+                else -> {
+                    tokens += 1
+                    i++
+                }
+            }
+        }
+        return tokens.coerceAtLeast(1)
     }
 
+    /** One streamed attempt's provider-reported usage (one request on the wire). */
+    data class AttemptUsage(
+        val inputTokens: Int,
+        val outputTokens: Int,
+        val cachedInputTokens: Int = 0
+    )
+
     /**
-     * Resolves token counts and cost for an assistant turn, including any tool call arguments/results,
-     * attached file tokens, or cached input tokens.
+     * Resolves token counts and cost for an assistant turn from its attempts.
+     *
+     * A turn with tool calls makes several requests, and every request
+     * re-sends the whole history. Summing the attempts' input tokens (the
+     * old behaviour) made one turn display e.g. 82,073 in / 1,270 out when
+     * the real final context was ~41k — the number doubled per tool round.
+     * So: displayed input = the FINAL attempt's input (the true context the
+     * turn ended at), displayed cached = the final attempt's cached count,
+     * output = the sum across attempts (every attempt really generated its
+     * tokens), and cost = the sum of each attempt's own cost (each request
+     * is billed separately). With no provider usage at all, both counts are
+     * estimated from the text and flagged as estimated.
      */
     fun resolveTurnUsage(
         modelId: String,
-        reportedInputTokens: Int,
-        reportedOutputTokens: Int,
-        fallbackInputText: String,
-        fallbackOutputText: String,
+        attemptUsages: List<AttemptUsage> = emptyList(),
+        reportedInputTokens: Int = 0,
+        reportedOutputTokens: Int = 0,
+        fallbackInputText: String = "",
+        fallbackOutputText: String = "",
         additionalToolInputTokens: Int = 0,
         additionalToolOutputTokens: Int = 0,
         reportedCachedInputTokens: Int = 0
     ): ResolvedMessageUsage {
+        val validAttempts = attemptUsages.filter { it.inputTokens > 0 || it.outputTokens > 0 }
+        if (validAttempts.isNotEmpty()) {
+            val last = validAttempts.last()
+            val input = maxOf(last.inputTokens, last.cachedInputTokens)
+            val output = validAttempts.sumOf { it.outputTokens }
+            val cached = last.cachedInputTokens.coerceIn(0, input)
+            val cost = validAttempts.sumOf {
+                calculateCostUsd(
+                    modelId = modelId,
+                    inputTokens = it.inputTokens,
+                    outputTokens = it.outputTokens,
+                    cachedInputTokens = it.cachedInputTokens
+                )
+            }
+            return ResolvedMessageUsage(
+                modelId = modelId,
+                inputTokens = input,
+                outputTokens = output,
+                isTokenCountEstimated = false,
+                estimatedCostUsd = cost,
+                cachedInputTokens = cached
+            )
+        }
+        // Legacy single-snapshot path (kept for callers without attempt data).
         val hasProviderUsage = reportedInputTokens > 0 || reportedOutputTokens > 0
         val baseInput = if (reportedInputTokens > 0) {
             reportedInputTokens
