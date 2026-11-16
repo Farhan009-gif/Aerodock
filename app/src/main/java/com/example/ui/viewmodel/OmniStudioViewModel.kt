@@ -4280,9 +4280,10 @@ class OmniStudioViewModel(
                             tools = subToolDefinitions
                         )
                         // Free routes 429 often and a subagent has no user watching,
-                        // so a rate-limited model request retries in place (10s, then
-                        // 20s) instead of killing the run. The 20-minute timeout still
-                        // bounds the total, and cancellation interrupts the wait.
+                        // so a rate-limited or transiently failing model request
+                        // retries in place (10s, then 20s) instead of killing the
+                        // run. The 20-minute timeout still bounds the total, and
+                        // cancellation interrupts the wait.
                         var streamAttempt = 0
                         while (true) {
                             turnText.setLength(0)
@@ -4297,10 +4298,11 @@ class OmniStudioViewModel(
                                 }
                             }
                             val attemptError = turnError
-                            if (attemptError == null ||
-                                attemptError.category != com.example.data.provider.ErrorCategory.RATE_LIMIT ||
-                                streamAttempt >= 2
-                            ) {
+                            val retryableCategory =
+                                attemptError?.category == com.example.data.provider.ErrorCategory.RATE_LIMIT ||
+                                    attemptError?.category == com.example.data.provider.ErrorCategory.NETWORK_UNREACHABLE ||
+                                    attemptError?.category == com.example.data.provider.ErrorCategory.SERVER_ERROR
+                            if (attemptError == null || !retryableCategory || streamAttempt >= 2) {
                                 break
                             }
                             streamAttempt++
@@ -4693,6 +4695,7 @@ class OmniStudioViewModel(
             val turnToolCalls = mutableListOf<ModelToolCallRequest>()
             var parseErrorRetries = 0
             var formatRepairNudged = false
+            var transientRetries = 0
 
             while (true) {
                 if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
@@ -5000,6 +5003,30 @@ class OmniStudioViewModel(
                         }
                         continue
                     }
+                }
+
+                // Failover had nowhere to go (a single self-hosted server
+                // has no second provider, and failover may be off): a
+                // transient error — tunnel blip, 502 from the gateway, a
+                // dropped connection — should not kill a long session.
+                // Retry the same provider twice with a short backoff
+                // before surfacing the error, like the subagent loop's
+                // in-place retries.
+                if (errorAction == com.example.data.provider.FailoverErrorAction.FAILOVER_TO_NEXT_PROVIDER &&
+                    transientRetries < 2
+                ) {
+                    transientRetries++
+                    failoverSession.onRetrySameProvider()
+                    dao.upsertMessage(
+                        initialAssistantMsg.copy(
+                            content = failoverSession.visibleText,
+                            providerInstanceId = currentProvider.id,
+                            modelId = currentModelId,
+                            isStreaming = true
+                        )
+                    )
+                    kotlinx.coroutines.delay(if (transientRetries == 1) 5_000L else 15_000L)
+                    continue
                 }
 
                 break

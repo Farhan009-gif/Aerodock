@@ -71,6 +71,18 @@ class OpenAICompatibleProvider(
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    // Streaming chat needs a far longer read timeout than the shared
+    // client's 90 seconds: a local server (llama.cpp) sends NO bytes while
+    // it processes the prompt, and a long session's prompt can take minutes
+    // to evaluate on a small GPU. At 90s the stream was killed mid-think,
+    // which read as "the model stops in long chats". Ten minutes covers
+    // any realistic prompt evaluation; pool and dispatcher stay shared.
+    private val streamingClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .readTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
+            .build()
+    }
+
     override suspend fun testConnection(
         provider: ProviderInstanceEntity,
         apiKey: String
@@ -479,7 +491,7 @@ class OpenAICompatibleProvider(
                             reqBuilder.header("X-Title", "Aerodock")
                         }
 
-                        val r = okHttpClient.newCall(reqBuilder.build()).execute()
+                        val r = streamingClient.newCall(reqBuilder.build()).execute()
                         if (!r.isSuccessful) {
                             val errBody = r.body?.string().orEmpty()
                             val code = r.code
