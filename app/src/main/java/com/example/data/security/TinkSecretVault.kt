@@ -140,6 +140,7 @@ class TinkSecretVault(private val context: Context) {
         private val KEY_LIVE_INFO_MAX_SEARCHES_PER_MESSAGE = intPreferencesKey("runway_live_info_max_searches_per_message")
         private val KEY_LIVE_INFO_RSS_FEEDS_JSON = stringPreferencesKey("runway_live_info_rss_feeds_json")
         private val KEY_WORK_MODE = stringPreferencesKey("runway_work_mode")
+        private val KEY_SUBAGENT_MODEL_ID = stringPreferencesKey("runway_subagent_model_id")
 
         private fun apiKeyPreferenceKey(providerInstanceId: String) =
             stringPreferencesKey("$ENC_KEY_PREFIX$providerInstanceId")
@@ -237,6 +238,11 @@ class TinkSecretVault(private val context: Context) {
         prefs[KEY_WORK_MODE] ?: "AUTO"
     }
 
+    /** Model id subagents should run on; "" means "same as the chat's model". */
+    val subagentModelIdFlow: Flow<String> = context.omniDataStore.data.map { prefs ->
+        prefs[KEY_SUBAGENT_MODEL_ID] ?: ""
+    }
+
     val runwayMigrationVerifiedFlow: Flow<Boolean> = context.omniDataStore.data.map { prefs ->
         prefs[KEY_RUNWAY_MIGRATION_VERIFIED] ?: false
     }
@@ -303,6 +309,12 @@ class TinkSecretVault(private val context: Context) {
     suspend fun setWorkMode(mode: String) {
         context.omniDataStore.edit { prefs ->
             prefs[KEY_WORK_MODE] = mode
+        }
+    }
+
+    suspend fun setSubagentModelId(modelId: String) {
+        context.omniDataStore.edit { prefs ->
+            prefs[KEY_SUBAGENT_MODEL_ID] = modelId
         }
     }
 

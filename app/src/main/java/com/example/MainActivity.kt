@@ -1157,6 +1157,7 @@ private fun OmniStudioRoot(
                                 onQueueMessage = viewModel::queueMessage,
                                 onRemoveQueuedMessage = viewModel::removeQueuedMessage,
                                 onSetWorkMode = viewModel::setWorkMode,
+                                onSetSubagentModel = viewModel::setSubagentModel,
                                 onGenerateMediaInChat = viewModel::generateMediaInChat,
                                 onUpsertCustomCombo = { rawId, displayName, strategy, targetModels, description ->
                                     viewModel.upsertOmniRouteCustomCombo(

@@ -224,6 +224,7 @@ fun ChatWorkspaceScreen(
     onQueueMessage: () -> Unit = {},
     onRemoveQueuedMessage: (String) -> Unit = {},
     onSetWorkMode: (WorkMode) -> Unit = {},
+    onSetSubagentModel: (String) -> Unit = {},
     onGenerateMediaInChat: (
         modality: String,
         prompt: String,
@@ -281,6 +282,7 @@ fun ChatWorkspaceScreen(
 
     var showToolsSheet by rememberSaveable { mutableStateOf(false) }
     var showWorkModeSheet by rememberSaveable { mutableStateOf(false) }
+    var showSubagentModelSheet by rememberSaveable { mutableStateOf(false) }
     var showAttachSheet by rememberSaveable { mutableStateOf(false) }
     var showHtmlCodeInputSheet by rememberSaveable { mutableStateOf(false) }
     var showChatMediaGenerateSheet by rememberSaveable { mutableStateOf(false) }
@@ -631,6 +633,61 @@ fun ChatWorkspaceScreen(
                 },
                 testTag = "work_mode_model_only"
             )
+            MinimalToolRow(
+                icon = LucideIcons.Bot,
+                title = "Subagent model",
+                subtitle = if (uiState.subagentModelId.isBlank()) {
+                    "Same as chat model"
+                } else {
+                    uiState.subagentModelId
+                },
+                isActive = uiState.subagentModelId.isNotBlank(),
+                onClick = {
+                    showWorkModeSheet = false
+                    showSubagentModelSheet = true
+                },
+                testTag = "work_mode_subagent_model"
+            )
+        }
+    }
+
+    // Subagent Model Bottom Sheet (which model background/foreground spawns run on)
+    if (showSubagentModelSheet) {
+        val subagentModelOptions = remember(models, activeConversation) {
+            models.filter { it.providerInstanceId == activeConversation?.providerInstanceId }
+                .distinctBy { it.modelId }
+        }
+        MinimalSheet(
+            onDismiss = { showSubagentModelSheet = false },
+            title = "Subagent model",
+            modifier = Modifier.testTag("chat_subagent_model_bottom_sheet")
+        ) {
+            MinimalToolRow(
+                icon = LucideIcons.Sparkles,
+                title = "Same as chat",
+                subtitle = "Subagents use this chat's current model",
+                isActive = uiState.subagentModelId.isBlank(),
+                onClick = {
+                    showSubagentModelSheet = false
+                    onSetSubagentModel("")
+                },
+                testTag = "subagent_model_same_as_chat"
+            )
+            LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                items(subagentModelOptions, key = { it.modelId }) { descriptor ->
+                    MinimalToolRow(
+                        icon = LucideIcons.Bot,
+                        title = descriptor.displayName.ifBlank { descriptor.modelId },
+                        subtitle = descriptor.modelId,
+                        isActive = uiState.subagentModelId == descriptor.modelId,
+                        onClick = {
+                            showSubagentModelSheet = false
+                            onSetSubagentModel(descriptor.modelId)
+                        },
+                        testTag = "subagent_model_option"
+                    )
+                }
+            }
         }
     }
 

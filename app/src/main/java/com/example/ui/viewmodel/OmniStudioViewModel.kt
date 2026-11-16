@@ -429,6 +429,8 @@ data class OmniUiState(
     val liveInfoSourcesByMessageId: Map<String, List<com.example.data.mcp.LiveInfoSource>> = emptyMap(),
     // 9b. Work mode (AUTO / AGENT_ONLY / MODEL_ONLY), persisted in the vault
     val workMode: WorkMode = WorkMode.AUTO,
+    // 9c. Model subagents run on ("" = same as the chat's model), persisted in the vault
+    val subagentModelId: String = "",
     // 10. Automatic Provider Failover
     val providerFailoverEnabled: Boolean = false,
     val providerFailoverChain: List<com.example.data.provider.FailoverChainEntry> = emptyList(),
@@ -640,6 +642,11 @@ class OmniStudioViewModel(
                             .getOrDefault(WorkMode.AUTO)
                     )
                 }
+            }
+        }
+        viewModelScope.launch {
+            repository.secretVault.subagentModelIdFlow.collect { modelId ->
+                _uiState.update { state -> state.copy(subagentModelId = modelId) }
             }
         }
         viewModelScope.launch {
@@ -4142,7 +4149,15 @@ class OmniStudioViewModel(
             call: ModelToolCallRequest,
             subRequest: com.example.data.agent.SubagentTool.SubagentRequest
         ): SubagentRunPlan {
-            val subModelId = subRequest.model ?: currentModelId
+            // The user's standing subagent-model choice wins when it is set AND
+            // the model exists on this chat's provider; then the parent model's
+            // per-spawn choice; then the chat's own model.
+            val storedSubModelId = _uiState.value.subagentModelId.takeIf { stored ->
+                stored.isNotBlank() && models.value.any {
+                    it.providerInstanceId == currentProvider.id && it.modelId == stored
+                }
+            }
+            val subModelId = storedSubModelId ?: subRequest.model ?: currentModelId
             val (subProvider, subApiKey, subDescriptor) =
                 resolveProviderRuntime(currentProvider, subModelId)
 
@@ -7071,10 +7086,29 @@ class OmniStudioViewModel(
         }
     }
 
+    // --- Subagent model (user's standing choice for background/foreground spawns) ---
+
+    fun setSubagentModel(modelId: String) {
+        viewModelScope.launch {
+            repository.secretVault.setSubagentModelId(modelId)
+            _uiState.update {
+                it.copy(
+                    subagentModelId = modelId,
+                    statusToast = if (modelId.isBlank()) {
+                        "Subagent model: same as chat"
+                    } else {
+                        "Subagent model: $modelId"
+                    }
+                )
+            }
+        }
+    }
+
     /**
      * Cancels every running background subagent of one conversation (the chat row's Cancel
      * button). Cancelled jobs post no result message.
      */
+
     fun cancelBackgroundSubagentsForConversation(conversationId: String) {
         val runningIds = _uiState.value.backgroundSubagentJobs
             .filter { it.conversationId == conversationId && it.status == BackgroundSubagentStatus.RUNNING }
