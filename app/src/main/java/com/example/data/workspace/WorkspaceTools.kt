@@ -386,9 +386,12 @@ object WorkspaceTools {
         val snapshotted = snapshotBeforeChange(root, DELETE_FILE_TOOL_NAME, path, target)
         val deleted = target.deleteRecursively()
         return if (deleted) {
-            "Deleted $path ($fileCount file(s))." +
-                if (!snapshotted) " Note: no undo snapshot was saved (too large), so this delete cannot be undone." else ""
-                to true
+            val note = if (!snapshotted) {
+                " Note: no undo snapshot was saved (too large), so this delete cannot be undone."
+            } else {
+                ""
+            }
+            "Deleted $path ($fileCount file(s)).$note" to true
         } else {
             "Error: could not fully delete '$path'." to false
         }
