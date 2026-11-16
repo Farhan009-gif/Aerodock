@@ -7,13 +7,20 @@ import java.util.UUID
 /**
  * Recovers tool calls that a model printed as TEXT inside its reply instead of
  * returning structured tool_calls. Free routes (e.g. LiteRouter ":free" models)
- * do this intermittently, in three dialects:
+ * and abliterated local models do this often, in several dialects:
  *
  *  JSON: <tool_call> {"name": "web_search", "arguments": {"query": "..."}} </tool_call>
  *  XML:  <tool_call> <function=web_search> <parameter=query> ... </parameter> </function> </tool_call>
  *  DSML: <｜DSML｜calls> <｜DSML｜invoke name="web_search"> <｜DSML｜parameter name="query" string="true"> ... </｜DSML｜parameter> </｜DSML｜invoke> </｜DSML｜calls>
  *        (DeepSeek's markup; the separator may be the fullwidth ｜ or an ASCII |.
  *        A parameter's string="false" means its content is raw JSON, not text.)
+ *  BARE: a plain JSON object with no wrapper at all — {"name": ..., "arguments": ...},
+ *        possibly inside a ``` fence. The name key may also be "tool" or
+ *        "function", and the arguments key "parameters", "args" or "input".
+ *
+ * Sloppy generations get one repair pass before being given up on: a code
+ * fence around the object, prose around the object inside its block, trailing
+ * commas, and single-quoted strings are all repaired leniently.
  *
  * A block is honoured only when its name matches a tool that was offered for
  * the request; anything else (unknown names, malformed or unclosed blocks)
@@ -40,6 +47,11 @@ object TextToolCallParser {
         )
     private val INTEGER_REGEX = Regex("""-?\d+""")
     private val DECIMAL_REGEX = Regex("""-?(\d+\.\d*|\.\d+|\d+)([eE][+-]?\d+)?""")
+    private val TRAILING_COMMA_REGEX = Regex(""",\s*([}\]])""")
+
+    // Key spellings different model families use for the same two fields.
+    private val NAME_KEYS = listOf("name", "tool", "function")
+    private val ARGUMENT_KEYS = listOf("arguments", "parameters", "args", "input")
 
     data class Extraction(
         val cleanedContent: String,
@@ -66,8 +78,27 @@ object TextToolCallParser {
             text = pass.first
             calls.addAll(pass.second)
         }
+        if (calls.size < MAX_EXTRACTED_CALLS && text.contains("{")) {
+            val pass = extractBareJsonCalls(text, offeredToolNames, MAX_EXTRACTED_CALLS - calls.size)
+            text = pass.first
+            calls.addAll(pass.second)
+        }
         if (calls.isEmpty()) return Extraction(content, emptyList())
         return Extraction(text, calls.take(MAX_EXTRACTED_CALLS))
+    }
+
+    /**
+     * True when a reply LOOKS like a failed tool-call attempt — it names an
+     * offered tool and carries call-shaped markup — yet [extract] recovered
+     * nothing from it. The tool loops use this to send one corrective retry
+     * ("reply with ONLY the call, in exactly this shape") instead of ending
+     * the turn on the model's broken text.
+     */
+    fun looksLikeAttemptedCall(content: String, offeredToolNames: Set<String>): Boolean {
+        if (content.isBlank() || offeredToolNames.isEmpty()) return false
+        if (offeredToolNames.none { content.contains(it) }) return false
+        return content.contains("{") || content.contains("<function=") ||
+            content.contains("tool_call") || content.contains("```")
     }
 
     /**
@@ -97,10 +128,85 @@ object TextToolCallParser {
         return cleaned.toString() to calls
     }
 
+    /**
+     * The BARE dialect: scan the text for balanced {...} objects and honour
+     * each one that reads as a call to an offered tool. An arguments key is
+     * required here (unlike inside an explicit <tool_call> block): a bare
+     * object in prose that merely names a tool is far more likely to be an
+     * example the model is showing the user than a call it wants run.
+     */
+    private fun extractBareJsonCalls(
+        content: String,
+        offeredToolNames: Set<String>,
+        limit: Int
+    ): Pair<String, List<ModelToolCallRequest>> {
+        val calls = mutableListOf<ModelToolCallRequest>()
+        val cleaned = StringBuilder()
+        var copiedUpTo = 0
+        var searchFrom = 0
+        while (calls.size < limit) {
+            val span = findBalancedObject(content, searchFrom) ?: break
+            val call = parseCallObject(
+                content.substring(span.first, span.last + 1),
+                offeredToolNames,
+                requireArguments = true
+            )
+            if (call == null) {
+                searchFrom = span.first + 1
+                continue
+            }
+            cleaned.append(content, copiedUpTo, span.first)
+            copiedUpTo = span.last + 1
+            searchFrom = span.last + 1
+            calls.add(call)
+        }
+        if (calls.isEmpty()) return content to emptyList()
+        cleaned.append(content, copiedUpTo, content.length)
+        return cleaned.toString() to calls
+    }
+
+    // String-aware scan for the next balanced {...} span at or after [from].
+    // Only double-quoted strings are tracked; single-quoted (broken) JSON with
+    // braces inside its strings can mis-split, and the parse then simply fails
+    // and the span is skipped.
+    private fun findBalancedObject(text: String, from: Int): IntRange? {
+        var start = -1
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var i = from
+        while (i < text.length) {
+            val c = text[i]
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    c == '\\' -> escaped = true
+                    c == '"' -> inString = false
+                }
+            } else {
+                when (c) {
+                    '"' -> if (depth > 0) inString = true
+                    '{' -> {
+                        if (depth == 0) start = i
+                        depth++
+                    }
+                    '}' -> {
+                        if (depth > 0) {
+                            depth--
+                            if (depth == 0 && start >= 0) return start..i
+                        }
+                    }
+                }
+            }
+            i++
+        }
+        return null
+    }
+
     private fun parseBlock(rawInner: String, offeredToolNames: Set<String>): ModelToolCallRequest? {
         val inner = rawInner.trim()
         if (inner.isEmpty()) return null
-        return if (inner.startsWith("{")) {
+        return if (inner.startsWith("{") || inner.startsWith("```")) {
             parseJsonBlock(inner, offeredToolNames)
         } else {
             parseXmlBlock(inner, offeredToolNames)
@@ -108,17 +214,75 @@ object TextToolCallParser {
     }
 
     private fun parseJsonBlock(inner: String, offeredToolNames: Set<String>): ModelToolCallRequest? {
-        val json = runCatching { JSONObject(inner) }.getOrNull() ?: return null
-        val name = json.optString("name").trim()
-        if (name.isEmpty() || name !in offeredToolNames) return null
-        val argumentsJson = when (val args = json.opt("arguments")) {
-            null, JSONObject.NULL -> "{}"
+        parseCallObject(inner, offeredToolNames, requireArguments = false)?.let { return it }
+        // Prose may surround the object inside the block; try each balanced
+        // object in turn before giving up on the block.
+        var searchFrom = 0
+        while (true) {
+            val span = findBalancedObject(inner, searchFrom) ?: return null
+            parseCallObject(
+                inner.substring(span.first, span.last + 1),
+                offeredToolNames,
+                requireArguments = false
+            )?.let { return it }
+            searchFrom = span.first + 1
+        }
+    }
+
+    /**
+     * Reads one JSON object as a tool call: the first non-blank of the name
+     * keys must name an offered tool, and the first present arguments key
+     * supplies the arguments (an object, or a string holding one). With
+     * [requireArguments] a missing arguments key rejects the object; without
+     * it the call runs with no arguments.
+     */
+    private fun parseCallObject(
+        raw: String,
+        offeredToolNames: Set<String>,
+        requireArguments: Boolean
+    ): ModelToolCallRequest? {
+        val json = parseJsonObjectLenient(raw) ?: return null
+        val name = NAME_KEYS.firstNotNullOfOrNull { key ->
+            json.optString(key).trim().takeIf { it.isNotEmpty() }
+        } ?: return null
+        if (name !in offeredToolNames) return null
+        val argsKey = ARGUMENT_KEYS.firstOrNull { json.has(it) && !json.isNull(it) }
+        if (argsKey == null) {
+            return if (requireArguments) null else newCall(name, "{}")
+        }
+        val argumentsJson = when (val args = json.opt(argsKey)) {
             is JSONObject -> args.toString()
             // Some models nest the arguments object as a JSON string.
-            is String -> runCatching { JSONObject(args).toString() }.getOrNull() ?: return null
+            is String -> parseJsonObjectLenient(args)?.toString() ?: return null
             else -> return null
         }
         return newCall(name, argumentsJson)
+    }
+
+    /**
+     * Strict JSON first, then the repairs sloppy generations need: a wrapping
+     * code fence stripped, trailing commas removed, and — only when the text
+     * has no double quotes at all — single quotes treated as string quotes.
+     */
+    private fun parseJsonObjectLenient(raw: String): JSONObject? {
+        var trimmed = raw.trim()
+        if (trimmed.startsWith("```")) {
+            // Drop the opening fence and its language tag, up to the newline
+            // or the start of the object, whichever comes first.
+            trimmed = trimmed.replaceFirst(Regex("""^```[^\n{]*\n?"""), "").trim()
+        }
+        if (trimmed.endsWith("```")) {
+            trimmed = trimmed.dropLast(3).trim()
+        }
+        if (trimmed.isEmpty()) return null
+        runCatching { JSONObject(trimmed) }.getOrNull()?.let { return it }
+        val noTrailingCommas = TRAILING_COMMA_REGEX.replace(trimmed, "$1")
+        runCatching { JSONObject(noTrailingCommas) }.getOrNull()?.let { return it }
+        if (!trimmed.contains('"')) {
+            val requoted = TRAILING_COMMA_REGEX.replace(trimmed.replace('\'', '"'), "$1")
+            runCatching { JSONObject(requoted) }.getOrNull()?.let { return it }
+        }
+        return null
     }
 
     private fun parseXmlBlock(inner: String, offeredToolNames: Set<String>): ModelToolCallRequest? {

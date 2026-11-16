@@ -4258,6 +4258,7 @@ class OmniStudioViewModel(
                     )
                     var lastSubText = ""
                     var subTurn = 0
+                    var subFormatNudged = false
                     var finalAnswer: String? = null
                     while (finalAnswer == null && subTurn < com.example.data.agent.SubagentTool.MAX_TURNS) {
                         subTurn++
@@ -4318,6 +4319,30 @@ class OmniStudioViewModel(
                             )
                             val effectiveText = extracted.cleanedContent
                             val effectiveCalls = turnCalls + extracted.calls
+                            // Same corrective retry as the main loop: the reply
+                            // names an offered tool in a call shape extraction
+                            // could not read, so without a nudge the run would
+                            // end on the model's broken text. One nudge per run.
+                            if (effectiveCalls.isEmpty() && subToolDefinitions.isNotEmpty() &&
+                                !subFormatNudged &&
+                                com.example.data.provider.TextToolCallParser.looksLikeAttemptedCall(
+                                    turnText.toString(),
+                                    subToolDefinitions.map { it.toolName }.toSet()
+                                )
+                            ) {
+                                subFormatNudged = true
+                                subMessages.add(
+                                    ChatMessagePayload(
+                                        role = "user",
+                                        content = "[System note: your previous reply tried to call a tool, " +
+                                            "but the call could not be read, so nothing ran. Reply again " +
+                                            "with ONLY the tool call in exactly this shape and no other " +
+                                            "text: <tool_call>{\"name\": \"tool_name\", \"arguments\": " +
+                                            "{\"arg_name\": \"value\"}}</tool_call>]"
+                                    )
+                                )
+                                continue
+                            }
                             if (effectiveText.isNotBlank()) {
                                 lastSubText = effectiveText
                             }
@@ -4667,6 +4692,7 @@ class OmniStudioViewModel(
             val turnText = StringBuilder()
             val turnToolCalls = mutableListOf<ModelToolCallRequest>()
             var parseErrorRetries = 0
+            var formatRepairNudged = false
 
             while (true) {
                 if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
@@ -4781,6 +4807,42 @@ class OmniStudioViewModel(
                                 )
                             )
                         }
+                    }
+                    // A sloppy model (abliterated locals especially) sometimes
+                    // ends its reply with a tool call no dialect could read:
+                    // the tool name is there, the shape is broken, and
+                    // extraction recovered nothing. Rather than committing
+                    // that broken text as the final answer, send ONE
+                    // corrective retry demanding the exact call shape,
+                    // mirroring the llama.cpp parse-500 retry below.
+                    if (!formatRepairNudged && turnToolCalls.isEmpty() &&
+                        offeredNames.isNotEmpty() &&
+                        com.example.data.provider.TextToolCallParser.looksLikeAttemptedCall(
+                            turnText.toString(),
+                            offeredNames
+                        )
+                    ) {
+                        formatRepairNudged = true
+                        workingPayloadMessages.add(
+                            ChatMessagePayload(
+                                role = "user",
+                                content = "[System note: your previous reply tried to call a tool, " +
+                                    "but the call could not be read, so nothing ran. Reply again " +
+                                    "with ONLY the tool call in exactly this shape and no other " +
+                                    "text: <tool_call>{\"name\": \"tool_name\", \"arguments\": " +
+                                    "{\"arg_name\": \"value\"}}</tool_call>]"
+                            )
+                        )
+                        failoverSession.onRetrySameProvider()
+                        dao.upsertMessage(
+                            initialAssistantMsg.copy(
+                                content = failoverSession.visibleText,
+                                providerInstanceId = currentProvider.id,
+                                modelId = currentModelId,
+                                isStreaming = true
+                            )
+                        )
+                        continue
                     }
                     failoverSession.commitCurrentAttempt()
                     break
