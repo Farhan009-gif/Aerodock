@@ -1817,6 +1817,44 @@ class OmniRepository(
     }
 
     /**
+     * Copies a picked video into app-owned storage and returns its
+     * file:// URI. Picker content URIs carry a temporary read grant that
+     * can die when the app process is killed (e.g. while the user is off
+     * completing a tool's sign-in page), after which the video silently
+     * becomes unreadable. An app-owned copy stays readable on every
+     * later turn. Returns null when the copy fails.
+     */
+    suspend fun copyVideoToAppStorage(uriString: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val uri = Uri.parse(uriString)
+            val dir = java.io.File(context.filesDir, "attachments").apply { mkdirs() }
+            val target = java.io.File(dir, "video_${System.currentTimeMillis()}.mp4")
+            val maxBytes = 64L * 1024 * 1024
+            var total = 0L
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > maxBytes) {
+                            target.delete()
+                            return@runCatching null
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            } ?: return@runCatching null
+            if (total == 0L) {
+                target.delete()
+                return@runCatching null
+            }
+            Uri.fromFile(target).toString()
+        }.getOrNull()
+    }
+
+    /**
      * Builds the provider payloads for one attachment. A video becomes
      * sampled frame images plus its audio track (see VideoFrameExtractor):
      * chat APIs cannot carry the video file itself, and sending it raw

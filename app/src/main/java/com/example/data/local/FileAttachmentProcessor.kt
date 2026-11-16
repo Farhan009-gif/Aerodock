@@ -387,10 +387,12 @@ object FileAttachmentProcessor {
     fun buildMessageContentWithFileAttachments(
         userText: String = "",
         userPrompt: String = "",
-        attachments: List<ChatMediaAttachment>
+        attachments: List<ChatMediaAttachment>,
+        videoFrameCounts: Map<String, Int> = emptyMap(),
+        videoAudioNames: Set<String> = emptySet()
     ): String {
         val effectiveUserPrompt = userText.ifBlank { userPrompt }
-        val videoNote = buildVideoAttachmentNote(attachments)
+        val videoNote = buildVideoAttachmentNote(attachments, videoFrameCounts, videoAudioNames)
         val docAttachments = attachments.filter { it.isDocument || !it.extractedText.isNullOrBlank() }
         if (docAttachments.isEmpty()) {
             return when {
@@ -422,16 +424,30 @@ object FileAttachmentProcessor {
      * images (plus the audio track where the provider accepts audio).
      * Without this note a model cannot know the images belong to a video.
      */
-    fun buildVideoAttachmentNote(attachments: List<ChatMediaAttachment>): String {
+    fun buildVideoAttachmentNote(
+        attachments: List<ChatMediaAttachment>,
+        frameCounts: Map<String, Int> = emptyMap(),
+        audioNames: Set<String> = emptySet()
+    ): String {
         val videos = attachments.filter { it.isVideo }
         if (videos.isEmpty()) return ""
         return buildString {
             videos.forEachIndexed { idx, att ->
                 if (idx > 0) append("\n")
                 val name = att.name?.takeIf { it.isNotBlank() } ?: "video"
-                val count = VideoFrameExtractor.frameCountFor(att.durationMs)
+                // Only promise what this request actually carries: the counts
+                // come from the encoded payloads, not from the attachment list.
+                val frames = frameCounts[name] ?: VideoFrameExtractor.frameCountFor(att.durationMs)
+                if (frames <= 0) {
+                    append("[VIDEO ATTACHMENT: A video named \"")
+                    append(name)
+                    append("\" was attached, but its frames could not be read, so ")
+                    append("you cannot see this video. Tell the user plainly that the ")
+                    append("video could not be read instead of guessing its contents.]")
+                    return@forEachIndexed
+                }
                 append("[VIDEO ATTACHMENT: The images attached to this message are ")
-                append(count)
+                append(frames)
                 append(" still frames sampled evenly, in chronological order, from the video \"")
                 append(name)
                 append("\"")
@@ -440,10 +456,14 @@ object FileAttachmentProcessor {
                     append(att.durationMs / 1000)
                     append(" seconds long)")
                 }
-                append(". The video's audio track is also attached as audio when the ")
-                append("receiving model accepts audio input — use it for anything spoken. ")
-                append("Treat the frames and audio together as the video itself when ")
-                append("answering about it.]")
+                append(".")
+                if (name in audioNames) {
+                    append(" The video's audio track is also attached as audio — ")
+                    append("use it for anything spoken.")
+                }
+                append(" Treat the frames")
+                if (name in audioNames) append(" and audio")
+                append(" together as the video itself when answering about it.]")
             }
         }
     }

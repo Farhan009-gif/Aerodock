@@ -2927,6 +2927,32 @@ class OmniStudioViewModel(
                 showFirstTimeFileNoticeForProvider = if (shouldShowNotice) activeProvName else current.showFirstTimeFileNoticeForProvider
             )
         }
+    
+        // Videos picked from the gallery carry a temporary read grant that
+        // can die with the app process (e.g. during a tool sign-in detour),
+        // silently making the video unreadable on later turns. Copy each
+        // picked video into app storage now and swap the attachment to the
+        // app-owned copy.
+        val pickedVideos = newItems.filter { it.isVideo && it.uri.startsWith("content://") }
+        if (pickedVideos.isNotEmpty()) {
+            viewModelScope.launch {
+                for (video in pickedVideos) {
+                    val copiedUri = repository.copyVideoToAppStorage(video.uri) ?: continue
+                    _uiState.update { current ->
+                        current.copy(
+                            attachedMediaList = current.attachedMediaList.map { item ->
+                                if (item.uri == video.uri) item.copy(uri = copiedUri) else item
+                            },
+                            attachedImageUri = if (current.attachedImageUri == video.uri) {
+                                copiedUri
+                            } else {
+                                current.attachedImageUri
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun removeMediaAttachment(index: Int) {
@@ -3764,9 +3790,19 @@ class OmniStudioViewModel(
                     repository.encodeImageUriToDataUri(m.attachmentUri)
                 } else null
                 val primaryImageDataUri = mediaPayloads.firstOrNull { !it.isVideo }?.dataUri ?: legacyDataUri
+                val videoFrameCounts = attachments.filter { it.isVideo }.associate { att ->
+                    val base = att.name ?: "video"
+                    base to mediaPayloads.count { p -> p.fileName?.startsWith("$base frame ") == true }
+                }
+                val videoAudioNames = attachments.filter { it.isVideo }.mapNotNull { att ->
+                    val base = att.name ?: "video"
+                    if (mediaPayloads.any { p -> p.fileName == "$base audio track" }) base else null
+                }.toSet()
                 val effectiveContent = com.example.data.local.FileAttachmentProcessor.buildMessageContentWithFileAttachments(
                     userText = m.content,
-                    attachments = attachments
+                    attachments = attachments,
+                    videoFrameCounts = videoFrameCounts,
+                    videoAudioNames = videoAudioNames
                 )
 
                 ChatMessagePayload(
