@@ -53,6 +53,7 @@ object WorkspaceGit {
         WorkspaceTools.GIT_STATUS_TOOL_NAME,
         WorkspaceTools.GIT_DIFF_TOOL_NAME,
         WorkspaceTools.GIT_COMMIT_PUSH_TOOL_NAME,
+        WorkspaceTools.GIT_PULL_TOOL_NAME,
         WorkspaceTools.BUILD_STATUS_TOOL_NAME
     )
 
@@ -105,6 +106,16 @@ object WorkspaceGit {
                 readOnly = false
             ),
             entity(
+                WorkspaceTools.GIT_PULL_TOOL_NAME,
+                "Update a cloned workspace project to the latest commit on GitHub " +
+                    "(fast-forward only). Files that changed on GitHub are downloaded; files " +
+                    "deleted there are removed. Unpushed local changes are kept — unless the " +
+                    "same file also changed on GitHub, in which case the pull is refused and " +
+                    "says why. The user approves every pull.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"Project folder inside the workspace."}},"required":["path"]}""",
+                readOnly = false
+            ),
+            entity(
                 WorkspaceTools.BUILD_STATUS_TOOL_NAME,
                 "Check the latest GitHub Actions build for a repository: pass repo as " +
                     "\"owner/repo\", or pass the workspace path of a cloned project. When the " +
@@ -131,6 +142,7 @@ object WorkspaceGit {
                 WorkspaceTools.GIT_STATUS_TOOL_NAME -> gitStatus(root, args)
                 WorkspaceTools.GIT_DIFF_TOOL_NAME -> gitDiff(root, client, token, args)
                 WorkspaceTools.GIT_COMMIT_PUSH_TOOL_NAME -> gitCommitPush(root, client, token, args)
+                WorkspaceTools.GIT_PULL_TOOL_NAME -> gitPull(root, client, token, args)
                 WorkspaceTools.BUILD_STATUS_TOOL_NAME -> buildStatus(root, client, token, args)
                 else -> "Error: unknown git tool '$toolName'." to false
             }
@@ -367,7 +379,8 @@ object WorkspaceGit {
             ProjectState(dest, target.owner, target.repo, branch, commitSha, treeSha, shas)
         )
         return "Cloned ${target.owner}/${target.repo} (branch $branch) into '$destPath': " +
-            "$fileCount files, head ${commitSha.take(7)}. Use the file tools on '$destPath', " +
+            "$fileCount files, head ${commitSha.take(7)}. If the project has a LESSONS.md, " +
+            "read it before working. Use the file tools on '$destPath', " +
             "then git_commit_push to ship changes." to true
     }
 
@@ -593,6 +606,105 @@ object WorkspaceGit {
             if (commitUrl.isNotBlank()) append(" $commitUrl")
         }
         return summary to true
+    }
+
+    private fun gitPull(
+        root: File,
+        client: OkHttpClient,
+        token: String?,
+        args: JSONObject
+    ): Pair<String, Boolean> {
+        val state = requireProject(root, args.optString("path"))
+        val (refCode, refBody) = apiCall(
+            client, token, "GET",
+            "$API_ROOT/repos/${state.owner}/${state.repo}/git/ref/heads/${state.branch}"
+        )
+        if (refCode != 200) return githubErrorHint(refCode, refBody) to false
+        val remoteCommit = JSONObject(refBody).getJSONObject("object").getString("sha")
+        if (remoteCommit == state.baseCommit) {
+            return "'${args.optString("path")}' is already up to date with " +
+                "${state.owner}/${state.repo}@${state.branch} (${remoteCommit.take(7)})." to true
+        }
+        val (commitCode, commitBody) = apiCall(
+            client, token, "GET",
+            "$API_ROOT/repos/${state.owner}/${state.repo}/git/commits/$remoteCommit"
+        )
+        if (commitCode != 200) return githubErrorHint(commitCode, commitBody) to false
+        val remoteTree = JSONObject(commitBody).getJSONObject("tree").getString("sha")
+        val (treeCode, treeBody) = apiCall(
+            client, token, "GET",
+            "$API_ROOT/repos/${state.owner}/${state.repo}/git/trees/$remoteTree?recursive=1"
+        )
+        if (treeCode != 200) return githubErrorHint(treeCode, treeBody) to false
+        val treeJson = JSONObject(treeBody)
+        if (treeJson.optBoolean("truncated", false)) {
+            return "Error: the repo tree is too large to pull safely. Delete the local project and git_clone it again." to false
+        }
+        val remoteFiles = mutableMapOf<String, String>()
+        val entries = treeJson.optJSONArray("tree")
+        if (entries != null) {
+            for (index in 0 until entries.length()) {
+                val entry = entries.getJSONObject(index)
+                if (entry.optString("type") == "blob") {
+                    val entryPath = entry.optString("path")
+                    val topDir = entryPath.substringBefore("/")
+                    if (topDir !in SKIPPED_DIRS) {
+                        remoteFiles[entryPath] = entry.optString("sha")
+                    }
+                }
+            }
+        }
+        val localChanges = computeChanges(state)
+        val locallyTouched = (localChanges.added + localChanges.modified + localChanges.deleted).toSet()
+        val remoteChanged = remoteFiles.keys.filter { state.fileShas[it] != remoteFiles[it] }.toSet()
+        val remoteDeleted = state.fileShas.keys.filter { it !in remoteFiles }.toSet()
+        val conflicts = locallyTouched.intersect(remoteChanged + remoteDeleted).sorted()
+        if (conflicts.isNotEmpty()) {
+            return "Pull refused — these files changed BOTH locally and on GitHub: " +
+                conflicts.joinToString(", ") +
+                ". Push the local changes first (git_commit_push), or delete the local project and re-clone." to false
+        }
+        var updated = 0
+        var deleted = 0
+        val skippedLarge = mutableListOf<String>()
+        for (rel in remoteChanged.sorted()) {
+            val sha = remoteFiles[rel] ?: continue
+            val (blobCode, blobBody) = apiCall(
+                client, token, "GET",
+                "$API_ROOT/repos/${state.owner}/${state.repo}/git/blobs/$sha"
+            )
+            if (blobCode != 200) return githubErrorHint(blobCode, blobBody) to false
+            val blobJson = JSONObject(blobBody)
+            if (blobJson.optLong("size") > MAX_FILE_BYTES) {
+                skippedLarge.add(rel)
+                continue
+            }
+            val bytes = Base64.decode(
+                blobJson.optString("content").replace("\n", "").replace(" ", ""),
+                Base64.DEFAULT
+            )
+            val outFile = File(state.dir, rel)
+            outFile.parentFile?.mkdirs()
+            outFile.writeBytes(bytes)
+            updated++
+        }
+        for (rel in remoteDeleted.sorted()) {
+            if (File(state.dir, rel).delete()) deleted++
+        }
+        saveManifest(
+            state.dir,
+            ProjectState(state.dir, state.owner, state.repo, state.branch, remoteCommit, remoteTree, remoteFiles)
+        )
+        val kept = locallyTouched.size
+        val text = buildString {
+            append("Pulled ${state.owner}/${state.repo}@${state.branch}: ${state.baseCommit.take(7)} -> ${remoteCommit.take(7)}. ")
+            append("$updated file(s) updated, $deleted deleted.")
+            if (kept > 0) append(" $kept unpushed local change(s) kept.")
+            if (skippedLarge.isNotEmpty()) {
+                append(" Skipped (over 10 MB): ${skippedLarge.joinToString(", ")}.")
+            }
+        }
+        return text to true
     }
 
     private fun buildStatus(

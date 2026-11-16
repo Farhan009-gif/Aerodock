@@ -2901,6 +2901,8 @@ class OmniRepository(
                 "Call $toolName again with every required argument filled in." to false
         } else if (toolName == com.example.data.workspace.WorkspaceTools.UPDATE_PLAN_TOOL_NAME) {
             executeUpdatePlan(conversationId, argumentsJson)
+        } else if (toolName == com.example.data.workspace.WorkspaceTools.READ_URL_TOOL_NAME) {
+            com.example.data.workspace.WorkspaceWeb.execute(okHttpClient, argumentsJson)
         } else if (com.example.data.workspace.WorkspaceGit.isGitTool(toolName)) {
             val root = java.io.File(context.filesDir, "workspace")
             val token = secretVault.getApiKey(TinkSecretVault.INTEGRATION_GITHUB_PAT_ID)

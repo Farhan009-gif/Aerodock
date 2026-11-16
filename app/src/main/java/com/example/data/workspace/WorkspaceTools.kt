@@ -48,7 +48,10 @@ object WorkspaceTools {
     const val GIT_STATUS_TOOL_NAME = "git_status"
     const val GIT_DIFF_TOOL_NAME = "git_diff"
     const val GIT_COMMIT_PUSH_TOOL_NAME = "git_commit_push"
+    const val GIT_PULL_TOOL_NAME = "git_pull"
     const val BUILD_STATUS_TOOL_NAME = "build_status"
+    const val ADD_LESSON_TOOL_NAME = "add_lesson"
+    const val READ_URL_TOOL_NAME = "read_url"
 
     private const val MAX_LIST_ENTRIES = 300
     private const val MAX_LIST_DEPTH = 6
@@ -70,7 +73,10 @@ object WorkspaceTools {
         GIT_STATUS_TOOL_NAME,
         GIT_DIFF_TOOL_NAME,
         GIT_COMMIT_PUSH_TOOL_NAME,
-        BUILD_STATUS_TOOL_NAME
+        GIT_PULL_TOOL_NAME,
+        BUILD_STATUS_TOOL_NAME,
+        ADD_LESSON_TOOL_NAME,
+        READ_URL_TOOL_NAME
     )
 
     private val WRITE_TOOL_NAMES = setOf(
@@ -79,7 +85,8 @@ object WorkspaceTools {
         DELETE_FILE_TOOL_NAME,
         MOVE_FILE_TOOL_NAME,
         GIT_CLONE_TOOL_NAME,
-        GIT_COMMIT_PUSH_TOOL_NAME
+        GIT_COMMIT_PUSH_TOOL_NAME,
+        GIT_PULL_TOOL_NAME
     )
 
     fun isWorkspaceTool(toolName: String): Boolean = toolName in TOOL_NAMES
@@ -174,8 +181,18 @@ object WorkspaceTools {
                     "of this conversation, so a long session never loses the thread.",
                 """{"type":"object","properties":{"items":{"type":"array","description":"The full plan, in order.","items":{"type":"object","properties":{"text":{"type":"string","description":"One step, phrased as an action."},"status":{"type":"string","enum":["pending","in_progress","done"],"description":"The step's state."}},"required":["text","status"]}}},"required":["items"]}""",
                 readOnly = true
+            ),
+            entity(
+                ADD_LESSON_TOOL_NAME,
+                "Record one lesson about a workspace project in its LESSONS.md file — something " +
+                    "you learned the hard way while working on it (a build quirk, an API limit, " +
+                    "a pattern the codebase uses) that a future session should know before " +
+                    "touching the project. One or two sentences, concrete. Read the project's " +
+                    "LESSONS.md with read_file before starting work on a cloned project.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"Project folder inside the workspace."},"lesson":{"type":"string","description":"The lesson, one or two concrete sentences."}},"required":["path","lesson"]}""",
+                readOnly = false
             )
-        ) + WorkspaceGit.buildToolEntities()
+        ) + WorkspaceGit.buildToolEntities() + WorkspaceWeb.buildToolEntity()
     }
 
     fun buildToolDefinitions(): List<McpToolDefinition> {
@@ -218,6 +235,7 @@ object WorkspaceTools {
                 SEARCH_FILES_TOOL_NAME -> searchFiles(root, args.optString("query"), args.optString("path"))
                 DELETE_FILE_TOOL_NAME -> deleteFile(root, args.optString("path"))
                 MOVE_FILE_TOOL_NAME -> moveFile(root, args.optString("from"), args.optString("to"))
+                ADD_LESSON_TOOL_NAME -> addLesson(root, args.optString("path"), args.optString("lesson"))
                 else -> "Error: tool '$toolName' is executed by the repository, not the file executor." to false
             }
         }.getOrElse { e ->
@@ -362,6 +380,23 @@ object WorkspaceTools {
         } else {
             "Error: could not move '$from' to '$to'." to false
         }
+    }
+
+    private fun addLesson(root: File, path: String, lesson: String): Pair<String, Boolean> {
+        if (path.isBlank()) return "Error: add_lesson needs the project path." to false
+        val cleanLesson = lesson.trim().replace("\n", " ")
+        if (cleanLesson.isBlank()) return "Error: add_lesson needs the lesson text." to false
+        val dir = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (!dir.isDirectory) return "Error: '$path' is not a workspace folder." to false
+        val lessonsFile = File(dir, "LESSONS.md")
+        if (!lessonsFile.exists()) {
+            lessonsFile.writeText(
+                "# Project lessons\n\nHard-won notes about this project. Read before working on it.\n\n",
+                Charsets.UTF_8
+            )
+        }
+        lessonsFile.appendText("- $cleanLesson\n", Charsets.UTF_8)
+        return "Lesson saved to $path/LESSONS.md." to true
     }
 
     private fun searchFiles(root: File, query: String, path: String): Pair<String, Boolean> {
