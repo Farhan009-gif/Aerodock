@@ -1,0 +1,313 @@
+package com.example.data.workspace
+
+import com.example.data.local.McpApprovalMode
+import com.example.data.local.McpServerEntity
+import com.example.data.local.McpToolEntity
+import com.example.data.local.McpTransportType
+import com.example.data.provider.McpToolDefinition
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * Built-in Workspace tools: the model's file hands. Five tools over one
+ * on-device workspace folder (the repository passes `filesDir/workspace`):
+ *
+ *  list_files   — show the project tree
+ *  read_file    — read a text file, optionally a line range
+ *  write_file   — create or overwrite a text file
+ *  edit_file    — replace one exact, unique passage of text
+ *  search_files — find a text string across the workspace
+ *
+ * Reads are marked read-only; writes are not, and the parent tool loop shows
+ * the approval sheet before any write runs (the run_code rule: a model never
+ * changes files silently). Every path is relative to the workspace root and
+ * canonicalised, so a call cannot escape the folder with ".." or an absolute
+ * path. Subagents do not inherit these tools in this step — the parent loop
+ * is the only executor, so the approval sheet always has a user in front of
+ * it. Identity and schemas live here; execution is a plain function over a
+ * root [File], and logging lives in OmniRepository next to the other
+ * built-in executors.
+ */
+object WorkspaceTools {
+
+    const val WORKSPACE_SERVER_ID = "builtin_workspace"
+    const val WORKSPACE_SERVER_NAME = "Workspace"
+
+    const val LIST_FILES_TOOL_NAME = "list_files"
+    const val READ_FILE_TOOL_NAME = "read_file"
+    const val WRITE_FILE_TOOL_NAME = "write_file"
+    const val EDIT_FILE_TOOL_NAME = "edit_file"
+    const val SEARCH_FILES_TOOL_NAME = "search_files"
+
+    private const val MAX_LIST_ENTRIES = 300
+    private const val MAX_LIST_DEPTH = 6
+    private const val MAX_READ_CHARS = 48_000
+    private const val MAX_WRITE_CHARS = 200_000
+    private const val MAX_SEARCH_MATCHES = 100
+    private const val MAX_SEARCH_FILE_BYTES = 1_000_000L
+
+    private val TOOL_NAMES = setOf(
+        LIST_FILES_TOOL_NAME,
+        READ_FILE_TOOL_NAME,
+        WRITE_FILE_TOOL_NAME,
+        EDIT_FILE_TOOL_NAME,
+        SEARCH_FILES_TOOL_NAME
+    )
+
+    private val WRITE_TOOL_NAMES = setOf(WRITE_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME)
+
+    fun isWorkspaceTool(toolName: String): Boolean = toolName in TOOL_NAMES
+
+    fun isWriteTool(toolName: String): Boolean = toolName in WRITE_TOOL_NAMES
+
+    fun buildWorkspaceServerEntity(): McpServerEntity {
+        return McpServerEntity(
+            id = WORKSPACE_SERVER_ID,
+            name = WORKSPACE_SERVER_NAME,
+            url = "builtin://workspace",
+            transport = McpTransportType.STREAMABLE_HTTP.name,
+            authHeaderName = "",
+            approvalMode = McpApprovalMode.ASK_EVERY_TIME.name,
+            isEnabled = true,
+            lastTestStatus = "Built-in on-device project workspace (files live in the app's workspace folder)"
+        )
+    }
+
+    fun buildToolEntities(): List<McpToolEntity> {
+        fun entity(name: String, description: String, schema: String, readOnly: Boolean) =
+            McpToolEntity(
+                id = "$WORKSPACE_SERVER_ID:$name",
+                serverId = WORKSPACE_SERVER_ID,
+                serverName = WORKSPACE_SERVER_NAME,
+                toolName = name,
+                description = description,
+                inputSchemaJson = schema,
+                isReadOnlyHint = readOnly,
+                isEnabled = true
+            )
+        return listOf(
+            entity(
+                LIST_FILES_TOOL_NAME,
+                "List the files and folders of the on-device project workspace. Paths everywhere " +
+                    "in these tools are relative to the workspace root. Use this first to see " +
+                    "what a project contains.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"Folder to list, relative to the workspace root. Omit for the root."}}}""",
+                readOnly = true
+            ),
+            entity(
+                READ_FILE_TOOL_NAME,
+                "Read a text file from the workspace. Optionally pass start_line and max_lines " +
+                    "to read one section of a long file instead of the whole file.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"File path relative to the workspace root."},"start_line":{"type":"integer","description":"Optional 1-based first line to return."},"max_lines":{"type":"integer","description":"Optional maximum number of lines to return (default 400)."}},"required":["path"]}""",
+                readOnly = true
+            ),
+            entity(
+                WRITE_FILE_TOOL_NAME,
+                "Create a text file in the workspace, or overwrite it completely. Parent folders " +
+                    "are created as needed. For large files, write the first chunk here and extend " +
+                    "it with edit_file appends, keeping each call modest. The user approves every write.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"File path relative to the workspace root."},"content":{"type":"string","description":"The complete new content of the file."}},"required":["path","content"]}""",
+                readOnly = false
+            ),
+            entity(
+                EDIT_FILE_TOOL_NAME,
+                "Replace one exact passage of a workspace file. old_text must appear exactly once " +
+                    "in the file — include enough surrounding context to make it unique. The user " +
+                    "approves every edit.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"File path relative to the workspace root."},"old_text":{"type":"string","description":"The exact existing text to replace. Must occur exactly once."},"new_text":{"type":"string","description":"The replacement text."}},"required":["path","old_text","new_text"]}""",
+                readOnly = false
+            ),
+            entity(
+                SEARCH_FILES_TOOL_NAME,
+                "Search for an exact text string in every text file of the workspace and get " +
+                    "back file:line matches. Use it to find where something is defined or used.",
+                """{"type":"object","properties":{"query":{"type":"string","description":"The exact text to search for."},"path":{"type":"string","description":"Optional folder (or file) to search within, relative to the workspace root."}},"required":["query"]}""",
+                readOnly = true
+            )
+        )
+    }
+
+    fun buildToolDefinitions(): List<McpToolDefinition> {
+        return buildToolEntities().map { entity ->
+            McpToolDefinition(
+                serverId = entity.serverId,
+                serverName = entity.serverName,
+                toolName = entity.toolName,
+                description = entity.description,
+                inputSchemaJson = entity.inputSchemaJson,
+                isReadOnlyHint = entity.isReadOnlyHint
+            )
+        }
+    }
+
+    /**
+     * Runs one workspace tool against [root]. Returns (model-facing text,
+     * success). Every failure is a plain "Error: ..." result the model can
+     * react to, never an exception.
+     */
+    fun execute(root: File, toolName: String, argumentsJson: String): Pair<String, Boolean> {
+        val args = runCatching { JSONObject(argumentsJson.ifBlank { "{}" }) }.getOrNull()
+            ?: return "Error: arguments were not valid JSON." to false
+        return runCatching {
+            when (toolName) {
+                LIST_FILES_TOOL_NAME -> listFiles(root, args.optString("path"))
+                READ_FILE_TOOL_NAME -> readFile(
+                    root,
+                    args.optString("path"),
+                    args.optInt("start_line", 0),
+                    args.optInt("max_lines", 0)
+                )
+                WRITE_FILE_TOOL_NAME -> writeFile(root, args.optString("path"), args.optString("content"))
+                EDIT_FILE_TOOL_NAME -> editFile(
+                    root,
+                    args.optString("path"),
+                    args.optString("old_text"),
+                    args.optString("new_text")
+                )
+                SEARCH_FILES_TOOL_NAME -> searchFiles(root, args.optString("query"), args.optString("path"))
+                else -> "Error: unknown workspace tool '$toolName'." to false
+            }
+        }.getOrElse { e ->
+            "Error: ${e.message ?: e.javaClass.simpleName}" to false
+        }
+    }
+
+    // Resolves [relativePath] inside [root]; null when it escapes the root.
+    private fun resolveInside(root: File, relativePath: String): File? {
+        val rootCanon = root.canonicalFile
+        val target = File(rootCanon, relativePath.trim()).canonicalFile
+        val inside = target.path == rootCanon.path ||
+            target.path.startsWith(rootCanon.path + File.separator)
+        return if (inside) target else null
+    }
+
+    private fun relativeDisplay(root: File, target: File): String {
+        val rel = target.canonicalFile.relativeTo(root.canonicalFile).path
+        return rel.ifEmpty { "." }
+    }
+
+    private fun listFiles(root: File, path: String): Pair<String, Boolean> {
+        val target = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (!target.exists()) {
+            return if (path.isBlank()) {
+                "The workspace is empty. Use write_file to create the first file." to true
+            } else {
+                "Error: '$path' does not exist in the workspace." to false
+            }
+        }
+        if (!target.isDirectory) return "Error: '$path' is a file, not a folder." to false
+        val entries = target.walkTopDown()
+            .maxDepth(MAX_LIST_DEPTH)
+            .filter { it.path != target.path && !it.path.contains("${File.separator}.git${File.separator}") }
+            .take(MAX_LIST_ENTRIES + 1)
+            .toList()
+        if (entries.isEmpty()) return "Folder '${path.ifBlank { "." }}' is empty." to true
+        val text = buildString {
+            appendLine("Workspace listing for ${path.ifBlank { "." }} (${entries.size} entries):")
+            for (entry in entries.sortedBy { it.path }) {
+                val rel = relativeDisplay(root, entry)
+                if (entry.isDirectory) {
+                    appendLine("$rel/")
+                } else {
+                    appendLine("$rel (${entry.length()} B)")
+                }
+            }
+            if (entries.size > MAX_LIST_ENTRIES) {
+                appendLine("[Listing truncated at $MAX_LIST_ENTRIES entries — list a subfolder for the rest.]")
+            }
+        }
+        return text.trimEnd() to true
+    }
+
+    private fun readFile(root: File, path: String, startLine: Int, maxLines: Int): Pair<String, Boolean> {
+        if (path.isBlank()) return "Error: read_file needs a path." to false
+        val target = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (!target.exists()) return "Error: '$path' does not exist in the workspace." to false
+        if (!target.isFile) return "Error: '$path' is a folder, not a file." to false
+        val bytes = target.readBytes()
+        if (bytes.take(8192).any { it == 0.toByte() }) {
+            return "Error: '$path' looks like a binary file; read_file only reads text." to false
+        }
+        val lines = bytes.toString(Charsets.UTF_8).split("\n")
+        val from = (if (startLine > 0) startLine else 1).coerceIn(1, maxOf(1, lines.size))
+        val count = if (maxLines > 0) maxLines else 400
+        val to = minOf(lines.size, from - 1 + count)
+        var slice = lines.subList(from - 1, to).joinToString("\n")
+        var truncatedNote = ""
+        if (slice.length > MAX_READ_CHARS) {
+            slice = slice.substring(0, MAX_READ_CHARS)
+            truncatedNote = "\n[Truncated at $MAX_READ_CHARS characters — read a smaller line range.]"
+        } else if (to < lines.size) {
+            truncatedNote = "\n[Showing lines $from–$to of ${lines.size} — pass start_line=${to + 1} to continue.]"
+        }
+        return "$path (lines $from–$to of ${lines.size}):\n$slice$truncatedNote" to true
+    }
+
+    private fun writeFile(root: File, path: String, content: String): Pair<String, Boolean> {
+        if (path.isBlank()) return "Error: write_file needs a path." to false
+        if (content.length > MAX_WRITE_CHARS) {
+            return "Error: content is ${content.length} characters; the limit per write is " +
+                "$MAX_WRITE_CHARS. Write the first chunk, then extend the file with edit_file." to false
+        }
+        val target = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (target.isDirectory) return "Error: '$path' is a folder, not a file." to false
+        target.parentFile?.mkdirs()
+        val existed = target.exists()
+        target.writeText(content, Charsets.UTF_8)
+        val lineCount = if (content.isEmpty()) 0 else content.count { it == '\n' } + 1
+        return "${if (existed) "Overwrote" else "Created"} $path (${content.length} characters, $lineCount lines)." to true
+    }
+
+    private fun editFile(root: File, path: String, oldText: String, newText: String): Pair<String, Boolean> {
+        if (path.isBlank()) return "Error: edit_file needs a path." to false
+        if (oldText.isEmpty()) return "Error: edit_file needs a non-empty old_text." to false
+        val target = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (!target.exists() || !target.isFile) return "Error: '$path' does not exist in the workspace." to false
+        val original = target.readText(Charsets.UTF_8)
+        val occurrences = original.split(oldText).size - 1
+        if (occurrences == 0) {
+            return "Error: old_text was not found in $path. Read the file and copy the exact text, including whitespace." to false
+        }
+        if (occurrences > 1) {
+            return "Error: old_text appears $occurrences times in $path. Include more surrounding context so it matches exactly one place." to false
+        }
+        target.writeText(original.replace(oldText, newText), Charsets.UTF_8)
+        return "Edited $path: replaced ${oldText.length} characters with ${newText.length} characters." to true
+    }
+
+    private fun searchFiles(root: File, query: String, path: String): Pair<String, Boolean> {
+        if (query.isBlank()) return "Error: search_files needs a query." to false
+        val target = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (!target.exists()) return "Error: '${path.ifBlank { "." }}' does not exist in the workspace." to false
+        val files = if (target.isFile) {
+            listOf(target)
+        } else {
+            target.walkTopDown()
+                .filter { it.isFile && !it.path.contains("${File.separator}.git${File.separator}") }
+                .toList()
+        }
+        val matches = mutableListOf<String>()
+        for (file in files) {
+            if (matches.size >= MAX_SEARCH_MATCHES) break
+            if (file.length() > MAX_SEARCH_FILE_BYTES) continue
+            val bytes = runCatching { file.readBytes() }.getOrNull() ?: continue
+            if (bytes.take(8192).any { it == 0.toByte() }) continue
+            val rel = relativeDisplay(root, file)
+            bytes.toString(Charsets.UTF_8).split("\n").forEachIndexed { index, line ->
+                if (matches.size < MAX_SEARCH_MATCHES && line.contains(query)) {
+                    val preview = line.trim().take(160)
+                    matches.add("$rel:${index + 1}: $preview")
+                }
+            }
+        }
+        if (matches.isEmpty()) return "No matches for \"$query\" in the workspace." to true
+        val text = buildString {
+            appendLine("Matches for \"$query\" (${matches.size}):")
+            matches.forEach { appendLine(it) }
+            if (matches.size >= MAX_SEARCH_MATCHES) {
+                appendLine("[Stopped at $MAX_SEARCH_MATCHES matches — narrow the search with a path or a longer query.]")
+            }
+        }
+        return text.trimEnd() to true
+    }
+}

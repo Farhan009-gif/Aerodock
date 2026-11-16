@@ -3999,7 +3999,22 @@ class OmniStudioViewModel(
                     com.example.data.agent.SubagentTool.buildChainToolEntity(),
                     com.example.data.agent.SubagentTool.buildChainToolDefinition()
                 )
-                mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple
+                val workspaceServer = com.example.data.workspace.WorkspaceTools.buildWorkspaceServerEntity()
+                val workspaceTriples = com.example.data.workspace.WorkspaceTools.buildToolEntities().map { toolEntity ->
+                    Triple(
+                        workspaceServer,
+                        toolEntity,
+                        McpToolDefinition(
+                            serverId = workspaceServer.id,
+                            serverName = workspaceServer.name,
+                            toolName = toolEntity.toolName,
+                            description = toolEntity.description,
+                            inputSchemaJson = toolEntity.inputSchemaJson,
+                            isReadOnlyHint = toolEntity.isReadOnlyHint
+                        )
+                    )
+                }
+                mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples
             } else {
                 emptyList()
             }
@@ -4172,6 +4187,7 @@ class OmniStudioViewModel(
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME -> false
                             name == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_TOOL_NAME -> false
+                            com.example.data.workspace.WorkspaceTools.isWorkspaceTool(name) -> false
                             com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(name) -> true
                             else -> {
                                 val srv = triple.first
@@ -5297,6 +5313,93 @@ class OmniStudioViewModel(
                         ChatMessagePayload(
                             role = "tool",
                             content = execResult.modelResponseText,
+                            toolCallId = toolCall.id,
+                            toolName = toolCall.toolName
+                        )
+                    )
+                    continue
+                }
+
+                // Built-in Workspace file tools: reads run directly; writes
+                // (write_file / edit_file) always show the approval sheet
+                // first, like run_code — a model never changes files silently.
+                if (com.example.data.workspace.WorkspaceTools.isWorkspaceTool(toolCall.toolName)) {
+                    val wsServer = com.example.data.workspace.WorkspaceTools.buildWorkspaceServerEntity()
+                    val wsTool = com.example.data.workspace.WorkspaceTools.buildToolEntities()
+                        .firstOrNull { it.toolName == toolCall.toolName }
+                    if (wsTool == null) {
+                        workingPayloadMessages.add(
+                            ChatMessagePayload(
+                                role = "tool",
+                                content = "Error: Tool '${toolCall.toolName}' is not registered.",
+                                toolCallId = toolCall.id,
+                                toolName = toolCall.toolName
+                            )
+                        )
+                        continue
+                    }
+                    if (com.example.data.workspace.WorkspaceTools.isWriteTool(toolCall.toolName)) {
+                        val approvalReq = PendingToolApprovalRequest(
+                            server = wsServer,
+                            tool = wsTool,
+                            callRequest = toolCall,
+                            iterationIndex = iteration,
+                            maxIterations = if (isUnlimited) 51 else maxIterations
+                        )
+                        _uiState.update {
+                            it.copy(
+                                pendingToolApproval = approvalReq,
+                                activeToolLoopStatus = "$turnCounter • Awaiting approval for Workspace • ${toolCall.toolName}"
+                            )
+                        }
+                        val decision = approvalReq.decisionDeferred.await()
+                        _uiState.update { it.copy(pendingToolApproval = null) }
+                        val approved = when (decision) {
+                            ToolApprovalDecision.APPROVE_ONCE,
+                            ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY -> true
+                            ToolApprovalDecision.DENY -> false
+                        }
+                        if (!approved) {
+                            dao.insertToolCallLog(
+                                ToolCallLogEntity(
+                                    id = "tcl_${UUID.randomUUID().toString().take(10)}",
+                                    conversationId = conv.id,
+                                    messageId = assistantMsgId,
+                                    serverId = wsServer.id,
+                                    serverName = wsServer.name,
+                                    toolName = wsTool.toolName,
+                                    argumentsJson = toolCall.argumentsJson,
+                                    resultText = "File change denied by user.",
+                                    isSuccess = false,
+                                    isDestructiveOrWrite = true,
+                                    durationMs = 0L
+                                )
+                            )
+                            workingPayloadMessages.add(
+                                ChatMessagePayload(
+                                    role = "tool",
+                                    content = "The file change was denied by the user.",
+                                    toolCallId = toolCall.id,
+                                    toolName = toolCall.toolName
+                                )
+                            )
+                            continue
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(activeToolLoopStatus = "$turnCounter • Workspace • ${toolCall.toolName}…")
+                    }
+                    val logEntry = repository.executeWorkspaceToolAndLog(
+                        conversationId = conv.id,
+                        messageId = assistantMsgId,
+                        toolName = toolCall.toolName,
+                        argumentsJson = toolCall.argumentsJson
+                    )
+                    val statusLabel = if (logEntry.isSuccess) "SUCCESS" else "ERROR"
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(
+                            role = "tool",
+                            content = "[Workspace ${toolCall.toolName} Result ($statusLabel)]\n${logEntry.resultText}",
                             toolCallId = toolCall.id,
                             toolName = toolCall.toolName
                         )

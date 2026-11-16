@@ -2879,6 +2879,49 @@ class OmniRepository(
         logEntity
     }
 
+    suspend fun executeWorkspaceToolAndLog(
+        conversationId: String,
+        messageId: String,
+        toolName: String,
+        argumentsJson: String
+    ): ToolCallLogEntity = withContext(Dispatchers.IO) {
+        val startMs = System.currentTimeMillis()
+        val toolEntity = com.example.data.workspace.WorkspaceTools.buildToolEntities()
+            .firstOrNull { it.toolName == toolName }
+        // Same pre-dispatch validation as MCP calls: a hollow call bounces
+        // back as a failed, logged result naming the missing fields.
+        val missingArgs = toolEntity?.let { missingRequiredArgs(it.inputSchemaJson, argumentsJson) }
+        val (outputText, isSuccess) = if (missingArgs != null) {
+            val why = if (missingArgs.isEmpty()) {
+                "not valid JSON, so no arguments arrived."
+            } else {
+                "missing required argument(s): " + missingArgs.joinToString(", ") + "."
+            }
+            "Call NOT executed — its arguments were $why " +
+                "Call $toolName again with every required argument filled in." to false
+        } else {
+            val root = java.io.File(context.filesDir, "workspace")
+            com.example.data.workspace.WorkspaceTools.execute(root, toolName, argumentsJson)
+        }
+        val durationMs = (System.currentTimeMillis() - startMs).coerceAtLeast(1L)
+        val logEntity = ToolCallLogEntity(
+            id = "tlog_${UUID.randomUUID().toString().take(10)}",
+            conversationId = conversationId,
+            messageId = messageId,
+            serverId = com.example.data.workspace.WorkspaceTools.WORKSPACE_SERVER_ID,
+            serverName = com.example.data.workspace.WorkspaceTools.WORKSPACE_SERVER_NAME,
+            toolName = toolName,
+            argumentsJson = argumentsJson.ifBlank { "{}" },
+            resultText = outputText,
+            isSuccess = isSuccess,
+            isDestructiveOrWrite = com.example.data.workspace.WorkspaceTools.isWriteTool(toolName),
+            durationMs = durationMs,
+            createdAt = System.currentTimeMillis()
+        )
+        dao.insertToolCallLog(logEntity)
+        logEntity
+    }
+
     suspend fun executeLiveInfoToolAndLog(
         conversationId: String,
         messageId: String,
