@@ -897,6 +897,10 @@ class OpenAICompatibleProvider(
                     }
                     if (msg.mediaAttachments.isNotEmpty()) {
                         for (media in msg.mediaAttachments) {
+                            // Only images may ride in an image_url block. A video
+                            // or audio payload here makes strict providers reject
+                            // the whole request, so anything else is skipped.
+                            if (!media.mimeType.startsWith("image/")) continue
                             val mediaBlock = JSONObject().apply {
                                 put("type", "image_url")
                                 put("image_url", JSONObject().put("url", media.dataUri))

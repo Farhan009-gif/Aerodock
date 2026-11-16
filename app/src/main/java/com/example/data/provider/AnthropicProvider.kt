@@ -385,6 +385,9 @@ class AnthropicProvider(
                         val contentArr = JSONArray()
                         if (msg.mediaAttachments.isNotEmpty()) {
                             for (media in msg.mediaAttachments) {
+                                // Image blocks carry images only; audio/video
+                                // payloads are skipped, never mislabelled.
+                                if (!media.mimeType.startsWith("image/")) continue
                                 val base64Data = media.dataUri.substringAfter("base64,", "")
                                 if (base64Data.isNotBlank()) {
                                     val imgBlock = JSONObject().apply {

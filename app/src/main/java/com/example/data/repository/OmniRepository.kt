@@ -1816,45 +1816,59 @@ class OmniRepository(
         }.getOrNull()
     }
 
-    suspend fun encodeMediaAttachment(attachment: com.example.data.local.ChatMediaAttachment): com.example.data.provider.MediaAttachmentPayload? = withContext(Dispatchers.IO) {
-        if (attachment.isDocument) return@withContext null
+    /**
+     * Builds the provider payloads for one attachment. A video becomes
+     * sampled frame images plus its audio track (see VideoFrameExtractor):
+     * chat APIs cannot carry the video file itself, and sending it raw
+     * made OpenAI-compatible routes fail the whole request.
+     */
+    suspend fun encodeMediaAttachmentPayloads(
+        attachment: com.example.data.local.ChatMediaAttachment
+    ): List<com.example.data.provider.MediaAttachmentPayload> = withContext(Dispatchers.IO) {
+        if (attachment.isDocument) return@withContext emptyList()
         runCatching {
             val uri = Uri.parse(attachment.uri)
             if (attachment.isVideo) {
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    val buffer = ByteArrayOutputStream()
-                    val temp = ByteArray(8192)
-                    var totalBytes = 0
-                    val maxBytes = 16 * 1024 * 1024 // 16 MB max for inline video
-                    var read = input.read(temp)
-                    while (read != -1 && totalBytes < maxBytes) {
-                        buffer.write(temp, 0, read)
-                        totalBytes += read
-                        read = input.read(temp)
-                    }
-                    val base64 = Base64.encodeToString(buffer.toByteArray(), Base64.NO_WRAP)
-                    val resolvedMime = attachment.mimeType.ifBlank { "video/mp4" }
-                    com.example.data.provider.MediaAttachmentPayload(
-                        dataUri = "data:$resolvedMime;base64,$base64",
-                        mimeType = resolvedMime,
-                        isVideo = true,
-                        fileName = attachment.name ?: "video.mp4"
+                val payloads = mutableListOf<com.example.data.provider.MediaAttachmentPayload>()
+                val baseName = attachment.name ?: "video"
+                val frames = com.example.data.local.VideoFrameExtractor.extractFrameDataUris(
+                    context, uri, attachment.durationMs
+                )
+                frames.forEachIndexed { idx, dataUri ->
+                    payloads += com.example.data.provider.MediaAttachmentPayload(
+                        dataUri = dataUri,
+                        mimeType = "image/jpeg",
+                        isVideo = false,
+                        fileName = "$baseName frame ${idx + 1} of ${frames.size}"
                     )
                 }
+                com.example.data.local.VideoFrameExtractor.extractAudioDataUri(context, uri)
+                    ?.let { (audioUri, audioMime) ->
+                        payloads += com.example.data.provider.MediaAttachmentPayload(
+                            dataUri = audioUri,
+                            mimeType = audioMime,
+                            isVideo = false,
+                            fileName = "$baseName audio track"
+                        )
+                    }
+                payloads
             } else {
-                val dataUri = encodeImageUriToDataUri(attachment.uri) ?: return@runCatching null
-                com.example.data.provider.MediaAttachmentPayload(
-                    dataUri = dataUri,
-                    mimeType = attachment.mimeType.ifBlank { "image/jpeg" },
-                    isVideo = false,
-                    fileName = attachment.name
+                val dataUri = encodeImageUriToDataUri(attachment.uri)
+                    ?: return@runCatching emptyList()
+                listOf(
+                    com.example.data.provider.MediaAttachmentPayload(
+                        dataUri = dataUri,
+                        mimeType = attachment.mimeType.ifBlank { "image/jpeg" },
+                        isVideo = false,
+                        fileName = attachment.name
+                    )
                 )
             }
-        }.getOrNull()
+        }.getOrElse { emptyList() }
     }
 
-    suspend fun encodeMediaAttachments(attachments: List<com.example.data.local.ChatMediaAttachment>): List<com.example.data.provider.MediaAttachmentPayload> = withContext(Dispatchers.IO) {
-        attachments.mapNotNull { encodeMediaAttachment(it) }
+    suspend fun encodeMediaAttachments(attachments: List<com.example.data.local.ChatMediaAttachment>): List<com.example.data.provider.MediaAttachmentPayload> {
+        return attachments.flatMap { encodeMediaAttachmentPayloads(it) }
     }
 
     suspend fun exportConversationAsMarkdown(
