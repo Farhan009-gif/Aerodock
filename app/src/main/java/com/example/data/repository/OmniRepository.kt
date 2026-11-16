@@ -2899,6 +2899,13 @@ class OmniRepository(
             }
             "Call NOT executed — its arguments were $why " +
                 "Call $toolName again with every required argument filled in." to false
+        } else if (toolName == com.example.data.workspace.WorkspaceTools.UPDATE_PLAN_TOOL_NAME) {
+            executeUpdatePlan(conversationId, argumentsJson)
+        } else if (com.example.data.workspace.WorkspaceGit.isGitTool(toolName)) {
+            val root = java.io.File(context.filesDir, "workspace")
+            val token = secretVault.getApiKey(TinkSecretVault.INTEGRATION_GITHUB_PAT_ID)
+                ?.trim()?.takeIf { it.isNotEmpty() }
+            com.example.data.workspace.WorkspaceGit.execute(root, okHttpClient, token, toolName, argumentsJson)
         } else {
             val root = java.io.File(context.filesDir, "workspace")
             com.example.data.workspace.WorkspaceTools.execute(root, toolName, argumentsJson)
@@ -2921,6 +2928,84 @@ class OmniRepository(
         dao.insertToolCallLog(logEntity)
         logEntity
     }
+
+    // ---- Conversation plans (the update_plan workspace tool) -----------------
+    // One small JSON file per conversation under filesDir/plans. The model
+    // replaces the whole list on every update_plan call; the rendered plan is
+    // injected into the system prompt of later turns (see executeModelStream)
+    // so a long session keeps its checklist in view.
+
+    private fun planFile(conversationId: String): java.io.File {
+        val dir = java.io.File(context.filesDir, "plans")
+        if (!dir.exists()) dir.mkdirs()
+        val safeId = conversationId.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+        return java.io.File(dir, "$safeId.json")
+    }
+
+    private fun renderPlan(items: List<Pair<String, String>>): String {
+        val done = items.count { it.second == "done" }
+        return buildString {
+            appendLine("Plan ($done/${items.size} done):")
+            for ((text, status) in items) {
+                val mark = when (status) {
+                    "done" -> "[x]"
+                    "in_progress" -> "[~]"
+                    else -> "[ ]"
+                }
+                appendLine("- $mark $text")
+            }
+        }.trimEnd()
+    }
+
+    private fun executeUpdatePlan(
+        conversationId: String,
+        argumentsJson: String
+    ): Pair<String, Boolean> {
+        val args = runCatching { org.json.JSONObject(argumentsJson.ifBlank { "{}" }) }.getOrNull()
+            ?: return "Error: arguments were not valid JSON." to false
+        val itemsJson = args.optJSONArray("items")
+            ?: return "Error: update_plan needs an items array." to false
+        val items = mutableListOf<Pair<String, String>>()
+        for (index in 0 until minOf(itemsJson.length(), 30)) {
+            val item = itemsJson.optJSONObject(index) ?: continue
+            val text = item.optString("text").trim()
+            if (text.isBlank()) continue
+            val status = item.optString("status").lowercase()
+                .takeIf { it == "in_progress" || it == "done" } ?: "pending"
+            items.add(text to status)
+        }
+        if (items.isEmpty()) return "Error: the plan needs at least one item with text." to false
+        val stored = org.json.JSONObject()
+        val storedItems = org.json.JSONArray()
+        items.forEach { (text, status) ->
+            storedItems.put(org.json.JSONObject().put("text", text).put("status", status))
+        }
+        stored.put("items", storedItems)
+        planFile(conversationId).writeText(stored.toString(), Charsets.UTF_8)
+        return (renderPlan(items) + "\nThe plan is saved and will be shown back to you on later turns of this conversation.") to true
+    }
+
+    /** The rendered plan for prompt injection, or null when the conversation has none. */
+    suspend fun getConversationPlanText(conversationId: String): String? =
+        withContext(Dispatchers.IO) {
+            val file = planFile(conversationId)
+            if (!file.isFile) return@withContext null
+            runCatching {
+                val stored = org.json.JSONObject(file.readText(Charsets.UTF_8))
+                val itemsJson = stored.optJSONArray("items") ?: return@runCatching null
+                val items = mutableListOf<Pair<String, String>>()
+                for (index in 0 until itemsJson.length()) {
+                    val item = itemsJson.optJSONObject(index) ?: continue
+                    items.add(item.optString("text") to item.optString("status", "pending"))
+                }
+                if (items.isEmpty()) {
+                    null
+                } else {
+                    "Your current plan for this conversation — keep working it, and call " +
+                        "update_plan whenever a step's state changes:\n" + renderPlan(items)
+                }
+            }.getOrNull()
+        }
 
     suspend fun executeLiveInfoToolAndLog(
         conversationId: String,

@@ -3938,7 +3938,8 @@ class OmniStudioViewModel(
             "payloads small — when writing a file or long content, send at most " +
             "~2,000 characters per call where the tool allows it (write the first " +
             "chunk, then extend it); very large single calls can fail to parse." +
-            (previousWorkBrief(conv.id)?.let { "\n\n" + it } ?: "")
+            (previousWorkBrief(conv.id)?.let { "\n\n" + it } ?: "") +
+            (repository.getConversationPlanText(conv.id)?.let { "\n\n" + it } ?: "")
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
         // Reset per-message web search counter at the start of each turn

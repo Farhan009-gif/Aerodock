@@ -38,6 +38,17 @@ object WorkspaceTools {
     const val WRITE_FILE_TOOL_NAME = "write_file"
     const val EDIT_FILE_TOOL_NAME = "edit_file"
     const val SEARCH_FILES_TOOL_NAME = "search_files"
+    const val DELETE_FILE_TOOL_NAME = "delete_file"
+    const val MOVE_FILE_TOOL_NAME = "move_file"
+    const val UPDATE_PLAN_TOOL_NAME = "update_plan"
+
+    // Git tool names live here so isWorkspaceTool/isWriteTool cover the whole
+    // family; their schemas and execution live in WorkspaceGit (GitHub API).
+    const val GIT_CLONE_TOOL_NAME = "git_clone"
+    const val GIT_STATUS_TOOL_NAME = "git_status"
+    const val GIT_DIFF_TOOL_NAME = "git_diff"
+    const val GIT_COMMIT_PUSH_TOOL_NAME = "git_commit_push"
+    const val BUILD_STATUS_TOOL_NAME = "build_status"
 
     private const val MAX_LIST_ENTRIES = 300
     private const val MAX_LIST_DEPTH = 6
@@ -51,10 +62,25 @@ object WorkspaceTools {
         READ_FILE_TOOL_NAME,
         WRITE_FILE_TOOL_NAME,
         EDIT_FILE_TOOL_NAME,
-        SEARCH_FILES_TOOL_NAME
+        SEARCH_FILES_TOOL_NAME,
+        DELETE_FILE_TOOL_NAME,
+        MOVE_FILE_TOOL_NAME,
+        UPDATE_PLAN_TOOL_NAME,
+        GIT_CLONE_TOOL_NAME,
+        GIT_STATUS_TOOL_NAME,
+        GIT_DIFF_TOOL_NAME,
+        GIT_COMMIT_PUSH_TOOL_NAME,
+        BUILD_STATUS_TOOL_NAME
     )
 
-    private val WRITE_TOOL_NAMES = setOf(WRITE_FILE_TOOL_NAME, EDIT_FILE_TOOL_NAME)
+    private val WRITE_TOOL_NAMES = setOf(
+        WRITE_FILE_TOOL_NAME,
+        EDIT_FILE_TOOL_NAME,
+        DELETE_FILE_TOOL_NAME,
+        MOVE_FILE_TOOL_NAME,
+        GIT_CLONE_TOOL_NAME,
+        GIT_COMMIT_PUSH_TOOL_NAME
+    )
 
     fun isWorkspaceTool(toolName: String): Boolean = toolName in TOOL_NAMES
 
@@ -123,8 +149,33 @@ object WorkspaceTools {
                     "back file:line matches. Use it to find where something is defined or used.",
                 """{"type":"object","properties":{"query":{"type":"string","description":"The exact text to search for."},"path":{"type":"string","description":"Optional folder (or file) to search within, relative to the workspace root."}},"required":["query"]}""",
                 readOnly = true
+            ),
+            entity(
+                DELETE_FILE_TOOL_NAME,
+                "Delete a file or a whole folder from the workspace. The user approves every " +
+                    "deletion, and deletion cannot be undone.",
+                """{"type":"object","properties":{"path":{"type":"string","description":"File or folder path relative to the workspace root."}},"required":["path"]}""",
+                readOnly = false
+            ),
+            entity(
+                MOVE_FILE_TOOL_NAME,
+                "Move or rename a file or folder inside the workspace. The destination must not " +
+                    "already exist. The user approves every move.",
+                """{"type":"object","properties":{"from":{"type":"string","description":"Current path relative to the workspace root."},"to":{"type":"string","description":"New path relative to the workspace root."}},"required":["from","to"]}""",
+                readOnly = false
+            ),
+            entity(
+                UPDATE_PLAN_TOOL_NAME,
+                "Write or replace your plan for this conversation: the checklist of steps for " +
+                    "the task you are working on. Send the WHOLE list every time — items you " +
+                    "leave out are removed. Keep exactly one item in_progress while you work, " +
+                    "mark items done as you finish them, and update the plan before starting a " +
+                    "long task. The plan is shown back to you at the start of every later turn " +
+                    "of this conversation, so a long session never loses the thread.",
+                """{"type":"object","properties":{"items":{"type":"array","description":"The full plan, in order.","items":{"type":"object","properties":{"text":{"type":"string","description":"One step, phrased as an action."},"status":{"type":"string","enum":["pending","in_progress","done"],"description":"The step's state."}},"required":["text","status"]}}},"required":["items"]}""",
+                readOnly = true
             )
-        )
+        ) + WorkspaceGit.buildToolEntities()
     }
 
     fun buildToolDefinitions(): List<McpToolDefinition> {
@@ -165,7 +216,9 @@ object WorkspaceTools {
                     args.optString("new_text")
                 )
                 SEARCH_FILES_TOOL_NAME -> searchFiles(root, args.optString("query"), args.optString("path"))
-                else -> "Error: unknown workspace tool '$toolName'." to false
+                DELETE_FILE_TOOL_NAME -> deleteFile(root, args.optString("path"))
+                MOVE_FILE_TOOL_NAME -> moveFile(root, args.optString("from"), args.optString("to"))
+                else -> "Error: tool '$toolName' is executed by the repository, not the file executor." to false
             }
         }.getOrElse { e ->
             "Error: ${e.message ?: e.javaClass.simpleName}" to false
@@ -173,7 +226,8 @@ object WorkspaceTools {
     }
 
     // Resolves [relativePath] inside [root]; null when it escapes the root.
-    private fun resolveInside(root: File, relativePath: String): File? {
+    // internal (not private) so WorkspaceGit resolves project paths the same way.
+    internal fun resolveInside(root: File, relativePath: String): File? {
         val rootCanon = root.canonicalFile
         val target = File(rootCanon, relativePath.trim()).canonicalFile
         val inside = target.path == rootCanon.path ||
@@ -273,6 +327,41 @@ object WorkspaceTools {
         }
         target.writeText(original.replace(oldText, newText), Charsets.UTF_8)
         return "Edited $path: replaced ${oldText.length} characters with ${newText.length} characters." to true
+    }
+
+    private fun deleteFile(root: File, path: String): Pair<String, Boolean> {
+        if (path.isBlank()) return "Error: delete_file needs a path." to false
+        val target = resolveInside(root, path) ?: return "Error: path escapes the workspace." to false
+        if (target.path == root.canonicalFile.path) {
+            return "Error: refusing to delete the whole workspace root." to false
+        }
+        if (!target.exists()) return "Error: '$path' does not exist in the workspace." to false
+        val fileCount = if (target.isDirectory) {
+            target.walkTopDown().count { it.isFile }
+        } else {
+            1
+        }
+        val deleted = target.deleteRecursively()
+        return if (deleted) {
+            "Deleted $path ($fileCount file(s))." to true
+        } else {
+            "Error: could not fully delete '$path'." to false
+        }
+    }
+
+    private fun moveFile(root: File, from: String, to: String): Pair<String, Boolean> {
+        if (from.isBlank() || to.isBlank()) return "Error: move_file needs both from and to." to false
+        val source = resolveInside(root, from) ?: return "Error: 'from' escapes the workspace." to false
+        val dest = resolveInside(root, to) ?: return "Error: 'to' escapes the workspace." to false
+        if (!source.exists()) return "Error: '$from' does not exist in the workspace." to false
+        if (dest.exists()) return "Error: '$to' already exists — delete it first or choose another name." to false
+        dest.parentFile?.mkdirs()
+        val moved = source.renameTo(dest) || (source.copyRecursively(dest, overwrite = false) && source.deleteRecursively())
+        return if (moved) {
+            "Moved $from to $to." to true
+        } else {
+            "Error: could not move '$from' to '$to'." to false
+        }
     }
 
     private fun searchFiles(root: File, query: String, path: String): Pair<String, Boolean> {
