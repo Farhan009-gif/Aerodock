@@ -46,7 +46,7 @@ object WorkspaceGit {
     private const val MAX_EXTRACT_BYTES = 100L * 1024 * 1024
     private const val MAX_DIFF_FILES = 5
     private const val MAX_DIFF_LINES = 1_200
-    private val SKIPPED_DIRS = setOf(".git", "build", ".gradle", "node_modules")
+    private val SKIPPED_DIRS = setOf(".git", "build", ".gradle", "node_modules", WorkspaceTools.SNAPSHOTS_DIR_NAME)
 
     private val GIT_TOOL_NAMES = setOf(
         WorkspaceTools.GIT_CLONE_TOOL_NAME,
@@ -295,6 +295,31 @@ object WorkspaceGit {
             ?: throw IllegalArgumentException(
                 "'$path' is not a cloned repo project (no $MANIFEST_NAME). Clone it with git_clone first."
             )
+    }
+
+    /** "owner/repo@branch (head abc1234)" for approval previews; null when not a project. */
+    internal fun describeProject(root: File, path: String): String? {
+        val state = runCatching { loadProject(root, path) }.getOrNull() ?: return null
+        return "${state.owner}/${state.repo}@${state.branch} (head ${state.baseCommit.take(7)})"
+    }
+
+    /** One-paragraph change summary for the git_commit_push approval preview. */
+    internal fun changeSummary(root: File, path: String): String? {
+        val state = runCatching { loadProject(root, path) }.getOrNull() ?: return null
+        val changes = runCatching { computeChanges(state) }.getOrNull() ?: return null
+        if (changes.isEmpty) {
+            return "Nothing to push — '$path' already matches ${state.owner}/${state.repo}@${state.branch}."
+        }
+        val all = changes.added.map { "+ $it" } +
+            changes.modified.map { "~ $it" } +
+            changes.deleted.map { "- $it" }
+        return buildString {
+            append("Pushes one commit to ${state.owner}/${state.repo}@${state.branch}: ")
+            append("${changes.added.size} added, ${changes.modified.size} modified, ${changes.deleted.size} deleted.")
+            append("\n")
+            append(all.take(30).joinToString("\n"))
+            if (all.size > 30) append("\n… and ${all.size - 30} more")
+        }
     }
 
     // ---- Tools ----------------------------------------------------------------

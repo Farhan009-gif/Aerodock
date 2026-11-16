@@ -52,6 +52,9 @@ object WorkspaceTools {
     const val BUILD_STATUS_TOOL_NAME = "build_status"
     const val ADD_LESSON_TOOL_NAME = "add_lesson"
     const val READ_URL_TOOL_NAME = "read_url"
+    const val UNDO_TOOL_NAME = "undo_last_change"
+
+    const val SNAPSHOTS_DIR_NAME = ".snapshots"
 
     private const val MAX_LIST_ENTRIES = 300
     private const val MAX_LIST_DEPTH = 6
@@ -59,6 +62,8 @@ object WorkspaceTools {
     private const val MAX_WRITE_CHARS = 200_000
     private const val MAX_SEARCH_MATCHES = 100
     private const val MAX_SEARCH_FILE_BYTES = 1_000_000L
+    private const val MAX_SNAPSHOT_BYTES = 20L * 1024 * 1024
+    private const val MAX_SNAPSHOTS_KEPT = 20
 
     private val TOOL_NAMES = setOf(
         LIST_FILES_TOOL_NAME,
@@ -76,7 +81,8 @@ object WorkspaceTools {
         GIT_PULL_TOOL_NAME,
         BUILD_STATUS_TOOL_NAME,
         ADD_LESSON_TOOL_NAME,
-        READ_URL_TOOL_NAME
+        READ_URL_TOOL_NAME,
+        UNDO_TOOL_NAME
     )
 
     private val WRITE_TOOL_NAMES = setOf(
@@ -86,7 +92,8 @@ object WorkspaceTools {
         MOVE_FILE_TOOL_NAME,
         GIT_CLONE_TOOL_NAME,
         GIT_COMMIT_PUSH_TOOL_NAME,
-        GIT_PULL_TOOL_NAME
+        GIT_PULL_TOOL_NAME,
+        UNDO_TOOL_NAME
     )
 
     fun isWorkspaceTool(toolName: String): Boolean = toolName in TOOL_NAMES
@@ -191,6 +198,15 @@ object WorkspaceTools {
                     "LESSONS.md with read_file before starting work on a cloned project.",
                 """{"type":"object","properties":{"path":{"type":"string","description":"Project folder inside the workspace."},"lesson":{"type":"string","description":"The lesson, one or two concrete sentences."}},"required":["path","lesson"]}""",
                 readOnly = false
+            ),
+            entity(
+                UNDO_TOOL_NAME,
+                "Undo the most recent workspace file change (write, edit, delete or move). " +
+                    "Every change first saves a snapshot of what was there; this restores the " +
+                    "newest snapshot and removes it, so repeated calls walk backwards. The user " +
+                    "approves every undo.",
+                """{"type":"object","properties":{}}""",
+                readOnly = false
             )
         ) + WorkspaceGit.buildToolEntities() + WorkspaceWeb.buildToolEntity()
     }
@@ -236,6 +252,7 @@ object WorkspaceTools {
                 DELETE_FILE_TOOL_NAME -> deleteFile(root, args.optString("path"))
                 MOVE_FILE_TOOL_NAME -> moveFile(root, args.optString("from"), args.optString("to"))
                 ADD_LESSON_TOOL_NAME -> addLesson(root, args.optString("path"), args.optString("lesson"))
+                UNDO_TOOL_NAME -> undoLastChange(root)
                 else -> "Error: tool '$toolName' is executed by the repository, not the file executor." to false
             }
         }.getOrElse { e ->
@@ -270,7 +287,12 @@ object WorkspaceTools {
         if (!target.isDirectory) return "Error: '$path' is a file, not a folder." to false
         val entries = target.walkTopDown()
             .maxDepth(MAX_LIST_DEPTH)
-            .filter { it.path != target.path && !it.path.contains("${File.separator}.git${File.separator}") }
+            .filter {
+                it.path != target.path &&
+                    !it.path.contains("${File.separator}.git${File.separator}") &&
+                    !it.path.contains("${File.separator}$SNAPSHOTS_DIR_NAME${File.separator}") &&
+                    it.name != SNAPSHOTS_DIR_NAME
+            }
             .take(MAX_LIST_ENTRIES + 1)
             .toList()
         if (entries.isEmpty()) return "Folder '${path.ifBlank { "." }}' is empty." to true
@@ -325,6 +347,7 @@ object WorkspaceTools {
         if (target.isDirectory) return "Error: '$path' is a folder, not a file." to false
         target.parentFile?.mkdirs()
         val existed = target.exists()
+        snapshotBeforeChange(root, WRITE_FILE_TOOL_NAME, path, target)
         target.writeText(content, Charsets.UTF_8)
         val lineCount = if (content.isEmpty()) 0 else content.count { it == '\n' } + 1
         return "${if (existed) "Overwrote" else "Created"} $path (${content.length} characters, $lineCount lines)." to true
@@ -343,6 +366,7 @@ object WorkspaceTools {
         if (occurrences > 1) {
             return "Error: old_text appears $occurrences times in $path. Include more surrounding context so it matches exactly one place." to false
         }
+        snapshotBeforeChange(root, EDIT_FILE_TOOL_NAME, path, target)
         target.writeText(original.replace(oldText, newText), Charsets.UTF_8)
         return "Edited $path: replaced ${oldText.length} characters with ${newText.length} characters." to true
     }
@@ -359,9 +383,12 @@ object WorkspaceTools {
         } else {
             1
         }
+        val snapshotted = snapshotBeforeChange(root, DELETE_FILE_TOOL_NAME, path, target)
         val deleted = target.deleteRecursively()
         return if (deleted) {
-            "Deleted $path ($fileCount file(s))." to true
+            "Deleted $path ($fileCount file(s))." +
+                if (!snapshotted) " Note: no undo snapshot was saved (too large), so this delete cannot be undone." else ""
+                to true
         } else {
             "Error: could not fully delete '$path'." to false
         }
@@ -374,12 +401,221 @@ object WorkspaceTools {
         if (!source.exists()) return "Error: '$from' does not exist in the workspace." to false
         if (dest.exists()) return "Error: '$to' already exists — delete it first or choose another name." to false
         dest.parentFile?.mkdirs()
+        snapshotMove(root, from, to)
         val moved = source.renameTo(dest) || (source.copyRecursively(dest, overwrite = false) && source.deleteRecursively())
         return if (moved) {
             "Moved $from to $to." to true
         } else {
             "Error: could not move '$from' to '$to'." to false
         }
+    }
+
+    // ---- Undo snapshots -------------------------------------------------------
+    // Before a write/edit/delete, the target's current state is copied into
+    // <root>/.snapshots/<timestamp>/ with a meta.json (tool, path, kind:
+    // absent | file | tree | move). undo_last_change restores the newest
+    // snapshot and drops it, so repeated undos walk backwards. The folder is
+    // hidden from list/search and skipped by git. Moves snapshot only their
+    // from/to (a move never destroys content, so renaming back IS the undo).
+
+    private fun snapshotsDir(root: File): File = File(root, SNAPSHOTS_DIR_NAME)
+
+    private fun newSnapshotDir(root: File): File {
+        val dir = File(
+            snapshotsDir(root),
+            "${System.currentTimeMillis()}-${System.nanoTime() % 100_000}"
+        )
+        dir.mkdirs()
+        return dir
+    }
+
+    private fun pruneSnapshots(root: File) {
+        val dirs = snapshotsDir(root).listFiles()
+            ?.filter { it.isDirectory }
+            ?.sortedBy { it.name }
+            .orEmpty()
+        if (dirs.size > MAX_SNAPSHOTS_KEPT) {
+            dirs.take(dirs.size - MAX_SNAPSHOTS_KEPT).forEach { it.deleteRecursively() }
+        }
+    }
+
+    private fun snapshotBeforeChange(root: File, tool: String, relPath: String, target: File): Boolean {
+        return runCatching {
+            val kind = when {
+                !target.exists() -> "absent"
+                target.isDirectory -> "tree"
+                else -> "file"
+            }
+            if (kind == "file" && target.length() > MAX_SNAPSHOT_BYTES) return false
+            if (kind == "tree") {
+                var total = 0L
+                target.walkTopDown().filter { it.isFile }.forEach { total += it.length() }
+                if (total > MAX_SNAPSHOT_BYTES) return false
+            }
+            val dir = newSnapshotDir(root)
+            when (kind) {
+                "file" -> target.copyTo(File(dir, "content"), overwrite = true)
+                "tree" -> target.copyRecursively(File(dir, "tree"), overwrite = true)
+            }
+            val meta = JSONObject()
+                .put("tool", tool)
+                .put("path", relPath)
+                .put("kind", kind)
+            File(dir, "meta.json").writeText(meta.toString(), Charsets.UTF_8)
+            pruneSnapshots(root)
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun snapshotMove(root: File, from: String, to: String) {
+        runCatching {
+            val dir = newSnapshotDir(root)
+            val meta = JSONObject()
+                .put("tool", MOVE_FILE_TOOL_NAME)
+                .put("path", from)
+                .put("kind", "move")
+                .put("from", from)
+                .put("to", to)
+            File(dir, "meta.json").writeText(meta.toString(), Charsets.UTF_8)
+            pruneSnapshots(root)
+        }
+    }
+
+    private fun newestSnapshot(root: File): Pair<File, JSONObject>? {
+        val dirs = snapshotsDir(root).listFiles()
+            ?.filter { it.isDirectory && File(it, "meta.json").isFile }
+            ?.sortedBy { it.name }
+            .orEmpty()
+        val newest = dirs.lastOrNull() ?: return null
+        val meta = runCatching {
+            JSONObject(File(newest, "meta.json").readText(Charsets.UTF_8))
+        }.getOrNull() ?: return null
+        return newest to meta
+    }
+
+    private fun undoLastChange(root: File): Pair<String, Boolean> {
+        val (snapshot, meta) = newestSnapshot(root)
+            ?: return "Nothing to undo — no saved snapshots." to true
+        val tool = meta.optString("tool")
+        val relPath = meta.optString("path")
+        val target = resolveInside(root, relPath)
+            ?: return "Error: the snapshot path escapes the workspace." to false
+        val restored = runCatching {
+            when (meta.optString("kind")) {
+                "absent" -> target.deleteRecursively()
+                "file" -> {
+                    target.deleteRecursively()
+                    target.parentFile?.mkdirs()
+                    File(snapshot, "content").copyTo(target, overwrite = true)
+                }
+                "tree" -> {
+                    target.deleteRecursively()
+                    File(snapshot, "tree").copyRecursively(target, overwrite = true)
+                }
+                "move" -> {
+                    val from = resolveInside(root, meta.optString("from"))
+                    val to = resolveInside(root, meta.optString("to"))
+                    if (from != null && to != null && to.exists() && !from.exists()) {
+                        from.parentFile?.mkdirs()
+                        if (!to.renameTo(from)) {
+                            to.copyRecursively(from, overwrite = false)
+                            to.deleteRecursively()
+                        }
+                    }
+                }
+                else -> return "Error: unknown snapshot kind in the newest snapshot." to false
+            }
+            true
+        }.getOrDefault(false)
+        if (!restored) return "Error: could not restore the snapshot for $relPath." to false
+        snapshot.deleteRecursively()
+        return "Undid $tool on $relPath — restored to how it was before that change." to true
+    }
+
+    private fun describeNewestSnapshot(root: File): String? {
+        val (_, meta) = newestSnapshot(root) ?: return null
+        return "the last change (${meta.optString("tool")} on ${meta.optString("path")})"
+    }
+
+    /**
+     * Human-readable "what will change" text for the approval sheet, shown
+     * instead of the raw arguments JSON for workspace write tools. Pure file
+     * reads over the workspace; null when no preview applies.
+     */
+    fun buildApprovalPreview(root: File, toolName: String, argumentsJson: String): String? {
+        val args = runCatching { JSONObject(argumentsJson.ifBlank { "{}" }) }.getOrNull()
+            ?: return null
+        return runCatching {
+            when (toolName) {
+                WRITE_FILE_TOOL_NAME -> {
+                    val path = args.optString("path")
+                    val content = args.optString("content")
+                    val target = resolveInside(root, path)
+                    val header = if (target?.isFile == true) {
+                        "Overwrites $path (currently ${target.length()} bytes). New content:"
+                    } else {
+                        "Creates $path. Content:"
+                    }
+                    val lines = content.split("\n")
+                    header + "\n" + lines.take(40).joinToString("\n") +
+                        if (lines.size > 40) "\n… (${lines.size} lines, ${content.length} characters total)" else ""
+                }
+                EDIT_FILE_TOOL_NAME -> {
+                    val path = args.optString("path")
+                    val oldText = args.optString("old_text")
+                    val newText = args.optString("new_text")
+                    val target = resolveInside(root, path)
+                    val current = if (target?.isFile == true) {
+                        target.readText(Charsets.UTF_8)
+                    } else {
+                        null
+                    }
+                    val occurrences = if (current != null && oldText.isNotEmpty()) {
+                        current.split(oldText).size - 1
+                    } else {
+                        0
+                    }
+                    buildString {
+                        appendLine("In $path, replace:")
+                        appendLine(oldText.take(600).lines().joinToString("\n") { "- $it" })
+                        appendLine("with:")
+                        appendLine(newText.take(600).lines().joinToString("\n") { "+ $it" })
+                        if (occurrences != 1) {
+                            appendLine("Note: that exact text currently appears $occurrences times in the file, so this edit would fail — it must appear exactly once.")
+                        }
+                    }.trimEnd()
+                }
+                DELETE_FILE_TOOL_NAME -> {
+                    val path = args.optString("path")
+                    val target = resolveInside(root, path)
+                    when {
+                        target == null -> "Deletes $path."
+                        !target.exists() -> "$path does not exist — this delete would fail."
+                        target.isDirectory -> "Deletes the folder $path and everything in it " +
+                            "(${target.walkTopDown().count { it.isFile }} files). A snapshot is saved first when it fits."
+                        else -> "Deletes the file $path (${target.length()} bytes). A snapshot is saved first."
+                    }
+                }
+                MOVE_FILE_TOOL_NAME ->
+                    "Moves ${args.optString("from")} to ${args.optString("to")}."
+                GIT_CLONE_TOOL_NAME ->
+                    "Clones ${args.optString("repo")} into the workspace folder " +
+                        "'${args.optString("path").ifBlank { "(named after the repo)" }}' — downloads the project's files."
+                GIT_COMMIT_PUSH_TOOL_NAME ->
+                    WorkspaceGit.changeSummary(root, args.optString("path"))
+                        ?: "Commits and pushes the project at '${args.optString("path")}'."
+                GIT_PULL_TOOL_NAME -> {
+                    val description = WorkspaceGit.describeProject(root, args.optString("path"))
+                    "Pulls the latest ${description ?: "version from GitHub"} into " +
+                        "'${args.optString("path")}' (fast-forward). Unpushed local changes are " +
+                        "kept unless the same file changed on GitHub."
+                }
+                UNDO_TOOL_NAME ->
+                    describeNewestSnapshot(root)?.let { "Restores the workspace to before $it." }
+                        ?: "No snapshot is saved — nothing would change."
+                else -> null
+            }
+        }.getOrNull()
     }
 
     private fun addLesson(root: File, path: String, lesson: String): Pair<String, Boolean> {
@@ -407,7 +643,11 @@ object WorkspaceTools {
             listOf(target)
         } else {
             target.walkTopDown()
-                .filter { it.isFile && !it.path.contains("${File.separator}.git${File.separator}") }
+                .filter {
+                    it.isFile &&
+                        !it.path.contains("${File.separator}.git${File.separator}") &&
+                        !it.path.contains("${File.separator}$SNAPSHOTS_DIR_NAME${File.separator}")
+                }
                 .toList()
         }
         val matches = mutableListOf<String>()

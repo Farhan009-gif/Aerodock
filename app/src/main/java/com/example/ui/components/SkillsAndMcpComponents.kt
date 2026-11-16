@@ -1657,6 +1657,22 @@ fun ToolCallApprovalDialog(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isCodeExecution = request.tool.toolName == JsSandboxExecutor.RUN_CODE_TOOL_NAME ||
         request.server.id == JsSandboxExecutor.RUN_CODE_SERVER_ID
+    // Workspace write tools (file writes, git push/pull, undo…) get a
+    // human-readable "what will change" preview instead of raw arguments.
+    val isWorkspaceWrite = request.server.id == com.example.data.workspace.WorkspaceTools.WORKSPACE_SERVER_ID &&
+        com.example.data.workspace.WorkspaceTools.isWriteTool(request.tool.toolName)
+    val dialogContext = androidx.compose.ui.platform.LocalContext.current
+    val workspacePreview = remember(request.callRequest.argumentsJson, isWorkspaceWrite) {
+        if (isWorkspaceWrite) {
+            com.example.data.workspace.WorkspaceTools.buildApprovalPreview(
+                java.io.File(dialogContext.filesDir, "workspace"),
+                request.tool.toolName,
+                request.callRequest.argumentsJson
+            )
+        } else {
+            null
+        }
+    }
     val confirmDetails = remember(request.callRequest.argumentsJson, isCodeExecution) {
         if (isCodeExecution) {
             JsSandboxExecutor.buildRunConfirmationDetails(request.callRequest.argumentsJson)
@@ -1867,10 +1883,10 @@ fun ToolCallApprovalDialog(
                 }
 
                 Text(
-                    text = if (isCodeExecution) {
-                        "Code to run (${confirmDetails?.languageLabel ?: "JavaScript"}):"
-                    } else {
-                        "Arguments JSON to send:"
+                    text = when {
+                        isCodeExecution -> "Code to run (${confirmDetails?.languageLabel ?: "JavaScript"}):"
+                        isWorkspaceWrite && workspacePreview != null -> "What will change:"
+                        else -> "Arguments JSON to send:"
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = if (isCodeExecution) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
@@ -1882,7 +1898,7 @@ fun ToolCallApprovalDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = extractedCode,
+                        text = if (isWorkspaceWrite && workspacePreview != null) workspacePreview else extractedCode,
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = JetBrainsMonoFontFamily),
                         modifier = Modifier
                             .padding(10.dp)
