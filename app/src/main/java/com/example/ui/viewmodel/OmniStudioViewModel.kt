@@ -3978,7 +3978,7 @@ class OmniStudioViewModel(
         toolCall: ModelToolCallRequest,
         conv: ConversationEntity,
         assistantMsgId: String,
-        turnCounter: Int,
+        turnCounter: String,
         workingPayloadMessages: MutableList<ChatMessagePayload>
     ): Pair<Boolean, String> {
         val (question, options) =
@@ -4038,7 +4038,7 @@ class OmniStudioViewModel(
         iteration: Int,
         isUnlimited: Boolean,
         maxIterations: Int,
-        turnCounter: Int,
+        turnCounter: String,
         workingPayloadMessages: MutableList<ChatMessagePayload>,
         buildGate: BuildGateState,
         recordStep: (String, String, Boolean, Long, String) -> Unit
