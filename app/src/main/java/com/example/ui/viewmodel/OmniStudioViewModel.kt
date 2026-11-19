@@ -3953,6 +3953,232 @@ class OmniStudioViewModel(
         return mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples + askUserTriple
     }
 
+    /**
+     * Build-gate state for one turn of [executeModelStream]: the commit
+     * the turn pushed but has not yet verified, the sha the end-of-turn
+     * gate already fired for, consecutive failed verdicts, and the
+     * pending stop note. A class (not locals) so the workspace dispatch
+     * can mutate it from its own function.
+     */
+    private class BuildGateState {
+        var pendingSha: String? = null
+        var firedForSha: String? = null
+        var failedVerdicts: Int = 0
+        var lastVerdict: String = "none"
+        var stopNotePending: Boolean = false
+    }
+
+    /**
+     * The ask_user dispatch: shows the question sheet and waits for the
+     * answer, logs the call and queues the tool result. Returns the
+     * (answered, answerText) pair so the caller can record the
+     * trajectory step. Extracted from executeModelStream (method size).
+     */
+    private suspend fun handleAskUserToolCall(
+        toolCall: ModelToolCallRequest,
+        conv: ConversationEntity,
+        assistantMsgId: String,
+        turnCounter: Int,
+        workingPayloadMessages: MutableList<ChatMessagePayload>
+    ): Pair<Boolean, String> {
+        val (question, options) =
+            com.example.data.agent.AskUserTool.parse(toolCall.argumentsJson)
+        val questionDeferred = CompletableDeferred<String?>()
+        _uiState.update {
+            it.copy(
+                pendingUserQuestion = PendingUserQuestion(
+                    question = question,
+                    options = options,
+                    decisionDeferred = questionDeferred
+                ),
+                activeToolLoopStatus = "$turnCounter • Waiting for your answer…"
+            )
+        }
+        val answer = questionDeferred.await()
+        _uiState.update { it.copy(pendingUserQuestion = null) }
+        dao.insertToolCallLog(
+            ToolCallLogEntity(
+                id = "tcl_${UUID.randomUUID().toString().take(10)}",
+                conversationId = conv.id,
+                messageId = assistantMsgId,
+                serverId = com.example.data.agent.AskUserTool.ASK_USER_SERVER_ID,
+                serverName = com.example.data.agent.AskUserTool.ASK_USER_SERVER_NAME,
+                toolName = toolCall.toolName,
+                argumentsJson = toolCall.argumentsJson,
+                resultText = answer ?: "(dismissed without answering)",
+                isSuccess = answer != null
+            )
+        )
+        workingPayloadMessages.add(
+            ChatMessagePayload(
+                role = "tool",
+                content = if (answer != null) {
+                    "The user answered your question.\nQuestion: $question\nAnswer: $answer"
+                } else {
+                    "The user dismissed your question without answering. " +
+                        "Continue with your best judgement and do not ask the same question again."
+                },
+                toolCallId = toolCall.id,
+                toolName = toolCall.toolName
+            )
+        )
+        return (answer != null) to (answer ?: "(dismissed without answering)")
+    }
+
+    /**
+     * The workspace-tool dispatch: reads run directly; writes show the
+     * approval sheet first. Also does the build-gate bookkeeping off
+     * git_commit_push / build_status results. Extracted from
+     * executeModelStream (method size).
+     */
+    private suspend fun handleWorkspaceToolCall(
+        toolCall: ModelToolCallRequest,
+        conv: ConversationEntity,
+        assistantMsgId: String,
+        iteration: Int,
+        isUnlimited: Boolean,
+        maxIterations: Int,
+        turnCounter: Int,
+        workingPayloadMessages: MutableList<ChatMessagePayload>,
+        buildGate: BuildGateState,
+        recordStep: (String, String, Boolean, Long, String) -> Unit
+    ) {
+        val wsServer = com.example.data.workspace.WorkspaceTools.buildWorkspaceServerEntity()
+        val wsTool = com.example.data.workspace.WorkspaceTools.buildToolEntities()
+            .firstOrNull { it.toolName == toolCall.toolName }
+        if (wsTool == null) {
+            workingPayloadMessages.add(
+                ChatMessagePayload(
+                    role = "tool",
+                    content = "Error: Tool '${toolCall.toolName}' is not registered.",
+                    toolCallId = toolCall.id,
+                    toolName = toolCall.toolName
+                )
+            )
+            recordStep(
+                toolCall.toolName, toolCall.argumentsJson,
+                false, 0L, "Error: Tool '${toolCall.toolName}' is not registered."
+            )
+            return
+        }
+        if (com.example.data.workspace.WorkspaceTools.isWriteTool(toolCall.toolName)) {
+            val approvalReq = PendingToolApprovalRequest(
+                server = wsServer,
+                tool = wsTool,
+                callRequest = toolCall,
+                iterationIndex = iteration,
+                maxIterations = if (isUnlimited) 51 else maxIterations
+            )
+            _uiState.update {
+                it.copy(
+                    pendingToolApproval = approvalReq,
+                    activeToolLoopStatus = "$turnCounter • Awaiting approval for Workspace • ${toolCall.toolName}"
+                )
+            }
+            val decision = approvalReq.decisionDeferred.await()
+            _uiState.update { it.copy(pendingToolApproval = null) }
+            val approved = when (decision) {
+                ToolApprovalDecision.APPROVE_ONCE,
+                ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY -> true
+                ToolApprovalDecision.DENY -> false
+            }
+            if (!approved) {
+                dao.insertToolCallLog(
+                    ToolCallLogEntity(
+                        id = "tcl_${UUID.randomUUID().toString().take(10)}",
+                        conversationId = conv.id,
+                        messageId = assistantMsgId,
+                        serverId = wsServer.id,
+                        serverName = wsServer.name,
+                        toolName = wsTool.toolName,
+                        argumentsJson = toolCall.argumentsJson,
+                        resultText = "File change denied by user.",
+                        isSuccess = false,
+                        isDestructiveOrWrite = true,
+                        durationMs = 0L
+                    )
+                )
+                workingPayloadMessages.add(
+                    ChatMessagePayload(
+                        role = "tool",
+                        content = "The file change was denied by the user.",
+                        toolCallId = toolCall.id,
+                        toolName = toolCall.toolName
+                    )
+                )
+                recordStep(
+                    toolCall.toolName, toolCall.argumentsJson,
+                    false, 0L, "File change denied by user."
+                )
+                return
+            }
+        }
+        _uiState.update {
+            it.copy(activeToolLoopStatus = "$turnCounter • Workspace • ${toolCall.toolName}…")
+        }
+        val logEntry = repository.executeWorkspaceToolAndLog(
+            conversationId = conv.id,
+            messageId = assistantMsgId,
+            toolName = toolCall.toolName,
+            argumentsJson = toolCall.argumentsJson
+        )
+        val statusLabel = if (logEntry.isSuccess) "SUCCESS" else "ERROR"
+        workingPayloadMessages.add(
+            ChatMessagePayload(
+                role = "tool",
+                content = "[Workspace ${toolCall.toolName} Result ($statusLabel)]\n${logEntry.resultText}",
+                toolCallId = toolCall.id,
+                toolName = toolCall.toolName
+            )
+        )
+        recordStep(
+            toolCall.toolName, toolCall.argumentsJson,
+            logEntry.isSuccess, logEntry.durationMs, logEntry.resultText
+        )
+        // Build-gate bookkeeping: remember the commit a push
+        // just made, and read verdicts off build_status results
+        // (the BUILD_VERDICT line WorkspaceGit prepends). Only a
+        // verdict whose sha matches the pending push counts.
+        if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.GIT_COMMIT_PUSH_TOOL_NAME &&
+            logEntry.isSuccess
+        ) {
+            val pushedSha = Regex("Pushed commit ([0-9a-f]{7})")
+                .find(logEntry.resultText)?.groupValues?.get(1)
+            if (pushedSha != null) buildGate.pendingSha = pushedSha
+        }
+        if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.BUILD_STATUS_TOOL_NAME) {
+            val verdictLine = logEntry.resultText.lineSequence()
+                .firstOrNull { it.startsWith("BUILD_VERDICT:") }
+            val verdict = verdictLine?.removePrefix("BUILD_VERDICT:")?.trim()
+                ?.substringBefore(' ')
+            val verdictSha = verdictLine?.substringAfter("sha=", "")?.trim()
+                ?.substringBefore(' ')
+            if (verdict != null && verdictSha == buildGate.pendingSha) {
+                when (verdict) {
+                    "success" -> {
+                        buildGate.pendingSha = null
+                        buildGate.failedVerdicts = 0
+                        buildGate.lastVerdict = "success"
+                    }
+                    "failure" -> {
+                        buildGate.lastVerdict = "failure"
+                        buildGate.failedVerdicts++
+                        if (buildGate.failedVerdicts >= 3) {
+                            // The stop note itself is added
+                            // after this dispatch loop, so it
+                            // lands after all of this round's
+                            // tool results, not between them.
+                            buildGate.stopNotePending = true
+                            buildGate.pendingSha = null
+                        }
+                    }
+                    // in_progress / unknown / no line: the push
+                    // stays pending and may be checked again.
+                }
+            }
+        }
+    }
+
     private suspend fun executeModelStream(
         conv: ConversationEntity,
         provider: ProviderInstanceEntity,
@@ -4160,12 +4386,10 @@ class OmniStudioViewModel(
         var narrationNudged = false
         // Build-gate state (loop discipline): the commit this turn pushed
         // but has not yet verified, the sha the end-of-turn gate already
-        // fired for, and consecutive failed verdicts seen this turn.
-        var pendingBuildSha: String? = null
-        var buildGateFiredForSha: String? = null
-        var failedBuildVerdicts = 0
-        var lastBuildVerdict = "none"
-        var buildFailureStopNotePending = false
+        // fired for, and consecutive failed verdicts seen this turn. Held in
+        // a small class so the workspace dispatch can live in its own
+        // function (see BuildGateState).
+        val buildGate = BuildGateState()
         var stoppedOnRepeatedCall = false
         // Trajectory log steps for this turn, recorded in-hand by the
         // dispatch branches below and written once at turn end.
@@ -5166,11 +5390,11 @@ class OmniStudioViewModel(
                 // Fires once per push (narration-nudge pattern); verdict
                 // handling in the workspace dispatch clears the pending
                 // sha on success or after 3 failed verdicts.
-                val pendingSha = pendingBuildSha
-                if (pendingSha != null && buildGateFiredForSha != pendingSha &&
+                val pendingSha = buildGate.pendingSha
+                if (pendingSha != null && buildGate.firedForSha != pendingSha &&
                     iteration < maxIterations
                 ) {
-                    buildGateFiredForSha = pendingSha
+                    buildGate.firedForSha = pendingSha
                     workingPayloadMessages.add(
                         ChatMessagePayload(
                             role = "user",
@@ -5455,196 +5679,40 @@ class OmniStudioViewModel(
                     continue
                 }
 
+
                 // Built-in ask_user: pause the turn and show the question
                 // sheet; the answer (or a dismissal) becomes the tool result.
                 // No approval is layered on top — the sheet IS the interaction.
                 if (toolCall.toolName == com.example.data.agent.AskUserTool.ASK_USER_TOOL_NAME) {
-                    val (question, options) =
-                        com.example.data.agent.AskUserTool.parse(toolCall.argumentsJson)
-                    val questionDeferred = CompletableDeferred<String?>()
-                    _uiState.update {
-                        it.copy(
-                            pendingUserQuestion = PendingUserQuestion(
-                                question = question,
-                                options = options,
-                                decisionDeferred = questionDeferred
-                            ),
-                            activeToolLoopStatus = "$turnCounter • Waiting for your answer…"
-                        )
-                    }
-                    val answer = questionDeferred.await()
-                    _uiState.update { it.copy(pendingUserQuestion = null) }
-                    dao.insertToolCallLog(
-                        ToolCallLogEntity(
-                            id = "tcl_${UUID.randomUUID().toString().take(10)}",
-                            conversationId = conv.id,
-                            messageId = assistantMsgId,
-                            serverId = com.example.data.agent.AskUserTool.ASK_USER_SERVER_ID,
-                            serverName = com.example.data.agent.AskUserTool.ASK_USER_SERVER_NAME,
-                            toolName = toolCall.toolName,
-                            argumentsJson = toolCall.argumentsJson,
-                            resultText = answer ?: "(dismissed without answering)",
-                            isSuccess = answer != null
-                        )
-                    )
-                    workingPayloadMessages.add(
-                        ChatMessagePayload(
-                            role = "tool",
-                            content = if (answer != null) {
-                                "The user answered your question.\nQuestion: $question\nAnswer: $answer"
-                            } else {
-                                "The user dismissed your question without answering. " +
-                                    "Continue with your best judgement and do not ask the same question again."
-                            },
-                            toolCallId = toolCall.id,
-                            toolName = toolCall.toolName
-                        )
+                    val (answered, answerText) = handleAskUserToolCall(
+                        toolCall, conv, assistantMsgId, turnCounter, workingPayloadMessages
                     )
                     recordTrajectoryStep(
                         toolCall.toolName, toolCall.argumentsJson,
-                        answer != null, 0L, answer ?: "(dismissed without answering)"
+                        answered, 0L, answerText
                     )
                     continue
                 }
+
 
                 // Built-in Workspace file tools: reads run directly; writes
                 // (write_file / edit_file) always show the approval sheet
                 // first, like run_code — a model never changes files silently.
                 if (com.example.data.workspace.WorkspaceTools.isWorkspaceTool(toolCall.toolName)) {
-                    val wsServer = com.example.data.workspace.WorkspaceTools.buildWorkspaceServerEntity()
-                    val wsTool = com.example.data.workspace.WorkspaceTools.buildToolEntities()
-                        .firstOrNull { it.toolName == toolCall.toolName }
-                    if (wsTool == null) {
-                        workingPayloadMessages.add(
-                            ChatMessagePayload(
-                                role = "tool",
-                                content = "Error: Tool '${toolCall.toolName}' is not registered.",
-                                toolCallId = toolCall.id,
-                                toolName = toolCall.toolName
-                            )
-                        )
-                        recordTrajectoryStep(
-                            toolCall.toolName, toolCall.argumentsJson,
-                            false, 0L, "Error: Tool '${toolCall.toolName}' is not registered."
-                        )
-                        continue
-                    }
-                    if (com.example.data.workspace.WorkspaceTools.isWriteTool(toolCall.toolName)) {
-                        val approvalReq = PendingToolApprovalRequest(
-                            server = wsServer,
-                            tool = wsTool,
-                            callRequest = toolCall,
-                            iterationIndex = iteration,
-                            maxIterations = if (isUnlimited) 51 else maxIterations
-                        )
-                        _uiState.update {
-                            it.copy(
-                                pendingToolApproval = approvalReq,
-                                activeToolLoopStatus = "$turnCounter • Awaiting approval for Workspace • ${toolCall.toolName}"
-                            )
+                    handleWorkspaceToolCall(
+                        toolCall = toolCall,
+                        conv = conv,
+                        assistantMsgId = assistantMsgId,
+                        iteration = iteration,
+                        isUnlimited = isUnlimited,
+                        maxIterations = maxIterations,
+                        turnCounter = turnCounter,
+                        workingPayloadMessages = workingPayloadMessages,
+                        buildGate = buildGate,
+                        recordStep = { name, args, ok, ms, result ->
+                            recordTrajectoryStep(name, args, ok, ms, result)
                         }
-                        val decision = approvalReq.decisionDeferred.await()
-                        _uiState.update { it.copy(pendingToolApproval = null) }
-                        val approved = when (decision) {
-                            ToolApprovalDecision.APPROVE_ONCE,
-                            ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY -> true
-                            ToolApprovalDecision.DENY -> false
-                        }
-                        if (!approved) {
-                            dao.insertToolCallLog(
-                                ToolCallLogEntity(
-                                    id = "tcl_${UUID.randomUUID().toString().take(10)}",
-                                    conversationId = conv.id,
-                                    messageId = assistantMsgId,
-                                    serverId = wsServer.id,
-                                    serverName = wsServer.name,
-                                    toolName = wsTool.toolName,
-                                    argumentsJson = toolCall.argumentsJson,
-                                    resultText = "File change denied by user.",
-                                    isSuccess = false,
-                                    isDestructiveOrWrite = true,
-                                    durationMs = 0L
-                                )
-                            )
-                            workingPayloadMessages.add(
-                                ChatMessagePayload(
-                                    role = "tool",
-                                    content = "The file change was denied by the user.",
-                                    toolCallId = toolCall.id,
-                                    toolName = toolCall.toolName
-                                )
-                            )
-                            recordTrajectoryStep(
-                                toolCall.toolName, toolCall.argumentsJson,
-                                false, 0L, "File change denied by user."
-                            )
-                            continue
-                        }
-                    }
-                    _uiState.update {
-                        it.copy(activeToolLoopStatus = "$turnCounter • Workspace • ${toolCall.toolName}…")
-                    }
-                    val logEntry = repository.executeWorkspaceToolAndLog(
-                        conversationId = conv.id,
-                        messageId = assistantMsgId,
-                        toolName = toolCall.toolName,
-                        argumentsJson = toolCall.argumentsJson
                     )
-                    val statusLabel = if (logEntry.isSuccess) "SUCCESS" else "ERROR"
-                    workingPayloadMessages.add(
-                        ChatMessagePayload(
-                            role = "tool",
-                            content = "[Workspace ${toolCall.toolName} Result ($statusLabel)]\n${logEntry.resultText}",
-                            toolCallId = toolCall.id,
-                            toolName = toolCall.toolName
-                        )
-                    )
-                    recordTrajectoryStep(
-                        toolCall.toolName, toolCall.argumentsJson,
-                        logEntry.isSuccess, logEntry.durationMs, logEntry.resultText
-                    )
-                    // Build-gate bookkeeping: remember the commit a push
-                    // just made, and read verdicts off build_status results
-                    // (the BUILD_VERDICT line WorkspaceGit prepends). Only a
-                    // verdict whose sha matches the pending push counts.
-                    if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.GIT_COMMIT_PUSH_TOOL_NAME &&
-                        logEntry.isSuccess
-                    ) {
-                        val pushedSha = Regex("Pushed commit ([0-9a-f]{7})")
-                            .find(logEntry.resultText)?.groupValues?.get(1)
-                        if (pushedSha != null) pendingBuildSha = pushedSha
-                    }
-                    if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.BUILD_STATUS_TOOL_NAME) {
-                        val verdictLine = logEntry.resultText.lineSequence()
-                            .firstOrNull { it.startsWith("BUILD_VERDICT:") }
-                        val verdict = verdictLine?.removePrefix("BUILD_VERDICT:")?.trim()
-                            ?.substringBefore(' ')
-                        val verdictSha = verdictLine?.substringAfter("sha=", "")?.trim()
-                            ?.substringBefore(' ')
-                        if (verdict != null && verdictSha == pendingBuildSha) {
-                            when (verdict) {
-                                "success" -> {
-                                    pendingBuildSha = null
-                                    failedBuildVerdicts = 0
-                                    lastBuildVerdict = "success"
-                                }
-                                "failure" -> {
-                                    lastBuildVerdict = "failure"
-                                    failedBuildVerdicts++
-                                    if (failedBuildVerdicts >= 3) {
-                                        // The stop note itself is added
-                                        // after this dispatch loop, so it
-                                        // lands after all of this round's
-                                        // tool results, not between them.
-                                        buildFailureStopNotePending = true
-                                        pendingBuildSha = null
-                                    }
-                                }
-                                // in_progress / unknown / no line: the push
-                                // stays pending and may be checked again.
-                            }
-                        }
-                    }
                     continue
                 }
 
@@ -5830,8 +5898,8 @@ class OmniStudioViewModel(
             // The 3rd failed verdict for a pushed commit lands here (flag
             // set in the workspace dispatch) so the note follows all of
             // this round's tool results instead of splitting them.
-            if (buildFailureStopNotePending) {
-                buildFailureStopNotePending = false
+            if (buildGate.stopNotePending) {
+                buildGate.stopNotePending = false
                 workingPayloadMessages.add(
                     ChatMessagePayload(
                         role = "user",
@@ -5853,7 +5921,7 @@ class OmniStudioViewModel(
             !kotlinx.coroutines.currentCoroutineContext().isActive -> "cancelled"
             stoppedOnRepeatedCall -> "stopped_repeated"
             streamError != null -> "error"
-            lastBuildVerdict == "failure" -> "build_failed"
+            buildGate.lastVerdict == "failure" -> "build_failed"
             iteration >= maxIterations -> "max_iterations"
             else -> "completed"
         }
@@ -5864,7 +5932,7 @@ class OmniStudioViewModel(
             task = latestUserPrompt,
             steps = trajectorySteps,
             outcome = trajectoryOutcome,
-            buildVerdict = lastBuildVerdict
+            buildVerdict = buildGate.lastVerdict
         )
 
         _uiState.update { it.copy(activeToolLoopStatus = null, pendingToolApproval = null) }
