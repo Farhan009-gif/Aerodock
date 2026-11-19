@@ -4436,7 +4436,7 @@ class OmniStudioViewModel(
                                                     messageId = plan.assistantMessageId,
                                                     toolName = subCall.toolName,
                                                     argumentsJson = subCall.argumentsJson
-                                                ).second.modelResponseText
+                                                ).resultText
                                             } else {
                                                 "Error: Tool '${subCall.toolName}' writes data and is not available to subagents; it runs only in the main chat with the user's approval."
                                             }

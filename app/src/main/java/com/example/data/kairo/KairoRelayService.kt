@@ -355,6 +355,32 @@ object KairoRelayService {
             }
             runCatching { historyFile().writeText(array.toString()) }
         }
+
+        private companion object {
+            val READ_TOOLS = setOf(
+                WorkspaceTools.LIST_FILES_TOOL_NAME,
+                WorkspaceTools.READ_FILE_TOOL_NAME,
+                WorkspaceTools.SEARCH_FILES_TOOL_NAME,
+                WorkspaceTools.GIT_STATUS_TOOL_NAME,
+                WorkspaceTools.BUILD_STATUS_TOOL_NAME
+            )
+
+            const val CONVERSATION_ID = "kairo-relay"
+            const val MAX_CHAT_TOOL_ROUNDS = 6
+            const val MAX_HISTORY_TURNS = 24
+
+            const val SYSTEM_PROMPT =
+                "You are the AI model inside Aerodock, an Android app on Farhan's phone. " +
+                    "You are talking with Kairo, Farhan's personal AI agent, who is directing " +
+                    "this conversation from outside the phone through a relay. You have " +
+                    "read-only workspace tools (list_files, read_file, search_files, " +
+                    "git_status, build_status) for the on-device project workspace. Use them " +
+                    "whenever Kairo asks about files or projects instead of guessing. You " +
+                    "cannot write files in this channel. Always finish with a clear summary " +
+                    "of what you found or did, because Kairo cannot see your tool calls " +
+                    "unless you describe the outcome."
+        }
+
     }
 
     private data class RelayJob(
@@ -365,28 +391,4 @@ object KairoRelayService {
         val message: String?
     )
 
-    private companion object {
-        val READ_TOOLS = setOf(
-            WorkspaceTools.LIST_FILES_TOOL_NAME,
-            WorkspaceTools.READ_FILE_TOOL_NAME,
-            WorkspaceTools.SEARCH_FILES_TOOL_NAME,
-            WorkspaceTools.GIT_STATUS_TOOL_NAME,
-            WorkspaceTools.BUILD_STATUS_TOOL_NAME
-        )
-
-        const val CONVERSATION_ID = "kairo-relay"
-        const val MAX_CHAT_TOOL_ROUNDS = 6
-        const val MAX_HISTORY_TURNS = 24
-
-        const val SYSTEM_PROMPT =
-            "You are the AI model inside Aerodock, an Android app on Farhan's phone. " +
-                "You are talking with Kairo, Farhan's personal AI agent, who is directing " +
-                "this conversation from outside the phone through a relay. You have " +
-                "read-only workspace tools (list_files, read_file, search_files, " +
-                "git_status, build_status) for the on-device project workspace. Use them " +
-                "whenever Kairo asks about files or projects instead of guessing. You " +
-                "cannot write files in this channel. Always finish with a clear summary " +
-                "of what you found or did, because Kairo cannot see your tool calls " +
-                "unless you describe the outcome."
-    }
 }

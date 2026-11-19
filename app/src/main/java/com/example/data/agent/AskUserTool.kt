@@ -1,10 +1,10 @@
 package com.example.data.agent
 
-import com.example.data.local.db.entity.McpServerEntity
-import com.example.data.local.db.entity.McpToolEntity
-import com.example.data.model.McpToolDefinition
-import com.example.domain.model.McpApprovalMode
-import com.example.domain.model.McpTransportType
+import com.example.data.local.McpApprovalMode
+import com.example.data.local.McpServerEntity
+import com.example.data.local.McpToolEntity
+import com.example.data.local.McpTransportType
+import com.example.data.provider.McpToolDefinition
 import org.json.JSONObject
 
 /**
