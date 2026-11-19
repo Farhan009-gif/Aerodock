@@ -140,6 +140,10 @@ class MainActivity : FragmentActivity() {
         val secretVault = TinkSecretVault(applicationContext)
         val repository = OmniRepository(applicationContext, dao, secretVault)
 
+        // Kairo access (Settings → Kairo access): resume relay polling if
+        // the user left it switched on.
+        com.example.data.kairo.KairoRelayService.maybeStart(applicationContext)
+
         setContent {
             val viewModel: OmniStudioViewModel = viewModel(
                 factory = OmniStudioViewModel.Factory(repository, dao)
@@ -760,6 +764,13 @@ private fun OmniStudioRoot(
         ToolCallApprovalDialog(
             request = approvalReq,
             onDecision = viewModel::resolvePendingToolApproval
+        )
+    }
+
+    uiState.pendingUserQuestion?.let { userQuestion ->
+        com.example.ui.components.UserQuestionDialog(
+            question = userQuestion,
+            onAnswer = viewModel::resolvePendingUserQuestion
         )
     }
 

@@ -152,6 +152,17 @@ data class PendingToolApprovalRequest(
     val decisionDeferred: CompletableDeferred<ToolApprovalDecision> = CompletableDeferred()
 )
 
+/**
+ * One pending `ask_user` question: the model is paused mid-task waiting for
+ * the user's answer (null answer = dismissed without answering).
+ */
+data class PendingUserQuestion(
+    val id: String = UUID.randomUUID().toString(),
+    val question: String,
+    val options: List<String> = emptyList(),
+    val decisionDeferred: CompletableDeferred<String?> = CompletableDeferred()
+)
+
 enum class BackgroundSubagentStatus { RUNNING, DONE, FAILED, CANCELLED }
 
 /** One background `spawn_subagent` job, tracked so the chat can show/cancel it while it runs. */
@@ -355,6 +366,7 @@ data class OmniUiState(
     val busyMcpServerId: String? = null,
     val mcpDiscoverySummaries: Map<String, McpDiscoveryResult> = emptyMap(),
     val pendingToolApproval: PendingToolApprovalRequest? = null,
+    val pendingUserQuestion: PendingUserQuestion? = null,
     val activeToolLoopStatus: String? = null,
     val backgroundSubagentJobs: List<BackgroundSubagentJob> = emptyList(),
     val queuedMessages: List<QueuedMessage> = emptyList(),
@@ -3003,6 +3015,7 @@ class OmniStudioViewModel(
 
     fun stopGeneration() {
         _uiState.value.pendingToolApproval?.decisionDeferred?.complete(ToolApprovalDecision.DENY)
+        _uiState.value.pendingUserQuestion?.decisionDeferred?.complete(null)
         activeStreamJob?.cancel()
         activeStreamJob = null
         viewModelScope.launch {
@@ -4015,7 +4028,12 @@ class OmniStudioViewModel(
                         )
                     )
                 }
-                mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples
+                val askUserTriple = Triple(
+                    com.example.data.agent.AskUserTool.buildServerEntity(),
+                    com.example.data.agent.AskUserTool.buildToolEntity(),
+                    com.example.data.agent.AskUserTool.buildToolDefinition()
+                )
+                mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples + askUserTriple
             } else {
                 emptyList()
             }
@@ -4124,6 +4142,29 @@ class OmniStudioViewModel(
         var lastToolCallSignature: String? = null
         var consecutiveIdenticalToolCalls = 0
         var narrationNudged = false
+        // Build-gate state (loop discipline): the commit this turn pushed
+        // but has not yet verified, the sha the end-of-turn gate already
+        // fired for, and consecutive failed verdicts seen this turn.
+        var pendingBuildSha: String? = null
+        var buildGateFiredForSha: String? = null
+        var failedBuildVerdicts = 0
+        var lastBuildVerdict = "none"
+        var buildFailureStopNotePending = false
+        var stoppedOnRepeatedCall = false
+        // Trajectory log steps for this turn, recorded in-hand by the
+        // dispatch branches below and written once at turn end.
+        val trajectorySteps = mutableListOf<com.example.data.workspace.TrajectoryLog.Step>()
+        fun recordTrajectoryStep(toolName: String, argumentsJson: String, ok: Boolean, ms: Long, result: String) {
+            trajectorySteps.add(
+                com.example.data.workspace.TrajectoryLog.Step(
+                    tool = toolName,
+                    args = argumentsJson,
+                    ok = ok,
+                    ms = ms,
+                    result = result
+                )
+            )
+        }
         var iteration = 0
         val failoverSession = com.example.data.provider.FailoverStreamSession()
         val attemptedFailoverKeys = mutableSetOf("${currentProvider.id}:$currentModelId")
@@ -4187,8 +4228,10 @@ class OmniStudioViewModel(
                         when {
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME -> false
+                            name == com.example.data.agent.AskUserTool.ASK_USER_TOOL_NAME -> false
                             name == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_TOOL_NAME -> false
-                            com.example.data.workspace.WorkspaceTools.isWorkspaceTool(name) -> false
+                            com.example.data.workspace.WorkspaceTools.isWorkspaceTool(name) ->
+                                com.example.data.workspace.WorkspaceTools.isSubagentSafeTool(name)
                             com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(name) -> true
                             else -> {
                                 val srv = triple.first
@@ -4276,6 +4319,7 @@ class OmniStudioViewModel(
                     var lastSubText = ""
                     var subTurn = 0
                     var subFormatNudged = false
+                    var subRepairJsonSchema: String? = null
                     var finalAnswer: String? = null
                     while (finalAnswer == null && subTurn < com.example.data.agent.SubagentTool.MAX_TURNS) {
                         subTurn++
@@ -4294,7 +4338,8 @@ class OmniStudioViewModel(
                             supportsTemperature = subDescriptor.supportsTemperature,
                             supportsTopP = subDescriptor.supportsTopP,
                             supportsSystemPrompt = subDescriptor.supportsSystemPrompt,
-                            tools = subToolDefinitions
+                            tools = subToolDefinitions,
+                            toolCallJsonSchema = subRepairJsonSchema
                         )
                         // Free routes 429 often and a subagent has no user watching,
                         // so a rate-limited or transiently failing model request
@@ -4350,6 +4395,9 @@ class OmniStudioViewModel(
                                 )
                             ) {
                                 subFormatNudged = true
+                                subRepairJsonSchema = buildToolCallEnvelopeSchema(
+                                    subToolDefinitions.map { it.toolName }
+                                )
                                 subMessages.add(
                                     ChatMessagePayload(
                                         role = "user",
@@ -4381,6 +4429,18 @@ class OmniStudioViewModel(
                                     // else (hallucinated names included) gets an error result
                                     // instead of an approval dialog or an MCP call.
                                     val subResult: String = when {
+                                        com.example.data.workspace.WorkspaceTools.isWorkspaceTool(subCall.toolName) -> {
+                                            if (com.example.data.workspace.WorkspaceTools.isSubagentSafeTool(subCall.toolName)) {
+                                                repository.executeWorkspaceToolAndLog(
+                                                    conversationId = plan.conversationId,
+                                                    messageId = plan.assistantMessageId,
+                                                    toolName = subCall.toolName,
+                                                    argumentsJson = subCall.argumentsJson
+                                                ).second.modelResponseText
+                                            } else {
+                                                "Error: Tool '${subCall.toolName}' writes data and is not available to subagents; it runs only in the main chat with the user's approval."
+                                            }
+                                        }
                                         com.example.data.mcp.LiveInfoToolsService.isLiveInfoTool(subCall.toolName) -> {
                                             val isToolEnabled = when (subCall.toolName) {
                                                 com.example.data.mcp.LiveInfoToolsService.WEB_SEARCH_TOOL_NAME ->
@@ -4712,6 +4772,7 @@ class OmniStudioViewModel(
             val turnToolCalls = mutableListOf<ModelToolCallRequest>()
             var parseErrorRetries = 0
             var formatRepairNudged = false
+            var repairJsonSchema: String? = null
             var transientRetries = 0
 
             while (true) {
@@ -4745,7 +4806,8 @@ class OmniStudioViewModel(
                     supportsTemperature = activeModelDescriptor.supportsTemperature,
                     supportsTopP = activeModelDescriptor.supportsTopP,
                     supportsSystemPrompt = activeModelDescriptor.supportsSystemPrompt,
-                    tools = if (activeModelDescriptor.supportsFunctionCalling) toolDefinitions else emptyList()
+                    tools = if (activeModelDescriptor.supportsFunctionCalling) toolDefinitions else emptyList(),
+                    toolCallJsonSchema = repairJsonSchema
                 )
 
                 repository.streamChat(request).collect { event ->
@@ -4843,6 +4905,7 @@ class OmniStudioViewModel(
                         )
                     ) {
                         formatRepairNudged = true
+                        repairJsonSchema = buildToolCallEnvelopeSchema(offeredNames)
                         workingPayloadMessages.add(
                             ChatMessagePayload(
                                 role = "user",
@@ -5082,12 +5145,45 @@ class OmniStudioViewModel(
                     )
                     continue
                 }
+                // Build gate: a turn that pushed a commit may not end
+                // until that commit's build verdict has been checked.
+                // Fires once per push (narration-nudge pattern); verdict
+                // handling in the workspace dispatch clears the pending
+                // sha on success or after 3 failed verdicts.
+                val pendingSha = pendingBuildSha
+                if (pendingSha != null && buildGateFiredForSha != pendingSha &&
+                    iteration < maxIterations
+                ) {
+                    buildGateFiredForSha = pendingSha
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(
+                            role = "user",
+                            content = "[System note: You pushed commit $pendingSha but its build " +
+                                "is not verified. Call build_status for the project and check " +
+                                "the BUILD_VERDICT line before finishing. Do not claim the " +
+                                "change works until the verdict for your commit is success.]"
+                        )
+                    )
+                    continue
+                }
                 break
             }
 
             // Check if same tool is called with identical arguments 3 times in a row
             var repeatedToolCallDetected = false
             for (toolCall in turnToolCalls) {
+                // build_status is a poll: the build gate drives repeated
+                // identical checks while a run finishes, and the notes
+                // interleaved between iterations do not touch this
+                // stopper's state — so identical polls would trip it
+                // mid-wait. Exempt build_status from counting; it still
+                // breaks a run of identical calls, exactly like any other
+                // distinct call did before.
+                if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.BUILD_STATUS_TOOL_NAME) {
+                    lastToolCallSignature = null
+                    consecutiveIdenticalToolCalls = 0
+                    continue
+                }
                 val callSig = "${toolCall.toolName}:::${toolCall.argumentsJson.trim()}"
                 if (callSig == lastToolCallSignature) {
                     consecutiveIdenticalToolCalls++
@@ -5101,6 +5197,7 @@ class OmniStudioViewModel(
                 }
             }
             if (repeatedToolCallDetected) {
+                stoppedOnRepeatedCall = true
                 val stopMsg = "Stopped: repeated identical tool call"
                 failoverSession.appendSeparatorIfNeeded("\n\n")
                 val visibleWithStop = failoverSession.appendCommittedText("[$stopMsg]")
@@ -5172,13 +5269,18 @@ class OmniStudioViewModel(
             for (toolCall in turnToolCalls) {
                 // Built-in Subagent delegation: result was computed concurrently above
                 if (spawnResultsByCallId.containsKey(toolCall.id)) {
+                    val spawnResult = spawnResultsByCallId[toolCall.id] ?: "Error: subagent did not run."
                     workingPayloadMessages.add(
                         ChatMessagePayload(
                             role = "tool",
-                            content = spawnResultsByCallId[toolCall.id] ?: "Error: subagent did not run.",
+                            content = spawnResult,
                             toolCallId = toolCall.id,
                             toolName = toolCall.toolName
                         )
+                    )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        !spawnResult.startsWith("Error"), 0L, spawnResult
                     )
                     continue
                 }
@@ -5235,6 +5337,10 @@ class OmniStudioViewModel(
                                 toolName = toolCall.toolName
                             )
                         )
+                        recordTrajectoryStep(
+                            toolCall.toolName, toolCall.argumentsJson,
+                            false, 0L, "Code execution denied by user."
+                        )
                         continue
                     }
 
@@ -5261,6 +5367,10 @@ class OmniStudioViewModel(
                             toolName = toolCall.toolName
                         )
                     )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        logEntry.isSuccess, logEntry.durationMs, logEntry.resultText
+                    )
                     continue
                 }
 
@@ -5280,6 +5390,10 @@ class OmniStudioViewModel(
                                 toolName = toolCall.toolName
                             )
                         )
+                        recordTrajectoryStep(
+                            toolCall.toolName, toolCall.argumentsJson,
+                            false, 0L, "Error: Tool '${toolCall.toolName}' is disabled in Settings > Live info."
+                        )
                         continue
                     }
 
@@ -5292,7 +5406,7 @@ class OmniStudioViewModel(
                         it.copy(activeToolLoopStatus = liveStatusText)
                     }
 
-                    val (_, execResult) = repository.executeLiveInfoToolAndLog(
+                    val (liveLogEntry, execResult) = repository.executeLiveInfoToolAndLog(
                         conversationId = conv.id,
                         messageId = assistantMsgId,
                         toolName = toolCall.toolName,
@@ -5318,6 +5432,62 @@ class OmniStudioViewModel(
                             toolName = toolCall.toolName
                         )
                     )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        liveLogEntry.isSuccess, liveLogEntry.durationMs, execResult.modelResponseText
+                    )
+                    continue
+                }
+
+                // Built-in ask_user: pause the turn and show the question
+                // sheet; the answer (or a dismissal) becomes the tool result.
+                // No approval is layered on top — the sheet IS the interaction.
+                if (toolCall.toolName == com.example.data.agent.AskUserTool.ASK_USER_TOOL_NAME) {
+                    val (question, options) =
+                        com.example.data.agent.AskUserTool.parse(toolCall.argumentsJson)
+                    val questionDeferred = CompletableDeferred<String?>()
+                    _uiState.update {
+                        it.copy(
+                            pendingUserQuestion = PendingUserQuestion(
+                                question = question,
+                                options = options,
+                                decisionDeferred = questionDeferred
+                            ),
+                            activeToolLoopStatus = "$turnCounter • Waiting for your answer…"
+                        )
+                    }
+                    val answer = questionDeferred.await()
+                    _uiState.update { it.copy(pendingUserQuestion = null) }
+                    dao.insertToolCallLog(
+                        ToolCallLogEntity(
+                            id = "tcl_${UUID.randomUUID().toString().take(10)}",
+                            conversationId = conv.id,
+                            messageId = assistantMsgId,
+                            serverId = com.example.data.agent.AskUserTool.ASK_USER_SERVER_ID,
+                            serverName = com.example.data.agent.AskUserTool.ASK_USER_SERVER_NAME,
+                            toolName = toolCall.toolName,
+                            argumentsJson = toolCall.argumentsJson,
+                            resultText = answer ?: "(dismissed without answering)",
+                            isSuccess = answer != null
+                        )
+                    )
+                    workingPayloadMessages.add(
+                        ChatMessagePayload(
+                            role = "tool",
+                            content = if (answer != null) {
+                                "The user answered your question.\nQuestion: $question\nAnswer: $answer"
+                            } else {
+                                "The user dismissed your question without answering. " +
+                                    "Continue with your best judgement and do not ask the same question again."
+                            },
+                            toolCallId = toolCall.id,
+                            toolName = toolCall.toolName
+                        )
+                    )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        answer != null, 0L, answer ?: "(dismissed without answering)"
+                    )
                     continue
                 }
 
@@ -5336,6 +5506,10 @@ class OmniStudioViewModel(
                                 toolCallId = toolCall.id,
                                 toolName = toolCall.toolName
                             )
+                        )
+                        recordTrajectoryStep(
+                            toolCall.toolName, toolCall.argumentsJson,
+                            false, 0L, "Error: Tool '${toolCall.toolName}' is not registered."
                         )
                         continue
                     }
@@ -5384,6 +5558,10 @@ class OmniStudioViewModel(
                                     toolName = toolCall.toolName
                                 )
                             )
+                            recordTrajectoryStep(
+                                toolCall.toolName, toolCall.argumentsJson,
+                                false, 0L, "File change denied by user."
+                            )
                             continue
                         }
                     }
@@ -5405,6 +5583,52 @@ class OmniStudioViewModel(
                             toolName = toolCall.toolName
                         )
                     )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        logEntry.isSuccess, logEntry.durationMs, logEntry.resultText
+                    )
+                    // Build-gate bookkeeping: remember the commit a push
+                    // just made, and read verdicts off build_status results
+                    // (the BUILD_VERDICT line WorkspaceGit prepends). Only a
+                    // verdict whose sha matches the pending push counts.
+                    if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.GIT_COMMIT_PUSH_TOOL_NAME &&
+                        logEntry.isSuccess
+                    ) {
+                        val pushedSha = Regex("Pushed commit ([0-9a-f]{7})")
+                            .find(logEntry.resultText)?.groupValues?.get(1)
+                        if (pushedSha != null) pendingBuildSha = pushedSha
+                    }
+                    if (toolCall.toolName == com.example.data.workspace.WorkspaceTools.BUILD_STATUS_TOOL_NAME) {
+                        val verdictLine = logEntry.resultText.lineSequence()
+                            .firstOrNull { it.startsWith("BUILD_VERDICT:") }
+                        val verdict = verdictLine?.removePrefix("BUILD_VERDICT:")?.trim()
+                            ?.substringBefore(' ')
+                        val verdictSha = verdictLine?.substringAfter("sha=", "")?.trim()
+                            ?.substringBefore(' ')
+                        if (verdict != null && verdictSha == pendingBuildSha) {
+                            when (verdict) {
+                                "success" -> {
+                                    pendingBuildSha = null
+                                    failedBuildVerdicts = 0
+                                    lastBuildVerdict = "success"
+                                }
+                                "failure" -> {
+                                    lastBuildVerdict = "failure"
+                                    failedBuildVerdicts++
+                                    if (failedBuildVerdicts >= 3) {
+                                        // The stop note itself is added
+                                        // after this dispatch loop, so it
+                                        // lands after all of this round's
+                                        // tool results, not between them.
+                                        buildFailureStopNotePending = true
+                                        pendingBuildSha = null
+                                    }
+                                }
+                                // in_progress / unknown / no line: the push
+                                // stays pending and may be checked again.
+                            }
+                        }
+                    }
                     continue
                 }
 
@@ -5419,6 +5643,7 @@ class OmniStudioViewModel(
                             toolName = toolCall.toolName
                         )
                     )
+                    recordTrajectoryStep(toolCall.toolName, toolCall.argumentsJson, false, 0L, notFoundMsg)
                     continue
                 }
 
@@ -5438,6 +5663,7 @@ class OmniStudioViewModel(
                             toolName = toolCall.toolName
                         )
                     )
+                    recordTrajectoryStep(toolCall.toolName, toolCall.argumentsJson, false, 0L, msg)
                     continue
                 }
 
@@ -5473,6 +5699,10 @@ class OmniStudioViewModel(
                             toolCallId = toolCall.id,
                             toolName = toolCall.toolName
                         )
+                    )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        false, 0L, "Tool call blocked by Never policy."
                     )
                     continue
                 }
@@ -5541,6 +5771,10 @@ class OmniStudioViewModel(
                             toolName = toolCall.toolName
                         )
                     )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        false, 0L, "Tool call denied by user."
+                    )
                     continue
                 }
 
@@ -5571,11 +5805,51 @@ class OmniStudioViewModel(
                         toolName = toolCall.toolName
                     )
                 )
+                recordTrajectoryStep(
+                    toolCall.toolName, toolCall.argumentsJson,
+                    logEntry.isSuccess, logEntry.durationMs, logEntry.resultText
+                )
+            }
+
+            // The 3rd failed verdict for a pushed commit lands here (flag
+            // set in the workspace dispatch) so the note follows all of
+            // this round's tool results instead of splitting them.
+            if (buildFailureStopNotePending) {
+                buildFailureStopNotePending = false
+                workingPayloadMessages.add(
+                    ChatMessagePayload(
+                        role = "user",
+                        content = "[System note: The build is still failing after 3 fix attempts. " +
+                            "Stop, and report the failure honestly with the latest error. " +
+                            "Do not claim success.]"
+                    )
+                )
             }
 
             failoverSession.appendSeparatorIfNeeded("\n\n")
             _uiState.update { it.copy(activeToolLoopStatus = turnCounter) }
         }
+
+        // Trajectory log: one record per turn, written here at the common
+        // end of the turn so every loop exit path above is captured. The
+        // writer never throws; a failed write just drops the record.
+        val trajectoryOutcome = when {
+            !kotlinx.coroutines.currentCoroutineContext().isActive -> "cancelled"
+            stoppedOnRepeatedCall -> "stopped_repeated"
+            streamError != null -> "error"
+            lastBuildVerdict == "failure" -> "build_failed"
+            iteration >= maxIterations -> "max_iterations"
+            else -> "completed"
+        }
+        com.example.data.workspace.TrajectoryLog.append(
+            filesDir = repository.appContext.filesDir,
+            conversationId = conv.id,
+            messageId = assistantMsgId,
+            task = latestUserPrompt,
+            steps = trajectorySteps,
+            outcome = trajectoryOutcome,
+            buildVerdict = lastBuildVerdict
+        )
 
         _uiState.update { it.copy(activeToolLoopStatus = null, pendingToolApproval = null) }
 
@@ -6763,6 +7037,36 @@ class OmniStudioViewModel(
 
     fun resolvePendingToolApproval(decision: ToolApprovalDecision) {
         _uiState.value.pendingToolApproval?.decisionDeferred?.complete(decision)
+    }
+
+    fun resolvePendingUserQuestion(answer: String?) {
+        _uiState.value.pendingUserQuestion?.decisionDeferred?.complete(answer)
+    }
+
+    /**
+     * The JSON Schema sent on a tool-call repair retry: the whole reply must
+     * be one {"name", "arguments"} envelope naming one of the offered tools.
+     * llama.cpp/vLLM turn this into a decoding grammar, so a model that
+     * mangles free-form calls physically cannot emit a broken shape on the
+     * retry; the text parser's bare-JSON dialect then reads it back.
+     */
+    private fun buildToolCallEnvelopeSchema(toolNames: Collection<String>): String {
+        val names = org.json.JSONArray()
+        toolNames.distinct().forEach { names.put(it) }
+        return org.json.JSONObject()
+            .put("type", "object")
+            .put(
+                "properties",
+                org.json.JSONObject()
+                    .put(
+                        "name",
+                        org.json.JSONObject().put("type", "string").put("enum", names)
+                    )
+                    .put("arguments", org.json.JSONObject().put("type", "object"))
+            )
+            .put("required", org.json.JSONArray().put("name").put("arguments"))
+            .put("additionalProperties", false)
+            .toString()
     }
 
     fun clearToolCallLogs() {

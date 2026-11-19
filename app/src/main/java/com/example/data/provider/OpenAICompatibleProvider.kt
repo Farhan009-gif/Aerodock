@@ -1024,6 +1024,9 @@ class OpenAICompatibleProvider(
             root.put("tools", toolsArr)
             root.put("tool_choice", "auto")
         }
+        request.toolCallJsonSchema?.let { schema ->
+            runCatching { root.put("json_schema", JSONObject(schema)) }
+        }
         return root
     }
 

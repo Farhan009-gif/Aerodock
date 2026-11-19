@@ -1036,6 +1036,12 @@ fun MinimalSettingsAndThemeScreen(
             }
         }
 
+        // Kairo access: self-contained card (toggle, relay URL, pairing
+        // token) — see KairoAccessCard.kt and data/kairo/.
+        item {
+            KairoAccessCard()
+        }
+
         // Danger zone: clear-data action at the very bottom, existing
         // confirmation flow unchanged (onClearAllData)
         item {

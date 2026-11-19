@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -2433,4 +2434,86 @@ private fun McpServerEditorDialog(
             }
         }
     )
+}
+
+/**
+ * The `ask_user` question sheet: the model paused mid-task to ask one
+ * question. Quick options answer with one tap; the text field covers any
+ * other answer; Skip dismisses (the model is told to use its judgement).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun UserQuestionDialog(
+    question: com.example.ui.viewmodel.PendingUserQuestion,
+    onAnswer: (String?) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var typedAnswer by remember { mutableStateOf("") }
+    ModalBottomSheet(
+        onDismissRequest = { onAnswer(null) },
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.HelpOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "The model is asking",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                question.question,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            question.options.forEach { option ->
+                OutlinedButton(
+                    onClick = { onAnswer(option) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(option)
+                }
+            }
+            OutlinedTextField(
+                value = typedAnswer,
+                onValueChange = { typedAnswer = it },
+                label = { Text("Or type your answer") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 1,
+                maxLines = 4
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TextButton(
+                    onClick = { onAnswer(null) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Skip")
+                }
+                Button(
+                    onClick = { onAnswer(typedAnswer.trim()) },
+                    enabled = typedAnswer.isNotBlank(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Send answer")
+                }
+            }
+        }
+    }
 }

@@ -87,7 +87,15 @@ data class ChatCompletionRequest(
     val tools: List<McpToolDefinition> = emptyList(),
     val baseSystemPrompt: String = "",
     val enabledSkillsBlock: String = "",
-    val enablePromptCaching: Boolean = false
+    val enablePromptCaching: Boolean = false,
+    /**
+     * Optional JSON Schema sent as `json_schema` on this one request. Used by
+     * the tool-call repair retry: when a model's free-form tool call could not
+     * be parsed, the retry constrains generation to a {"name", "arguments"}
+     * envelope on servers that honour schema-constrained output (llama.cpp,
+     * vLLM). Servers that ignore the field simply answer as usual.
+     */
+    val toolCallJsonSchema: String? = null
 )
 
 sealed class ChatStreamEvent {

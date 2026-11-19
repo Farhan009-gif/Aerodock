@@ -120,7 +120,9 @@ object WorkspaceGit {
                 "Check the latest GitHub Actions build for a repository: pass repo as " +
                     "\"owner/repo\", or pass the workspace path of a cloned project. When the " +
                     "latest run failed, the failing job, step and the tail of its log come back " +
-                    "so you can fix the cause.",
+                    "so you can fix the cause. After any git_commit_push, call build_status " +
+                    "and keep fixing until the BUILD_VERDICT for your commit is success, " +
+                    "or report the failure.",
                 """{"type":"object","properties":{"repo":{"type":"string","description":"Repository as owner/repo or a GitHub URL. Optional when path is given."},"path":{"type":"string","description":"Workspace project folder to read the repo from. Optional when repo is given."},"branch":{"type":"string","description":"Optional branch filter."}}}""",
                 readOnly = true
             )
@@ -773,8 +775,17 @@ object WorkspaceGit {
         val conclusion = latest.optString("conclusion").ifBlank { "—" }
         val runUrl = latest.optString("html_url")
         val headSha = latest.optString("head_sha").take(7)
+        // Machine-readable verdict first: the agent loop (and the build
+        // gate in the view model) keys off this line, not the prose below.
+        val verdict = when {
+            status != "completed" -> "in_progress"
+            conclusion == "success" -> "success"
+            conclusion == "failure" -> "failure"
+            else -> "unknown"
+        }
         val text = StringBuilder(
-            "Latest Actions run for $owner/$repo: #$runId \"$runName\" — status $status, " +
+            "BUILD_VERDICT: $verdict sha=$headSha\n" +
+                "Latest Actions run for $owner/$repo: #$runId \"$runName\" — status $status, " +
                 "conclusion $conclusion, commit $headSha. $runUrl"
         )
         if (conclusion == "failure" && runId > 0) {

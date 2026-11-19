@@ -11,6 +11,12 @@ import java.util.UUID
  *
  *  JSON: <tool_call> {"name": "web_search", "arguments": {"query": "..."}} </tool_call>
  *  XML:  <tool_call> <function=web_search> <parameter=query> ... </parameter> </function> </tool_call>
+ *  INVOKE: the Anthropic/MiniMax spelling — the wrapper tag may carry any
+ *        vendor prefix (<minimax:tool_call>, <antml:function_calls>, plain
+ *        <tool_call> or <function_calls>) and holds one or more
+ *        <invoke name="web_search"> <parameter name="query"> ... </parameter>
+ *        </invoke> elements. Invokes are also recovered with no wrapper at
+ *        all, because some models drop the wrapper mid-conversation.
  *  DSML: <｜DSML｜calls> <｜DSML｜invoke name="web_search"> <｜DSML｜parameter name="query" string="true"> ... </｜DSML｜parameter> </｜DSML｜invoke> </｜DSML｜calls>
  *        (DeepSeek's markup; the separator may be the fullwidth ｜ or an ASCII |.
  *        A parameter's string="false" means its content is raw JSON, not text.)
@@ -32,7 +38,24 @@ object TextToolCallParser {
 
     const val MAX_EXTRACTED_CALLS = 8
 
-    private val BLOCK_REGEX = Regex("""<tool_call>(.*?)</tool_call>""", RegexOption.DOT_MATCHES_ALL)
+    // The wrapper tag name is captured so the closer must repeat it: plain
+    // <tool_call> and prefixed <minimax:tool_call> both match, with any prefix.
+    private val BLOCK_REGEX =
+        Regex("""<([A-Za-z0-9_.\-]*:?tool_call)>(.*?)</\1>""", RegexOption.DOT_MATCHES_ALL)
+    private val FUNCTION_CALLS_REGEX =
+        Regex("""<([A-Za-z0-9_.\-]*:?function_calls)>(.*?)</\1>""", RegexOption.DOT_MATCHES_ALL)
+    private val INVOKE_REGEX = Regex(
+        """<(?:[A-Za-z0-9_.\-]+:)?invoke\s+name="([^"]+)"[^>]*>(.*?)</(?:[A-Za-z0-9_.\-]+:)?invoke>""",
+        RegexOption.DOT_MATCHES_ALL
+    )
+    private val INVOKE_PARAMETER_REGEX = Regex(
+        """<(?:[A-Za-z0-9_.\-]+:)?parameter\s+name="([^"]+)"[^>]*>(.*?)</(?:[A-Za-z0-9_.\-]+:)?parameter>""",
+        RegexOption.DOT_MATCHES_ALL
+    )
+    // Wrapper debris left behind when a model drops or double-writes a tag;
+    // stripped from the visible reply once at least one call was recovered.
+    private val STRAY_WRAPPER_REGEX =
+        Regex("""</?[A-Za-z0-9_.\-]*:?(tool_call|function_calls)>""")
     private val FUNCTION_REGEX = Regex("""<function=([A-Za-z0-9_.\-]+)>""")
     private val PARAMETER_REGEX =
         Regex("""<parameter=([A-Za-z0-9_.\-]+)>(.*?)</parameter>""", RegexOption.DOT_MATCHES_ALL)
@@ -64,9 +87,16 @@ object TextToolCallParser {
         }
         val calls = mutableListOf<ModelToolCallRequest>()
         var text = content
-        if (text.contains("<tool_call>")) {
-            val pass = extractBlocks(text, BLOCK_REGEX) { inner ->
-                parseBlock(inner, offeredToolNames)?.let { listOf(it) } ?: emptyList()
+        if (text.contains("tool_call>")) {
+            val pass = extractBlocks(text, BLOCK_REGEX, innerGroup = 2) { inner ->
+                parseBlock(inner, offeredToolNames)
+            }
+            text = pass.first
+            calls.addAll(pass.second)
+        }
+        if (calls.size < MAX_EXTRACTED_CALLS && text.contains("function_calls>")) {
+            val pass = extractBlocks(text, FUNCTION_CALLS_REGEX, innerGroup = 2) { inner ->
+                parseInvokeCalls(inner, offeredToolNames)
             }
             text = pass.first
             calls.addAll(pass.second)
@@ -78,12 +108,20 @@ object TextToolCallParser {
             text = pass.first
             calls.addAll(pass.second)
         }
+        if (calls.size < MAX_EXTRACTED_CALLS && text.contains("invoke")) {
+            val pass = extractBareInvokes(text, offeredToolNames, MAX_EXTRACTED_CALLS - calls.size)
+            text = pass.first
+            calls.addAll(pass.second)
+        }
         if (calls.size < MAX_EXTRACTED_CALLS && text.contains("{")) {
             val pass = extractBareJsonCalls(text, offeredToolNames, MAX_EXTRACTED_CALLS - calls.size)
             text = pass.first
             calls.addAll(pass.second)
         }
         if (calls.isEmpty()) return Extraction(content, emptyList())
+        // Any wrapper tags still left are debris from blocks that were
+        // recovered (double-written or unclosed tags); hide them from the user.
+        text = STRAY_WRAPPER_REGEX.replace(text, "")
         return Extraction(text, calls.take(MAX_EXTRACTED_CALLS))
     }
 
@@ -98,7 +136,8 @@ object TextToolCallParser {
         if (content.isBlank() || offeredToolNames.isEmpty()) return false
         if (offeredToolNames.none { content.contains(it) }) return false
         return content.contains("{") || content.contains("<function=") ||
-            content.contains("tool_call") || content.contains("```")
+            content.contains("tool_call") || content.contains("<invoke") ||
+            content.contains("```")
     }
 
     /**
@@ -110,6 +149,7 @@ object TextToolCallParser {
     private fun extractBlocks(
         content: String,
         blockRegex: Regex,
+        innerGroup: Int = 1,
         parse: (String) -> List<ModelToolCallRequest>
     ): Pair<String, List<ModelToolCallRequest>> {
         val calls = mutableListOf<ModelToolCallRequest>()
@@ -117,7 +157,7 @@ object TextToolCallParser {
         var copiedUpTo = 0
         for (match in blockRegex.findAll(content)) {
             if (calls.size >= MAX_EXTRACTED_CALLS) break
-            val parsed = parse(match.groupValues[1])
+            val parsed = parse(match.groupValues[innerGroup])
             if (parsed.isEmpty()) continue
             cleaned.append(content, copiedUpTo, match.range.first)
             copiedUpTo = match.range.last + 1
@@ -203,14 +243,78 @@ object TextToolCallParser {
         return null
     }
 
-    private fun parseBlock(rawInner: String, offeredToolNames: Set<String>): ModelToolCallRequest? {
+    private fun parseBlock(rawInner: String, offeredToolNames: Set<String>): List<ModelToolCallRequest> {
         val inner = rawInner.trim()
-        if (inner.isEmpty()) return null
-        return if (inner.startsWith("{") || inner.startsWith("```")) {
-            parseJsonBlock(inner, offeredToolNames)
-        } else {
-            parseXmlBlock(inner, offeredToolNames)
+        if (inner.isEmpty()) return emptyList()
+        if (inner.startsWith("{") || inner.startsWith("```")) {
+            return parseJsonBlock(inner, offeredToolNames)?.let { listOf(it) } ?: emptyList()
         }
+        if (inner.contains("<invoke") || inner.contains(":invoke")) {
+            val invokes = parseInvokeCalls(inner, offeredToolNames)
+            if (invokes.isNotEmpty()) return invokes
+        }
+        return parseXmlBlock(inner, offeredToolNames)?.let { listOf(it) } ?: emptyList()
+    }
+
+    // Every <invoke name="..."> element in [text] that names an offered tool,
+    // with its <parameter name="..."> children as the arguments.
+    private fun parseInvokeCalls(text: String, offeredToolNames: Set<String>): List<ModelToolCallRequest> {
+        val calls = mutableListOf<ModelToolCallRequest>()
+        for (match in INVOKE_REGEX.findAll(text)) {
+            if (calls.size >= MAX_EXTRACTED_CALLS) break
+            parseInvokeMatch(match, offeredToolNames)?.let { calls.add(it) }
+        }
+        return calls
+    }
+
+    private fun parseInvokeMatch(
+        match: MatchResult,
+        offeredToolNames: Set<String>
+    ): ModelToolCallRequest? {
+        val name = match.groupValues[1].trim()
+        if (name.isEmpty() || name !in offeredToolNames) return null
+        val args = JSONObject()
+        for (param in INVOKE_PARAMETER_REGEX.findAll(match.groupValues[2])) {
+            args.put(param.groupValues[1], coerceValue(unescapeXml(param.groupValues[2].trim())))
+        }
+        return newCall(name, args.toString())
+    }
+
+    /**
+     * Invokes with no wrapper around them: some models emit the wrapper for
+     * the first call of a turn, then bare <invoke> elements for the rest.
+     * Only elements naming an offered tool are removed from the text.
+     */
+    private fun extractBareInvokes(
+        content: String,
+        offeredToolNames: Set<String>,
+        limit: Int
+    ): Pair<String, List<ModelToolCallRequest>> {
+        val calls = mutableListOf<ModelToolCallRequest>()
+        val cleaned = StringBuilder()
+        var copiedUpTo = 0
+        for (match in INVOKE_REGEX.findAll(content)) {
+            if (calls.size >= limit) break
+            val call = parseInvokeMatch(match, offeredToolNames) ?: continue
+            cleaned.append(content, copiedUpTo, match.range.first)
+            copiedUpTo = match.range.last + 1
+            calls.add(call)
+        }
+        if (calls.isEmpty()) return content to emptyList()
+        cleaned.append(content, copiedUpTo, content.length)
+        return cleaned.toString() to calls
+    }
+
+    // Models writing calls as XML escape markup characters inside parameter
+    // values (most often code containing < or &). Undo that one layer.
+    private fun unescapeXml(raw: String): String {
+        if (!raw.contains('&')) return raw
+        return raw.replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&")
     }
 
     private fun parseJsonBlock(inner: String, offeredToolNames: Set<String>): ModelToolCallRequest? {
@@ -290,7 +394,7 @@ object TextToolCallParser {
         if (name.isEmpty() || name !in offeredToolNames) return null
         val args = JSONObject()
         for (param in PARAMETER_REGEX.findAll(inner)) {
-            args.put(param.groupValues[1], coerceValue(param.groupValues[2].trim()))
+            args.put(param.groupValues[1], coerceValue(unescapeXml(param.groupValues[2].trim())))
         }
         return newCall(name, args.toString())
     }

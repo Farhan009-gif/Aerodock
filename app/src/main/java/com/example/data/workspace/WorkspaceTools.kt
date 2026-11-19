@@ -100,6 +100,16 @@ object WorkspaceTools {
 
     fun isWriteTool(toolName: String): Boolean = toolName in WRITE_TOOL_NAMES
 
+    /**
+     * Tools a subagent may use: the workspace READ tools only. Writes stay in
+     * the main chat (they need the approval sheet), update_plan belongs to the
+     * parent conversation, and add_lesson writes a file despite its
+     * no-approval status in the main chat.
+     */
+    fun isSubagentSafeTool(toolName: String): Boolean =
+        isWorkspaceTool(toolName) && !isWriteTool(toolName) &&
+            toolName != UPDATE_PLAN_TOOL_NAME && toolName != ADD_LESSON_TOOL_NAME
+
     fun buildWorkspaceServerEntity(): McpServerEntity {
         return McpServerEntity(
             id = WORKSPACE_SERVER_ID,
