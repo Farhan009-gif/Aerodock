@@ -3864,6 +3864,95 @@ class OmniStudioViewModel(
         return brief
     }
 
+    /**
+     * Assembles the tool triples offered to the main model for one turn:
+     * enabled MCP tools plus the built-in run_code, subagent, workspace and
+     * ask_user triples. Extracted from executeModelStream, whose bytecode
+     * outgrew the JVM 64 KB per-method limit as features were added.
+     */
+    private suspend fun buildMcpAndSandboxTriples(
+        conv: ConversationEntity,
+        supportsFunctionCalling: Boolean,
+        comparisonGroupId: String?
+    ): List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> {
+        if (!conv.mcpToolsEnabled || !supportsFunctionCalling || comparisonGroupId != null) {
+            return emptyList()
+        }
+        val serversById = dao.getMcpServersOnce().filter { it.isEnabled }.associateBy { it.id }
+        val mcpTriples = dao.getMcpToolsOnce().filter { it.isEnabled }.mapNotNull { toolEntity ->
+            val srv = serversById[toolEntity.serverId] ?: return@mapNotNull null
+            val gate = com.example.data.mcp.ConnectorApprovalPolicy.evaluateToolExecutionGate(
+                tool = toolEntity,
+                server = srv,
+                connectorDefaultPolicies = _uiState.value.connectorDefaultChoices,
+                perToolPolicies = _uiState.value.connectorToolChoices,
+                confirmedWriteAlwaysToolIds = _uiState.value.confirmedWriteAlwaysTools
+            )
+            if (gate == com.example.data.mcp.ToolExecutionGate.BLOCK) {
+                return@mapNotNull null
+            }
+            Triple(
+                srv,
+                toolEntity,
+                McpToolDefinition(
+                    serverId = srv.id,
+                    serverName = srv.name,
+                    toolName = toolEntity.toolName,
+                    description = toolEntity.description,
+                    inputSchemaJson = toolEntity.inputSchemaJson,
+                    isReadOnlyHint = toolEntity.isReadOnlyHint
+                )
+            )
+        }
+        val synthServer = com.example.data.mcp.JsSandboxExecutor.buildRunCodeServerEntity()
+        val synthTool = com.example.data.mcp.JsSandboxExecutor.buildRunCodeToolEntity()
+        val runCodeTriple = Triple(
+            synthServer,
+            synthTool,
+            McpToolDefinition(
+                serverId = synthServer.id,
+                serverName = synthServer.name,
+                toolName = synthTool.toolName,
+                description = synthTool.description,
+                inputSchemaJson = synthTool.inputSchemaJson,
+                isReadOnlyHint = synthTool.isReadOnlyHint
+            )
+        )
+        val subagentServer = com.example.data.agent.SubagentTool.buildSubagentServerEntity()
+        val subagentToolEntity = com.example.data.agent.SubagentTool.buildSubagentToolEntity()
+        val spawnSubagentTriple = Triple(
+            subagentServer,
+            subagentToolEntity,
+            com.example.data.agent.SubagentTool.buildSubagentToolDefinition()
+        )
+        val spawnSubagentChainTriple = Triple(
+            subagentServer,
+            com.example.data.agent.SubagentTool.buildChainToolEntity(),
+            com.example.data.agent.SubagentTool.buildChainToolDefinition()
+        )
+        val workspaceServer = com.example.data.workspace.WorkspaceTools.buildWorkspaceServerEntity()
+        val workspaceTriples = com.example.data.workspace.WorkspaceTools.buildToolEntities().map { toolEntity ->
+            Triple(
+                workspaceServer,
+                toolEntity,
+                McpToolDefinition(
+                    serverId = workspaceServer.id,
+                    serverName = workspaceServer.name,
+                    toolName = toolEntity.toolName,
+                    description = toolEntity.description,
+                    inputSchemaJson = toolEntity.inputSchemaJson,
+                    isReadOnlyHint = toolEntity.isReadOnlyHint
+                )
+            )
+        }
+        val askUserTriple = Triple(
+            com.example.data.agent.AskUserTool.buildServerEntity(),
+            com.example.data.agent.AskUserTool.buildToolEntity(),
+            com.example.data.agent.AskUserTool.buildToolDefinition()
+        )
+        return mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples + askUserTriple
+    }
+
     private suspend fun executeModelStream(
         conv: ConversationEntity,
         provider: ProviderInstanceEntity,
@@ -3959,84 +4048,11 @@ class OmniStudioViewModel(
         repository.liveInfoToolsService.resetPerMessageSearchCounter()
 
         // Resolve enabled MCP tools + built-in sandboxed run_code tool + Live Info tools if function calling is supported
-        val mcpAndSandboxTriples: List<Triple<McpServerEntity, McpToolEntity, McpToolDefinition>> =
-            if (conv.mcpToolsEnabled && modelDescriptor.supportsFunctionCalling && comparisonGroupId == null) {
-                val serversById = dao.getMcpServersOnce().filter { it.isEnabled }.associateBy { it.id }
-                val mcpTriples = dao.getMcpToolsOnce().filter { it.isEnabled }.mapNotNull { toolEntity ->
-                    val srv = serversById[toolEntity.serverId] ?: return@mapNotNull null
-                    val gate = com.example.data.mcp.ConnectorApprovalPolicy.evaluateToolExecutionGate(
-                        tool = toolEntity,
-                        server = srv,
-                        connectorDefaultPolicies = _uiState.value.connectorDefaultChoices,
-                        perToolPolicies = _uiState.value.connectorToolChoices,
-                        confirmedWriteAlwaysToolIds = _uiState.value.confirmedWriteAlwaysTools
-                    )
-                    if (gate == com.example.data.mcp.ToolExecutionGate.BLOCK) {
-                        return@mapNotNull null
-                    }
-                    Triple(
-                        srv,
-                        toolEntity,
-                        McpToolDefinition(
-                            serverId = srv.id,
-                            serverName = srv.name,
-                            toolName = toolEntity.toolName,
-                            description = toolEntity.description,
-                            inputSchemaJson = toolEntity.inputSchemaJson,
-                            isReadOnlyHint = toolEntity.isReadOnlyHint
-                        )
-                    )
-                }
-                val synthServer = com.example.data.mcp.JsSandboxExecutor.buildRunCodeServerEntity()
-                val synthTool = com.example.data.mcp.JsSandboxExecutor.buildRunCodeToolEntity()
-                val runCodeTriple = Triple(
-                    synthServer,
-                    synthTool,
-                    McpToolDefinition(
-                        serverId = synthServer.id,
-                        serverName = synthServer.name,
-                        toolName = synthTool.toolName,
-                        description = synthTool.description,
-                        inputSchemaJson = synthTool.inputSchemaJson,
-                        isReadOnlyHint = synthTool.isReadOnlyHint
-                    )
-                )
-                val subagentServer = com.example.data.agent.SubagentTool.buildSubagentServerEntity()
-                val subagentToolEntity = com.example.data.agent.SubagentTool.buildSubagentToolEntity()
-                val spawnSubagentTriple = Triple(
-                    subagentServer,
-                    subagentToolEntity,
-                    com.example.data.agent.SubagentTool.buildSubagentToolDefinition()
-                )
-                val spawnSubagentChainTriple = Triple(
-                    subagentServer,
-                    com.example.data.agent.SubagentTool.buildChainToolEntity(),
-                    com.example.data.agent.SubagentTool.buildChainToolDefinition()
-                )
-                val workspaceServer = com.example.data.workspace.WorkspaceTools.buildWorkspaceServerEntity()
-                val workspaceTriples = com.example.data.workspace.WorkspaceTools.buildToolEntities().map { toolEntity ->
-                    Triple(
-                        workspaceServer,
-                        toolEntity,
-                        McpToolDefinition(
-                            serverId = workspaceServer.id,
-                            serverName = workspaceServer.name,
-                            toolName = toolEntity.toolName,
-                            description = toolEntity.description,
-                            inputSchemaJson = toolEntity.inputSchemaJson,
-                            isReadOnlyHint = toolEntity.isReadOnlyHint
-                        )
-                    )
-                }
-                val askUserTriple = Triple(
-                    com.example.data.agent.AskUserTool.buildServerEntity(),
-                    com.example.data.agent.AskUserTool.buildToolEntity(),
-                    com.example.data.agent.AskUserTool.buildToolDefinition()
-                )
-                mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples + askUserTriple
-            } else {
-                emptyList()
-            }
+        val mcpAndSandboxTriples = buildMcpAndSandboxTriples(
+            conv = conv,
+            supportsFunctionCalling = modelDescriptor.supportsFunctionCalling,
+            comparisonGroupId = comparisonGroupId
+        )
 
         val allToolTriples = mcpAndSandboxTriples + liveInfoTriples
         // Work mode decides what the MAIN model is offered this turn: AUTO = everything,
