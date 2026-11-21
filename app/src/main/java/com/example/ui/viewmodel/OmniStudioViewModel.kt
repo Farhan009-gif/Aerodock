@@ -5158,7 +5158,6 @@ class OmniStudioViewModel(
                     toolCallJsonSchema = repairJsonSchema
                 )
 
-                try {
                 repository.streamChat(request).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Delta -> {
@@ -5172,9 +5171,6 @@ class OmniStudioViewModel(
                                     isStreaming = true
                                 )
                             )
-                            if (failoverSession.loopDetected) {
-                                throw com.example.data.provider.StreamLoopDetectedException()
-                            }
                         }
                         is ChatStreamEvent.ToolCall -> {
                             turnToolCalls.add(event.call)
@@ -5195,19 +5191,6 @@ class OmniStudioViewModel(
                         }
                         is ChatStreamEvent.Done -> Unit
                     }
-                }
-                } catch (e: com.example.data.provider.StreamLoopDetectedException) {
-                    // A looping model never errors on its own, so the
-                    // attempt was aborted mid-stream by the loop detector.
-                    // Surface it as a stream interruption: the failover
-                    // classification below then moves to the next provider,
-                    // exactly as it does for a dropped connection.
-                    streamError = NormalizedAiError(
-                        category = ErrorCategory.SERVER_ERROR,
-                        title = "Output loop detected",
-                        message = "Stream interrupted: the model started repeating the same output, so the attempt was stopped.",
-                        suggestedFix = "Trying the next provider in the failover chain."
-                    )
                 }
 
                 val isCancelled = !kotlinx.coroutines.currentCoroutineContext().isActive
