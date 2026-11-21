@@ -1036,6 +1036,13 @@ fun MinimalSettingsAndThemeScreen(
             }
         }
 
+        // Memory: self-contained card for the on-device fact store
+        // (list, add, delete, clear) — see MemoryCard.kt and
+        // data/memory/AerodockMemory.kt.
+        item {
+            MemoryCard()
+        }
+
         // Kairo access: self-contained card (toggle, relay URL, pairing
         // token) — see KairoAccessCard.kt and data/kairo/.
         item {

@@ -3953,7 +3953,12 @@ class OmniStudioViewModel(
             com.example.data.agent.AskUserTool.buildToolEntity(),
             com.example.data.agent.AskUserTool.buildToolDefinition()
         )
-        return mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples + askUserTriple
+        val rememberFactTriple = Triple(
+            com.example.data.agent.RememberFactTool.buildServerEntity(),
+            com.example.data.agent.RememberFactTool.buildToolEntity(),
+            com.example.data.agent.RememberFactTool.buildToolDefinition()
+        )
+        return mcpTriples + runCodeTriple + spawnSubagentTriple + spawnSubagentChainTriple + workspaceTriples + askUserTriple + rememberFactTriple
     }
 
     /**
@@ -4026,6 +4031,97 @@ class OmniStudioViewModel(
             )
         )
         return (answer != null) to (answer ?: "(dismissed without answering)")
+    }
+
+    /**
+     * The remember_fact dispatch: saving to long-term memory is a write,
+     * so the approval sheet shows first (the workspace-write treatment);
+     * on approval the fact lands in AerodockMemory. Returns the
+     * (saved, resultText) pair for the trajectory step. Extracted from
+     * executeModelStream (method size).
+     */
+    private suspend fun handleRememberFactToolCall(
+        toolCall: ModelToolCallRequest,
+        conv: ConversationEntity,
+        assistantMsgId: String,
+        iteration: Int,
+        isUnlimited: Boolean,
+        maxIterations: Int,
+        turnCounter: String,
+        workingPayloadMessages: MutableList<ChatMessagePayload>
+    ): Pair<Boolean, String> {
+        val fact = com.example.data.agent.RememberFactTool.parseFact(toolCall.argumentsJson)
+        val memServer = com.example.data.agent.RememberFactTool.buildServerEntity()
+        val memTool = com.example.data.agent.RememberFactTool.buildToolEntity()
+        if (fact.isBlank()) {
+            val msg = "Error: remember_fact needs a non-empty \"fact\" argument."
+            workingPayloadMessages.add(
+                ChatMessagePayload(
+                    role = "tool",
+                    content = msg,
+                    toolCallId = toolCall.id,
+                    toolName = toolCall.toolName
+                )
+            )
+            return false to msg
+        }
+        val approvalReq = PendingToolApprovalRequest(
+            server = memServer,
+            tool = memTool,
+            callRequest = toolCall,
+            iterationIndex = iteration,
+            maxIterations = if (isUnlimited) 51 else maxIterations
+        )
+        _uiState.update {
+            it.copy(
+                pendingToolApproval = approvalReq,
+                activeToolLoopStatus = "$turnCounter • Awaiting approval for Memory • remember_fact"
+            )
+        }
+        val decision = approvalReq.decisionDeferred.await()
+        _uiState.update { it.copy(pendingToolApproval = null) }
+        val approved = when (decision) {
+            ToolApprovalDecision.APPROVE_ONCE,
+            ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY,
+            ToolApprovalDecision.APPROVE_CONVERSATION_WRITE -> true
+            ToolApprovalDecision.DENY -> false
+        }
+        val saved: Boolean
+        val resultText: String
+        if (!approved) {
+            saved = false
+            resultText = "The user declined to save that memory. Do not try to save it again in this chat."
+        } else {
+            saved = com.example.data.memory.AerodockMemory.addFact(repository.appContext, fact)
+            resultText = if (saved) {
+                "Saved to long-term memory: \"$fact\" It will be included in future chats."
+            } else {
+                "That fact is already saved (or the memory store is full) — nothing new was stored."
+            }
+        }
+        dao.insertToolCallLog(
+            ToolCallLogEntity(
+                id = "tcl_${UUID.randomUUID().toString().take(10)}",
+                conversationId = conv.id,
+                messageId = assistantMsgId,
+                serverId = memServer.id,
+                serverName = memServer.name,
+                toolName = toolCall.toolName,
+                argumentsJson = toolCall.argumentsJson,
+                resultText = resultText,
+                isSuccess = saved,
+                isDestructiveOrWrite = true
+            )
+        )
+        workingPayloadMessages.add(
+            ChatMessagePayload(
+                role = "tool",
+                content = resultText,
+                toolCallId = toolCall.id,
+                toolName = toolCall.toolName
+            )
+        )
+        return saved to resultText
     }
 
     /**
@@ -4277,6 +4373,7 @@ class OmniStudioViewModel(
             "~2,000 characters per call where the tool allows it (write the first " +
             "chunk, then extend it); very large single calls can fail to parse." +
             (previousWorkBrief(conv.id)?.let { "\n\n" + it } ?: "") +
+            (com.example.data.memory.AerodockMemory.promptBlock(repository.appContext)?.let { "\n\n" + it } ?: "") +
             (repository.getConversationPlanText(conv.id)?.let { "\n\n" + it } ?: "")
         val providerSupportsCaching = com.example.data.provider.PromptCacheManager.supportsPromptCaching(effectiveProvider)
 
@@ -4479,6 +4576,7 @@ class OmniStudioViewModel(
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_TOOL_NAME -> false
                             name == com.example.data.agent.SubagentTool.SPAWN_SUBAGENT_CHAIN_TOOL_NAME -> false
                             name == com.example.data.agent.AskUserTool.ASK_USER_TOOL_NAME -> false
+                            name == com.example.data.agent.RememberFactTool.REMEMBER_FACT_TOOL_NAME -> false
                             name == com.example.data.mcp.JsSandboxExecutor.RUN_CODE_TOOL_NAME -> false
                             com.example.data.workspace.WorkspaceTools.isWorkspaceTool(name) ->
                                 com.example.data.workspace.WorkspaceTools.isSubagentSafeTool(name)
@@ -5060,6 +5158,7 @@ class OmniStudioViewModel(
                     toolCallJsonSchema = repairJsonSchema
                 )
 
+                try {
                 repository.streamChat(request).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Delta -> {
@@ -5073,6 +5172,9 @@ class OmniStudioViewModel(
                                     isStreaming = true
                                 )
                             )
+                            if (failoverSession.loopDetected) {
+                                throw com.example.data.provider.StreamLoopDetectedException()
+                            }
                         }
                         is ChatStreamEvent.ToolCall -> {
                             turnToolCalls.add(event.call)
@@ -5093,6 +5195,19 @@ class OmniStudioViewModel(
                         }
                         is ChatStreamEvent.Done -> Unit
                     }
+                }
+                } catch (e: com.example.data.provider.StreamLoopDetectedException) {
+                    // A looping model never errors on its own, so the
+                    // attempt was aborted mid-stream by the loop detector.
+                    // Surface it as a stream interruption: the failover
+                    // classification below then moves to the next provider,
+                    // exactly as it does for a dropped connection.
+                    streamError = NormalizedAiError(
+                        category = ErrorCategory.SERVER_ERROR,
+                        title = "Output loop detected",
+                        message = "Stream interrupted: the model started repeating the same output, so the attempt was stopped.",
+                        suggestedFix = "Trying the next provider in the failover chain."
+                    )
                 }
 
                 val isCancelled = !kotlinx.coroutines.currentCoroutineContext().isActive
@@ -5701,6 +5816,27 @@ class OmniStudioViewModel(
                     recordTrajectoryStep(
                         toolCall.toolName, toolCall.argumentsJson,
                         answered, 0L, answerText
+                    )
+                    continue
+                }
+
+
+                // Built-in remember_fact: saves one durable fact to the
+                // on-device memory, approval-gated like a workspace write.
+                if (toolCall.toolName == com.example.data.agent.RememberFactTool.REMEMBER_FACT_TOOL_NAME) {
+                    val (saved, resultText) = handleRememberFactToolCall(
+                        toolCall = toolCall,
+                        conv = conv,
+                        assistantMsgId = assistantMsgId,
+                        iteration = iteration,
+                        isUnlimited = isUnlimited,
+                        maxIterations = maxIterations,
+                        turnCounter = turnCounter,
+                        workingPayloadMessages = workingPayloadMessages
+                    )
+                    recordTrajectoryStep(
+                        toolCall.toolName, toolCall.argumentsJson,
+                        saved, 0L, resultText
                     )
                     continue
                 }
