@@ -139,6 +139,7 @@ data class YouTubePublishDraft(
 enum class ToolApprovalDecision {
     APPROVE_ONCE,
     APPROVE_CONVERSATION_READ_ONLY,
+    APPROVE_CONVERSATION_WRITE,
     DENY
 }
 
@@ -573,6 +574,8 @@ class OmniStudioViewModel(
     private val backgroundSubagentHandles = mutableMapOf<String, Job>()
     // Tracks servers approved once for the active conversation (McpApprovalMode.ASK_ONCE_PER_CONVERSATION)
     private val conversationApprovedReadOnlyServers = mutableSetOf<String>()
+    // Tracks (conversation:server) pairs where the user clicked "Always Allow in This Chat" for write/delete tools
+    private val conversationApprovedWriteServers = mutableSetOf<String>()
     // Tracks conversations where the user clicked "Always allow for this chat" for sandboxed run_code
     private val conversationAllowedCodeExecutionIds = mutableSetOf<String>()
 
@@ -4061,7 +4064,10 @@ class OmniStudioViewModel(
             )
             return
         }
-        if (com.example.data.workspace.WorkspaceTools.isWriteTool(toolCall.toolName)) {
+        val wsApprovalKey = "${conv.id}:${wsServer.id}"
+        if (com.example.data.workspace.WorkspaceTools.isWriteTool(toolCall.toolName) &&
+            wsApprovalKey !in conversationApprovedWriteServers
+        ) {
             val approvalReq = PendingToolApprovalRequest(
                 server = wsServer,
                 tool = wsTool,
@@ -4080,6 +4086,10 @@ class OmniStudioViewModel(
             val approved = when (decision) {
                 ToolApprovalDecision.APPROVE_ONCE,
                 ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY -> true
+                ToolApprovalDecision.APPROVE_CONVERSATION_WRITE -> {
+                    conversationApprovedWriteServers.add(wsApprovalKey)
+                    true
+                }
                 ToolApprovalDecision.DENY -> false
             }
             if (!approved) {
@@ -5550,7 +5560,8 @@ class OmniStudioViewModel(
                     _uiState.update { it.copy(pendingToolApproval = null) }
                     val approved = when (decision) {
                         ToolApprovalDecision.APPROVE_ONCE,
-                        ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY -> true
+                        ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY,
+                        ToolApprovalDecision.APPROVE_CONVERSATION_WRITE -> true
                         ToolApprovalDecision.DENY -> false
                     }
 
@@ -5793,7 +5804,9 @@ class OmniStudioViewModel(
 
                 val approvalMode = server.approvalModeEnum()
                 val isWriteDeleteTool = com.example.data.mcp.ConnectorApprovalPolicy.isWriteOrDeleteTool(toolEntity) || !toolEntity.isReadOnlyHint
-                val canAutoRun = !isWriteDeleteTool && (
+                val canAutoRun = if (isWriteDeleteTool) {
+                    convServerKey in conversationApprovedWriteServers
+                } else (
                     policyGate == com.example.data.mcp.ToolExecutionGate.AUTO_RUN || (
                         toolEntity.isReadOnlyHint && (
                             approvalMode == McpApprovalMode.ALWAYS_ALLOW_READ_ONLY ||
@@ -5826,6 +5839,12 @@ class OmniStudioViewModel(
                             approved = true
                             if (toolEntity.isReadOnlyHint) {
                                 conversationApprovedReadOnlyServers.add(convServerKey)
+                            }
+                        }
+                        ToolApprovalDecision.APPROVE_CONVERSATION_WRITE -> {
+                            approved = true
+                            if (isWriteDeleteTool) {
+                                conversationApprovedWriteServers.add(convServerKey)
                             }
                         }
                         ToolApprovalDecision.DENY -> approved = false
@@ -7093,6 +7112,7 @@ class OmniStudioViewModel(
 
     fun resetConversationApprovals() {
         conversationApprovedReadOnlyServers.clear()
+        conversationApprovedWriteServers.clear()
         _uiState.update {
             it.copy(statusToast = "Reset all remembered thread tool approvals")
         }

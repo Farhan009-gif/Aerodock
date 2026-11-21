@@ -1989,21 +1989,38 @@ fun ToolCallApprovalDialog(
                     }
 
                     if (!isCodeExecution) {
-                        OutlinedButton(
-                            onClick = { onDecision(ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY) },
-                            enabled = request.tool.isReadOnlyHint,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("approve_tool_conversation_button")
-                        ) {
-                            Text(
-                                text = "Allow Read-Only for Thread",
-                                maxLines = 1,
-                                softWrap = false
-                            )
+                        if (request.tool.isReadOnlyHint) {
+                            OutlinedButton(
+                                onClick = { onDecision(ToolApprovalDecision.APPROVE_CONVERSATION_READ_ONLY) },
+                                shape = RoundedCornerShape(50),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("approve_tool_conversation_button")
+                            ) {
+                                Text(
+                                    text = "Allow Read-Only for Thread",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onDecision(ToolApprovalDecision.APPROVE_CONVERSATION_WRITE) },
+                                shape = RoundedCornerShape(50),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("approve_tool_conversation_write_button")
+                            ) {
+                                Text(
+                                    text = "Always Allow in This Chat",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }
